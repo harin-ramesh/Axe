@@ -1,14 +1,18 @@
-# Eva
+# Eva Programming Language
 
-A lightweight interpreter written in Rust featuring scoped variables, arithmetic operations, and block expressions.
+A lightweight S-expression based programming language interpreter written in Rust, featuring variables, control flow, and proper scoping.
 
 ## Features
 
-- **Arithmetic Operations**: Add, subtract, multiply, and divide integers and floats
-- **Variables**: Define and reference variables with lexical scoping
-- **Block Expressions**: Create nested scopes with block expressions
-- **Variable Shadowing**: Inner scopes can shadow outer scope variables
-- **Type Safety**: Strong type checking with compile-time guarantees
+- **S-Expression Syntax**: Clean Lisp-like syntax
+- **Arithmetic Operations**: `+`, `-`, `*`, `/` for integers and floats
+- **Comparison Operations**: `>`, `<`, `>=`, `<=`, `==`, `!=`
+- **Variables**: `set` for declaration, `assign` for updates
+- **Control Flow**: `if` expressions and `while` loops
+- **Block Scoping**: Lexical scoping with blocks
+- **Boolean Type**: `true` and `false` with proper truthiness rules
+- **Type Safety**: Strong type checking at runtime
+- **Interactive REPL**: Command-line interface for experimentation
 
 ## Installation
 
@@ -18,110 +22,266 @@ cargo build --release
 
 ## Usage
 
+### Interactive REPL
+
+Start the REPL:
+
+```bash
+cargo run --release
+```
+
+Example session:
+
+```
+Eva Programming Language REPL
+Type 'exit' or 'quit' to exit, 'help' for help
+
+eva> (+ 10 20)
+=> Int(30)
+
+eva> (set x 5)
+=> Int(5)
+
+eva> (* x 2)
+=> Int(10)
+
+eva> (if (> x 3) "big" "small")
+=> Str("big")
+
+eva> quit
+Goodbye!
+```
+
 ### As a Library
 
 ```rust
-use eva::{Eva, Expr, Value, Operation};
+use eva::{Eva, Parser};
 
 fn main() {
     let eva = Eva::new();
     
-    // Simple arithmetic
-    let expr = Expr::Binary(
-        Operation::Add,
-        Box::new(Expr::Int(10)),
-        Box::new(Expr::Int(20))
-    );
+    // Parse and evaluate
+    let mut parser = Parser::new("(+ 10 20)").unwrap();
+    let expr = parser.parse().unwrap();
     let result = eva.eval(expr).unwrap();
-    assert_eq!(result, Value::Int(30));
-    
-    // Variables
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(42)))).unwrap();
-    let result = eva.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(result, Value::Int(42));
-    
-    // Block expressions with scoping
-    let block = Expr::Block(vec![
-        Expr::Set("y".into(), Box::new(Expr::Int(100))),
-        Expr::Binary(
-            Operation::Mul,
-            Box::new(Expr::Var("y".into())),
-            Box::new(Expr::Int(2))
-        )
-    ]);
-    let result = eva.eval(block).unwrap();
-    assert_eq!(result, Value::Int(200));
+    println!("{:?}", result); // Int(30)
 }
+```
+
+## Language Syntax
+
+### Literals
+
+```lisp
+42                  ; Integer
+3.14                ; Float
+"hello"             ; String
+true                ; Boolean true
+false               ; Boolean false
+null                ; Null value
+```
+
+### Arithmetic
+
+```lisp
+(+ 1 2)             ; 3
+(- 5 3)             ; 2
+(* 4 5)             ; 20
+(/ 10 2)            ; 5
+(+ (* 2 3) 4)       ; 10 (nested expressions)
+```
+
+### Comparisons
+
+```lisp
+(> 5 3)             ; true
+(< 2 4)             ; true
+(>= 5 5)            ; true
+(<= 3 4)            ; true
+(== 5 5)            ; true
+(!= 3 4)            ; true
+```
+
+### Variables
+
+```lisp
+(set x 10)          ; Declare variable x = 10
+x                   ; Get value: 10
+(assign x 20)       ; Update x = 20
+(set y (+ x 5))     ; y = 25
+```
+
+### Control Flow
+
+#### If Expressions
+
+```lisp
+(if (> x 0) "positive" "not positive")
+
+(if (== x 0)
+    "zero"
+    "not zero")
+```
+
+#### While Loops
+
+```lisp
+(set counter 5)
+(while (> counter 0)
+    (assign counter (- counter 1)))
+
+; Multiple statements in while
+(while (< i 10)
+    (assign sum (+ sum i))
+    (assign i (+ i 1)))
+```
+
+### Blocks
+
+Blocks create new scopes:
+
+```lisp
+(block
+    (set x 10)
+    (set y 20)
+    (+ x y))        ; Returns 30
+```
+
+### Complete Example: Sum from 1 to 5
+
+```lisp
+(block
+    (set sum 0)
+    (set i 1)
+    (while (<= i 5)
+        (assign sum (+ sum i))
+        (assign i (+ i 1)))
+    sum)            ; Returns 15
 ```
 
 ## Expression Types
 
-### Values
-
-- `Expr::Null` - Null value
-- `Expr::Int(i64)` - Integer literal
-- `Expr::Float(f64)` - Float literal
-- `Expr::Str(String)` - String literal
+### Literals
+- `Null` - Null value
+- `Bool(bool)` - Boolean
+- `Int(i64)` - Integer  
+- `Float(f64)` - Float
+- `Str(String)` - String
 
 ### Operations
+- `Binary(op, left, right)` - Binary operations
+- `Set(name, expr)` - Variable declaration
+- `Assign(name, expr)` - Variable assignment
+- `Var(name)` - Variable reference
+- `Block(exprs)` - Block with new scope
+- `If(condition, then, else)` - Conditional
+- `While(condition, body)` - Loop
 
-- `Expr::Binary(op, left, right)` - Binary operations (Add, Sub, Mul, Div)
-- `Expr::Set(name, expr)` - Variable assignment
-- `Expr::Var(name)` - Variable reference
-- `Expr::Block(exprs)` - Block expression creating a new scope
+## Truthiness Rules
+
+Falsy values:
+- `null`
+- `false`
+- `0` (integer zero)
+- `0.0` (float zero)
+
+Everything else is truthy (including empty strings).
 
 ## Scoping Rules
 
-Eva implements lexical scoping with proper variable shadowing:
+Eva implements lexical scoping:
 
-### Parent Scope Access
-```rust
-// Child blocks can access parent variables
-let eva = Eva::new();
-
-let parent_block = Expr::Block(vec![
-    Expr::Set("x".into(), Box::new(Expr::Int(10))),
-    Expr::Block(vec![
-        Expr::Var("x".into()) // Returns 10
-    ])
-]);
+### Variable Access
+```lisp
+(set x 10)
+(block
+    x)              ; Can access parent scope: 10
 ```
 
 ### Variable Shadowing
-```rust
-// Inner scopes can shadow outer variables without modifying them
-let eva = Eva::new();
-eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
-
-let block = Expr::Block(vec![
-    Expr::Set("x".into(), Box::new(Expr::Int(100))), // Shadows global x
-    Expr::Var("x".into()) // Returns 100
-]);
-
-eva.eval(block).unwrap(); // Returns Value::Int(100)
-let global_x = eva.eval(Expr::Var("x".into())).unwrap();
-// global_x is still 1 - unchanged by the block
+```lisp
+(set x 1)
+(block
+    (set x 100)     ; Shadows parent x
+    x)              ; 100
+x                   ; Still 1 (parent unchanged)
 ```
 
 ### Scope Isolation
-```rust
-// Variables defined in blocks don't leak to parent scope
-let eva = Eva::new();
+```lisp
+(block
+    (set local 42))
+local               ; Error: undefined variable
+```
 
-let block = Expr::Block(vec![
-    Expr::Set("local_var".into(), Box::new(Expr::Int(42)))
-]);
+## REPL Commands
 
-eva.eval(block).unwrap();
-// local_var is not accessible here
-eva.eval(Expr::Var("local_var".into())).unwrap_err();
+- `help` - Show help message
+- `exit` or `quit` - Exit the REPL
+- Any Eva expression - Evaluate and print result
+
+## Testing
+
+Run the comprehensive test suite:
+
+```bash
+# Run all tests
+cargo test
+
+# Run specific test suites
+cargo test --test parser_tests
+cargo test --test while_tests
+cargo test --test if_tests
+cargo test --test comparison_tests
+cargo test --test block_tests
+```
+
+### Test Coverage
+
+113 tests covering:
+- **Parser**: 24 tests - S-expression parsing
+- **While Loops**: 10 tests - Loop execution
+- **If Expressions**: 18 tests - Conditionals
+- **Comparisons**: 29 tests - All comparison operators
+- **Blocks**: 11 tests - Scoping and nesting
+- **Variables**: 9 tests - Variable operations
+- **Evaluation**: 4 tests - Basic evaluation
+- **Assignments**: 8 tests - Variable updates
+
+## Error Handling
+
+Descriptive error messages:
+- `"undefined variable"` - Variable not found
+- `"invalid variable name"` - Invalid identifier
+- `"division by zero"` - Division by zero
+- `"type error"` - Type mismatch
+- `"Unterminated string"` - Parse error
+- `"Expected operator"` - Syntax error
+
+## Architecture
+
+```
+eva/
+├── src/
+│   ├── lib.rs      - Core interpreter and evaluation
+│   ├── parser.rs   - S-expression parser
+│   └── main.rs     - REPL implementation
+├── tests/
+│   ├── parser_tests.rs
+│   ├── while_tests.rs
+│   ├── if_tests.rs
+│   ├── comparison_tests.rs
+│   ├── block_tests.rs
+│   ├── variable_tests.rs
+│   └── ... (8 test files total)
+└── Cargo.toml
 ```
 
 ## Implementation Details
 
 ### Environment Model
 
-Eva uses a parent-pointer tree structure for environments:
+Uses Rc<RefCell<Environment>> for shared ownership with interior mutability:
 
 ```rust
 type EnvRef = Rc<RefCell<Environment>>;
@@ -132,70 +292,10 @@ pub struct Environment {
 }
 ```
 
-The `Rc<RefCell<T>>` pattern enables:
-- **Shared Ownership**: Multiple references to the same environment
-- **Interior Mutability**: Mutation through shared references
-- **Variable Persistence**: Changes persist across expressions in the same scope
+### Variable Validation
 
-When cloning `EnvRef`, only the reference count is incremented - the underlying `Environment` is shared. This allows variables to persist within a block while maintaining proper scoping.
-
-### Variable Name Validation
-
-Variable names must follow these rules:
-- Start with a letter (a-z, A-Z) or underscore (_)
-- Contain only letters, digits (0-9), or underscores
+Variable names must:
+- Start with letter (a-z, A-Z) or underscore (_)
+- Contain only letters, digits, or underscores
 - Match regex: `^[a-zA-Z_][a-zA-Z0-9_]*$`
 
-## Testing
-
-Run the test suite:
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific test suites
-cargo test --test block_tests
-cargo test --test variable_tests
-cargo test --test eval_tests
-```
-
-### Test Coverage
-
-- **Block Tests**: Scoping, nesting, shadowing, variable persistence
-- **Variable Tests**: Assignment, retrieval, scope isolation
-- **Evaluation Tests**: Arithmetic operations, type checking, error handling
-- **Validation Tests**: Variable name validation rules
-
-## Error Handling
-
-Eva returns `Result<Value, &'static str>` with descriptive error messages:
-
-- `"undefined variable"` - Variable not found in current or parent scopes
-- `"invalid variable name"` - Variable name doesn't match validation rules
-- `"division by zero"` - Division or modulo by zero
-- `"type error"` - Type mismatch in operations
-
-## Architecture
-
-```
-eva/
-├── src/
-│   ├── lib.rs       # Core interpreter implementation
-│   └── main.rs      # CLI entry point
-├── tests/
-│   ├── block_tests.rs              # Block expression tests
-│   ├── eval_tests.rs               # Evaluation tests
-│   ├── variable_tests.rs           # Variable tests
-│   └── variable_validation_tests.rs # Name validation tests
-├── Cargo.toml
-└── README.md
-```
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
