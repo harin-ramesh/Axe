@@ -1,16 +1,16 @@
-use eva::{Eva, Parser};
+use axe::{Axe, Parser};
 use std::io::{self, Write};
 
 fn main() {
-    println!("Eva Programming Language REPL");
+    println!("Axe Programming Language REPL");
     println!("Type 'exit' or 'quit' to exit, 'help' for help");
     println!();
 
-    let eva = Eva::new();
+    let axe = Axe::new();
     let mut input = String::new();
 
     loop {
-        print!("eva> ");
+        print!("axe> ");
         io::stdout().flush().unwrap();
 
         input.clear();
@@ -35,7 +35,7 @@ fn main() {
                 // Parse and evaluate
                 match Parser::new(trimmed) {
                     Ok(mut parser) => match parser.parse() {
-                        Ok(expr) => match eva.eval(expr) {
+                        Ok(expr) => match axe.eval(expr) {
                             Ok(value) => println!("=> {:?}", value),
                             Err(e) => println!("Error: {}", e),
                         },
@@ -53,7 +53,7 @@ fn main() {
 }
 
 fn print_help() {
-    println!("Eva Language Help");
+    println!("Axe Language Help");
     println!("================");
     println!();
     println!("Literals:");

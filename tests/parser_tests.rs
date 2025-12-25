@@ -1,4 +1,4 @@
-use eva::{Condition, Eva, Expr, Operation, Parser, Value};
+use axe::{Condition, Axe, Expr, Operation, Parser, Value};
 
 #[test]
 fn parse_integer() {
@@ -162,69 +162,69 @@ fn parse_while() {
 
 #[test]
 fn parse_and_eval_simple() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     let mut parser = Parser::new("(+ 10 20)").unwrap();
     let expr = parser.parse().unwrap();
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(30));
 }
 
 #[test]
 fn parse_and_eval_with_variables() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // (set x 5)
     let mut parser = Parser::new("(set x 5)").unwrap();
-    eva.eval(parser.parse().unwrap()).unwrap();
+    axe.eval(parser.parse().unwrap()).unwrap();
     
     // (* x 2)
     let mut parser = Parser::new("(* x 2)").unwrap();
-    let result = eva.eval(parser.parse().unwrap()).unwrap();
+    let result = axe.eval(parser.parse().unwrap()).unwrap();
     assert_eq!(result, Value::Int(10));
 }
 
 #[test]
 fn parse_and_eval_block() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     let input = "(block (set x 10) (set y 20) (+ x y))";
     let mut parser = Parser::new(input).unwrap();
     let expr = parser.parse().unwrap();
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(30));
 }
 
 #[test]
 fn parse_and_eval_if() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     let input = "(if (> 10 5) \"yes\" \"no\")";
     let mut parser = Parser::new(input).unwrap();
     let expr = parser.parse().unwrap();
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Str("yes".to_string()));
 }
 
 #[test]
 fn parse_and_eval_while() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Set initial value
     let mut parser = Parser::new("(set counter 3)").unwrap();
-    eva.eval(parser.parse().unwrap()).unwrap();
+    axe.eval(parser.parse().unwrap()).unwrap();
     
     // Run while loop
     let input = "(while (> counter 0) (assign counter (- counter 1)))";
     let mut parser = Parser::new(input).unwrap();
-    eva.eval(parser.parse().unwrap()).unwrap();
+    axe.eval(parser.parse().unwrap()).unwrap();
     
     // Check result
     let mut parser = Parser::new("counter").unwrap();
-    let result = eva.eval(parser.parse().unwrap()).unwrap();
+    let result = axe.eval(parser.parse().unwrap()).unwrap();
     assert_eq!(result, Value::Int(0));
 }
 
 #[test]
 fn parse_complex_program() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     let program = r#"
         (block
             (set sum 0)
@@ -237,18 +237,18 @@ fn parse_complex_program() {
     
     let mut parser = Parser::new(program).unwrap();
     let expr = parser.parse().unwrap();
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     // sum = 1 + 2 + 3 + 4 + 5 = 15
     assert_eq!(result, Value::Int(15));
 }
 
 #[test]
 fn parse_nested_if() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     let input = "(if true (if false 1 2) 3)";
     let mut parser = Parser::new(input).unwrap();
     let expr = parser.parse().unwrap();
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(2));
 }
 

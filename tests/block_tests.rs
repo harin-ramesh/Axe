@@ -1,47 +1,47 @@
-use eva::{Eva, Expr, Operation, Value};
+use axe::{Axe, Expr, Operation, Value};
 
 #[test]
 fn block_creates_new_scope() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Set a variable in global scope
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
     
     // Set a variable in block scope
     let block_expr = Expr::Block(vec![
         Expr::Set("y".into(), Box::new(Expr::Int(20)))
     ]);
     
-    let result = eva.eval(block_expr).unwrap();
+    let result = axe.eval(block_expr).unwrap();
     assert_eq!(result, Value::Int(20));
     
     // Variable y should not exist in global scope
-    let err = eva.eval(Expr::Var("y".into())).unwrap_err();
+    let err = axe.eval(Expr::Var("y".into())).unwrap_err();
     assert_eq!(err, "undefined variable");
 }
 
 #[test]
 fn block_can_access_parent_scope() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Set a variable in global scope
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
     
     // Access parent variable from block scope
     let block_expr = Expr::Block(vec![
         Expr::Var("x".into())
     ]);
     
-    let result = eva.eval(block_expr).unwrap();
+    let result = axe.eval(block_expr).unwrap();
     assert_eq!(result, Value::Int(10));
 }
 
 #[test]
 fn block_variable_shadows_parent() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Set a variable in global scope
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
     
     // Shadow variable in block scope and use it
     let block_expr = Expr::Block(vec![
@@ -52,20 +52,20 @@ fn block_variable_shadows_parent() {
         )
     ]);
     
-    let result = eva.eval(block_expr).unwrap();
+    let result = axe.eval(block_expr).unwrap();
     assert_eq!(result, Value::Int(10)); // 5 + 5
     
     // Global x should still be 10
-    let global_x = eva.eval(Expr::Var("x".into())).unwrap();
+    let global_x = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(global_x, Value::Int(10));
 }
 
 #[test]
 fn nested_blocks() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Set outer variable
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
     
     // Nested block: outer block sets y, inner block sets z and uses both x and y
     let inner_block = Expr::Block(vec![
@@ -88,21 +88,21 @@ fn nested_blocks() {
         )
     ]);
     
-    let result = eva.eval(outer_block).unwrap();
+    let result = axe.eval(outer_block).unwrap();
     // y=2, then inner: z=3, x=1, y=2, so z + (x + y) = 3 + 3 = 6, then y * 6 = 2 * 6 = 12
     assert_eq!(result, Value::Int(12));
     
     // y and z should not exist in global scope
-    let err = eva.eval(Expr::Var("y".into())).unwrap_err();
+    let err = axe.eval(Expr::Var("y".into())).unwrap_err();
     assert_eq!(err, "undefined variable");
     
-    let err = eva.eval(Expr::Var("z".into())).unwrap_err();
+    let err = axe.eval(Expr::Var("z".into())).unwrap_err();
     assert_eq!(err, "undefined variable");
 }
 
 #[test]
 fn block_with_multiple_expressions() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Block with multiple expressions - returns the last one
     let block_expr = Expr::Block(vec![
@@ -120,28 +120,28 @@ fn block_with_multiple_expressions() {
         )
     ]);
     
-    let result = eva.eval(block_expr).unwrap();
+    let result = axe.eval(block_expr).unwrap();
     assert_eq!(result, Value::Int(60)); // 10 + 20 + 30
     
     // Variables a, b, c should not exist in global scope
-    let err = eva.eval(Expr::Var("a".into())).unwrap_err();
+    let err = axe.eval(Expr::Var("a".into())).unwrap_err();
     assert_eq!(err, "undefined variable");
 }
 
 #[test]
 fn block_empty_returns_null() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Empty block should return Null
     let block_expr = Expr::Block(vec![]);
     
-    let result = eva.eval(block_expr).unwrap();
+    let result = axe.eval(block_expr).unwrap();
     assert_eq!(result, Value::Null);
 }
 
 #[test]
 fn block_variables_persist_across_expressions() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Test that variables set in one expression are available in the next
     let block_expr = Expr::Block(vec![
@@ -155,13 +155,13 @@ fn block_variables_persist_across_expressions() {
         )
     ]);
     
-    let result = eva.eval(block_expr).unwrap();
+    let result = axe.eval(block_expr).unwrap();
     assert_eq!(result, Value::Int(50)); // 5 * 10
 }
 
 #[test]
 fn nested_block_accesses_parent_variable() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Parent block sets a variable, child block uses it
     let child_block = Expr::Block(vec![
@@ -179,13 +179,13 @@ fn nested_block_accesses_parent_variable() {
         child_block,
     ]);
     
-    let result = eva.eval(parent_block).unwrap();
+    let result = axe.eval(parent_block).unwrap();
     assert_eq!(result, Value::Int(30)); // 10 + 20
 }
 
 #[test]
 fn nested_block_shadows_parent_variable() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Both parent and child have the same variable name
     let child_block = Expr::Block(vec![
@@ -206,16 +206,16 @@ fn nested_block_shadows_parent_variable() {
         Expr::Var("x".into()),
     ]);
     
-    let result = eva.eval(parent_block).unwrap();
+    let result = axe.eval(parent_block).unwrap();
     assert_eq!(result, Value::Int(10)); // parent's x is unchanged
 }
 
 #[test]
 fn deeply_nested_blocks_with_shadowing() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Global x = 1
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
     
     // Level 3 (innermost): x = 30
     let level3_block = Expr::Block(vec![
@@ -237,17 +237,17 @@ fn deeply_nested_blocks_with_shadowing() {
         Expr::Var("x".into()), // Should still be 10
     ]);
     
-    let result = eva.eval(level1_block).unwrap();
+    let result = axe.eval(level1_block).unwrap();
     assert_eq!(result, Value::Int(10)); // level1's x is unchanged
     
     // Global x should still be 1
-    let global_x = eva.eval(Expr::Var("x".into())).unwrap();
+    let global_x = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(global_x, Value::Int(1));
 }
 
 #[test]
 fn block_with_variable_referencing_outer_scope() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // ['begin',
     //   ['var', 'value', 10],
@@ -285,6 +285,6 @@ fn block_with_variable_referencing_outer_scope() {
         Expr::Var("result".into()),
     ]);
     
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(20));
 }

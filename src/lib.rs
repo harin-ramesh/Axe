@@ -109,11 +109,11 @@ pub enum Value {
     Str(String),
 }
 
-pub struct Eva {
+pub struct Axe {
     globals: EnvRef,
 }
 
-impl Eva {
+impl Axe {
     pub fn new() -> Self {
         Self {
             globals: Environment::new(),

@@ -1,4 +1,4 @@
-# Eva Programming Language
+# Axe Programming Language
 
 A lightweight S-expression based programming language interpreter written in Rust, featuring variables, control flow, and proper scoping.
 
@@ -33,37 +33,37 @@ cargo run --release
 Example session:
 
 ```
-Eva Programming Language REPL
+Axe Programming Language REPL
 Type 'exit' or 'quit' to exit, 'help' for help
 
-eva> (+ 10 20)
+axe> (+ 10 20)
 => Int(30)
 
-eva> (set x 5)
+axe> (set x 5)
 => Int(5)
 
-eva> (* x 2)
+axe> (* x 2)
 => Int(10)
 
-eva> (if (> x 3) "big" "small")
+axe> (if (> x 3) "big" "small")
 => Str("big")
 
-eva> quit
+axe> quit
 Goodbye!
 ```
 
 ### As a Library
 
 ```rust
-use eva::{Eva, Parser};
+use axe::{Axe, Parser};
 
 fn main() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // Parse and evaluate
     let mut parser = Parser::new("(+ 10 20)").unwrap();
     let expr = parser.parse().unwrap();
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     println!("{:?}", result); // Int(30)
 }
 ```
@@ -189,7 +189,7 @@ Everything else is truthy (including empty strings).
 
 ## Scoping Rules
 
-Eva implements lexical scoping:
+Axe implements lexical scoping:
 
 ### Variable Access
 ```lisp
@@ -218,7 +218,7 @@ local               ; Error: undefined variable
 
 - `help` - Show help message
 - `exit` or `quit` - Exit the REPL
-- Any Eva expression - Evaluate and print result
+- Any Axe expression - Evaluate and print result
 
 ## Testing
 
@@ -261,7 +261,7 @@ Descriptive error messages:
 ## Architecture
 
 ```
-eva/
+axe/
 ├── src/
 │   ├── lib.rs      - Core interpreter and evaluation
 │   ├── parser.rs   - S-expression parser

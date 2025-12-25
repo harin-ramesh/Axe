@@ -1,14 +1,14 @@
-use eva::{Condition, Eva, Expr, Operation, Value};
+use axe::{Condition, Axe, Expr, Operation, Value};
 
 #[test]
 fn while_basic_countdown() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // counter = 5
     // while (counter) {
     //     counter = counter - 1
     // }
-    eva.eval(Expr::Set("counter".to_string(), Box::new(Expr::Int(5)))).unwrap();
+    axe.eval(Expr::Set("counter".to_string(), Box::new(Expr::Int(5)))).unwrap();
     
     let expr = Expr::While(
         Condition::Var("counter".to_string()),
@@ -24,16 +24,16 @@ fn while_basic_countdown() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // After loop, counter should be 0
-    let result = eva.eval(Expr::Var("counter".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("counter".to_string())).unwrap();
     assert_eq!(result, Value::Int(0));
 }
 
 #[test]
 fn while_with_comparison_condition() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // i = 0
     // sum = 0
@@ -41,8 +41,8 @@ fn while_with_comparison_condition() {
     //     sum = sum + i
     //     i = i + 1
     // }
-    eva.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(0)))).unwrap();
-    eva.eval(Expr::Set("sum".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("sum".to_string(), Box::new(Expr::Int(0)))).unwrap();
     
     let expr = Expr::While(
         Condition::Binary(
@@ -70,22 +70,22 @@ fn while_with_comparison_condition() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // sum should be 0 + 1 + 2 + 3 + 4 = 10
-    let result = eva.eval(Expr::Var("sum".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("sum".to_string())).unwrap();
     assert_eq!(result, Value::Int(10));
 }
 
 #[test]
 fn while_never_executes() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // x = 0
     // while (0) {
     //     x = 10
     // }
-    eva.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(0)))).unwrap();
     
     let expr = Expr::While(
         Condition::Int(0),
@@ -94,22 +94,22 @@ fn while_never_executes() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // x should still be 0 since loop never executed
-    let result = eva.eval(Expr::Var("x".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("x".to_string())).unwrap();
     assert_eq!(result, Value::Int(0));
 }
 
 #[test]
 fn while_with_false_condition() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // count = 0
     // while (false) {
     //     count = count + 1
     // }
-    eva.eval(Expr::Set("count".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("count".to_string(), Box::new(Expr::Int(0)))).unwrap();
     
     let expr = Expr::While(
         Condition::Bool(false),
@@ -125,22 +125,22 @@ fn while_with_false_condition() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
-    let result = eva.eval(Expr::Var("count".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("count".to_string())).unwrap();
     assert_eq!(result, Value::Int(0));
 }
 
 #[test]
 fn while_returns_last_expression_value() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // i = 3
     // result = while (i) {
     //     i = i - 1
     //     i * 10
     // }
-    eva.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(3)))).unwrap();
+    axe.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(3)))).unwrap();
     
     let while_expr = Expr::While(
         Condition::Var("i".to_string()),
@@ -161,14 +161,14 @@ fn while_returns_last_expression_value() {
         ],
     );
     
-    let result = eva.eval(while_expr).unwrap();
+    let result = axe.eval(while_expr).unwrap();
     // Last iteration: i becomes 0, then 0 * 10 = 0
     assert_eq!(result, Value::Int(0));
 }
 
 #[test]
 fn while_with_nested_blocks() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // n = 3
     // total = 0
@@ -179,8 +179,8 @@ fn while_with_nested_blocks() {
     //     }
     //     n = n - 1
     // }
-    eva.eval(Expr::Set("n".to_string(), Box::new(Expr::Int(3)))).unwrap();
-    eva.eval(Expr::Set("total".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("n".to_string(), Box::new(Expr::Int(3)))).unwrap();
+    axe.eval(Expr::Set("total".to_string(), Box::new(Expr::Int(0)))).unwrap();
     
     let expr = Expr::While(
         Condition::Binary(
@@ -218,16 +218,16 @@ fn while_with_nested_blocks() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // total should be (3*2) + (2*2) + (1*2) = 6 + 4 + 2 = 12
-    let result = eva.eval(Expr::Var("total".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("total".to_string())).unwrap();
     assert_eq!(result, Value::Int(12));
 }
 
 #[test]
 fn while_empty_body_returns_null() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // while (false) { }
     let expr = Expr::While(
@@ -235,19 +235,19 @@ fn while_empty_body_returns_null() {
         vec![],
     );
     
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Null);
 }
 
 #[test]
 fn while_with_variable_modification() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // x = 1
     // while (x < 100) {
     //     x = x * 2
     // }
-    eva.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(1)))).unwrap();
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(1)))).unwrap();
     
     let expr = Expr::While(
         Condition::Binary(
@@ -267,16 +267,16 @@ fn while_with_variable_modification() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // x should be 128 (1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64 -> 128)
-    let result = eva.eval(Expr::Var("x".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("x".to_string())).unwrap();
     assert_eq!(result, Value::Int(128));
 }
 
 #[test]
 fn nested_while_loops() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // i = 2
     // j = 0
@@ -289,9 +289,9 @@ fn nested_while_loops() {
     //     }
     //     i = i - 1
     // }
-    eva.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(2)))).unwrap();
-    eva.eval(Expr::Set("j".to_string(), Box::new(Expr::Int(0)))).unwrap();
-    eva.eval(Expr::Set("total".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(2)))).unwrap();
+    axe.eval(Expr::Set("j".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("total".to_string(), Box::new(Expr::Int(0)))).unwrap();
     
     let expr = Expr::While(
         Condition::Binary(
@@ -337,16 +337,16 @@ fn nested_while_loops() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // total should be 4 (outer loop runs 2 times, inner loop runs 2 times each = 2*2 = 4)
-    let result = eva.eval(Expr::Var("total".to_string())).unwrap();
+    let result = axe.eval(Expr::Var("total".to_string())).unwrap();
     assert_eq!(result, Value::Int(4));
 }
 
 #[test]
 fn while_with_if_inside() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
     // i = 0
     // evens = 0
@@ -359,9 +359,9 @@ fn while_with_if_inside() {
     //     }
     //     i = i + 1
     // }
-    eva.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(0)))).unwrap();
-    eva.eval(Expr::Set("evens".to_string(), Box::new(Expr::Int(0)))).unwrap();
-    eva.eval(Expr::Set("odds".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("i".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("evens".to_string(), Box::new(Expr::Int(0)))).unwrap();
+    axe.eval(Expr::Set("odds".to_string(), Box::new(Expr::Int(0)))).unwrap();
     
     let expr = Expr::While(
         Condition::Binary(
@@ -420,12 +420,12 @@ fn while_with_if_inside() {
         ],
     );
     
-    eva.eval(expr).unwrap();
+    axe.eval(expr).unwrap();
     
     // evens should be 3 (0, 2, 4)
     // odds should be 2 (1, 3)
-    let evens_result = eva.eval(Expr::Var("evens".to_string())).unwrap();
-    let odds_result = eva.eval(Expr::Var("odds".to_string())).unwrap();
+    let evens_result = axe.eval(Expr::Var("evens".to_string())).unwrap();
+    let odds_result = axe.eval(Expr::Var("odds".to_string())).unwrap();
     assert_eq!(evens_result, Value::Int(3));
     assert_eq!(odds_result, Value::Int(2));
 }

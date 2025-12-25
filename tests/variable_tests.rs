@@ -1,23 +1,23 @@
-use eva::{Eva, Expr, Operation, Value};
+use axe::{Axe, Expr, Operation, Value};
 
 #[test]
 fn set_and_get_variable() {
-    let eva = Eva::new();
+    let axe = Axe::new();
 
-    eva.eval(
+    axe.eval(
         Expr::Set("x".into(), Box::new(Expr::Int(42))),
     )
     .unwrap();
 
-    let value = eva.eval(Expr::Var("x".into())).unwrap();
+    let value = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(value, Value::Int(42));
 }
 
 #[test]
 fn nested_expression_with_variable() {
-    let eva = Eva::new();
+    let axe = Axe::new();
 
-    eva.eval(
+    axe.eval(
         Expr::Set("x".into(), Box::new(Expr::Int(3))),
     )
     .unwrap();
@@ -33,23 +33,23 @@ fn nested_expression_with_variable() {
         Box::new(Expr::Int(4)),
     );
 
-    let result = eva.eval(expr).unwrap();
+    let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(20));
 }
 
 #[test]
 fn undefined_variable_fails() {
-    let eva = Eva::new();
-    let err = eva.eval(Expr::Var("y".into())).unwrap_err();
+    let axe = Axe::new();
+    let err = axe.eval(Expr::Var("y".into())).unwrap_err();
     assert_eq!(err, "undefined variable");
 }
 
 #[test]
 fn null_can_be_stored_in_variable() {
-    let eva = Eva::new();
+    let axe = Axe::new();
     
-    eva.eval(Expr::Set("x".into(), Box::new(Expr::Null))).unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Null))).unwrap();
     
-    let value = eva.eval(Expr::Var("x".into())).unwrap();
+    let value = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(value, Value::Null);
 }

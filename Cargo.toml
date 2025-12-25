@@ -1,10 +1,10 @@
 [package]
-name = "eva"
+name = "axe"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "eva"
+name = "axe"
 path = "src/lib.rs"
 
 [dependencies]
