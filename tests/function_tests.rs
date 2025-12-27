@@ -4,8 +4,8 @@ use axe::{Axe, Parser, Value};
 fn simple_function_definition_and_call() {
     let axe = Axe::new();
     
-    // Define a function: (set add2 (fn (x) (+ x 2)))
-    let mut parser = Parser::new("(set add2 (fn (x) (+ x 2)))").unwrap();
+    // Define a function: (fn add2 (x) (+ x 2))
+    let mut parser = Parser::new("(fn add2 (x) (+ x 2))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -21,8 +21,8 @@ fn simple_function_definition_and_call() {
 fn function_with_multiple_parameters() {
     let axe = Axe::new();
     
-    // (set add (fn (x y) (+ x y)))
-    let mut parser = Parser::new("(set add (fn (x y) (+ x y)))").unwrap();
+    // (fn add (x y) (+ x y))
+    let mut parser = Parser::new("(fn add (x y) (+ x y))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -38,8 +38,8 @@ fn function_with_multiple_parameters() {
 fn function_with_no_parameters() {
     let axe = Axe::new();
     
-    // (set get42 (fn () 42))
-    let mut parser = Parser::new("(set get42 (fn () 42))").unwrap();
+    // (fn get42 () 42)
+    let mut parser = Parser::new("(fn get42 () 42)").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -55,8 +55,8 @@ fn function_with_no_parameters() {
 fn function_with_multiple_expressions_in_body() {
     let axe = Axe::new();
     
-    // (set calc (fn (x) (set y (* x 2)) (+ y 3)))
-    let mut parser = Parser::new("(set calc (fn (x) (set y (* x 2)) (+ y 3)))").unwrap();
+    // (fn calc (x) (set y (* x 2)) (+ y 3))
+    let mut parser = Parser::new("(fn calc (x) (set y (* x 2)) (+ y 3))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -77,8 +77,8 @@ fn function_capturing_closure_variable() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (set addX (fn (y) (+ x y)))
-    let mut parser = Parser::new("(set addX (fn (y) (+ x y)))").unwrap();
+    // (fn addX (y) (+ x y))
+    let mut parser = Parser::new("(fn addX (y) (+ x y))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -94,13 +94,13 @@ fn function_capturing_closure_variable() {
 fn nested_function_calls() {
     let axe = Axe::new();
     
-    // (set double (fn (x) (* x 2)))
-    let mut parser = Parser::new("(set double (fn (x) (* x 2)))").unwrap();
+    // (fn double (x) (* x 2))
+    let mut parser = Parser::new("(fn double (x) (* x 2))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (set add3 (fn (x) (+ x 3)))
-    let mut parser = Parser::new("(set add3 (fn (x) (+ x 3)))").unwrap();
+    // (fn add3 (x) (+ x 3))
+    let mut parser = Parser::new("(fn add3 (x) (+ x 3))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -116,8 +116,8 @@ fn nested_function_calls() {
 fn function_call_with_wrong_argument_count() {
     let axe = Axe::new();
     
-    // (set add (fn (x y) (+ x y)))
-    let mut parser = Parser::new("(set add (fn (x y) (+ x y)))").unwrap();
+    // (fn add (x y) (+ x y))
+    let mut parser = Parser::new("(fn add (x y) (+ x y))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -165,8 +165,8 @@ fn calling_non_function_value() {
 fn recursive_function() {
     let axe = Axe::new();
     
-    // (set factorial (fn (n) (if (<= n 1) 1 (* n (factorial (- n 1))))))
-    let mut parser = Parser::new("(set factorial (fn (n) (if (<= n 1) 1 (* n (factorial (- n 1))))))").unwrap();
+    // (fn factorial (n) (if (<= n 1) 1 (* n (factorial (- n 1)))))
+    let mut parser = Parser::new("(fn factorial (n) (if (<= n 1) 1 (* n (factorial (- n 1)))))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -182,8 +182,8 @@ fn recursive_function() {
 fn function_in_condition() {
     let axe = Axe::new();
     
-    // (set isPositive (fn (x) (> x 0)))
-    let mut parser = Parser::new("(set isPositive (fn (x) (> x 0)))").unwrap();
+    // (fn isPositive (x) (> x 0))
+    let mut parser = Parser::new("(fn isPositive (x) (> x 0))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -199,8 +199,8 @@ fn function_in_condition() {
 fn function_returning_function() {
     let axe = Axe::new();
     
-    // (set makeAdder (fn (x) (fn (y) (+ x y))))
-    let mut parser = Parser::new("(set makeAdder (fn (x) (fn (y) (+ x y))))").unwrap();
+    // (fn makeAdder (x) (fn adder (y) (+ x y)))
+    let mut parser = Parser::new("(fn makeAdder (x) (fn adder (y) (+ x y)))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -221,8 +221,8 @@ fn function_returning_function() {
 fn function_with_invalid_parameter_name() {
     let axe = Axe::new();
     
-    // (set bad (fn (hello-world) (+ hello-world 1))) - parameter name contains hyphen
-    let mut parser = Parser::new("(set bad (fn (hello-world) (+ hello-world 1)))").unwrap();
+    // (fn bad (hello-world) (+ hello-world 1)) - parameter name contains hyphen
+    let mut parser = Parser::new("(fn bad (hello-world) (+ hello-world 1))").unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr);
     
@@ -239,8 +239,8 @@ fn function_scope_isolation() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (set changeX (fn () (set x 100)))
-    let mut parser = Parser::new("(set changeX (fn () (set x 100)))").unwrap();
+    // (fn changeX () (set x 100))
+    let mut parser = Parser::new("(fn changeX () (set x 100))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -266,8 +266,8 @@ fn function_modifying_outer_variable() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (set modifyX (fn () (assign x 100)))
-    let mut parser = Parser::new("(set modifyX (fn () (assign x 100)))").unwrap();
+    // (fn modifyX () (assign x 100))
+    let mut parser = Parser::new("(fn modifyX () (assign x 100))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     

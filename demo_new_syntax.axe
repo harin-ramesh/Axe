@@ -1,0 +1,11 @@
+(fn add (a b) (+ a b))
+(print "5 + 3 =" (add 5 3))
+
+(fn greet (name) (print "Hello," name))
+(greet "World")
+
+(fn factorial (n) 
+  (if (<= n 1) 
+    1 
+    (* n (factorial (- n 1)))))
+(print "5! =" (factorial 5))

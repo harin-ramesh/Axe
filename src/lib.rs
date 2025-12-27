@@ -99,11 +99,10 @@ pub enum Expr {
     Block(Vec<Expr>),
     If(Condition, Vec<Expr>, Vec<Expr>),
     While(Condition, Vec<Expr>),
-    Function(Vec<String>, Vec<Expr>), // (fn (params...) body...)
+    Function(String, Vec<String>, Vec<Expr>), // (fn name (params...) body...)
     FunctionCall(String, Vec<Expr>),  // (funcname args...)
 }
 
-#[derive(Debug, Clone)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -111,6 +110,37 @@ pub enum Value {
     Float(f64),
     Str(String),
     Function(Vec<String>, Vec<Expr>, EnvRef), // parameters, body, closure environment
+    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>), // name, native function
+}
+
+// Manual Clone implementation because fn pointers are Copy
+impl Clone for Value {
+    fn clone(&self) -> Self {
+        match self {
+            Value::Null => Value::Null,
+            Value::Bool(b) => Value::Bool(*b),
+            Value::Int(n) => Value::Int(*n),
+            Value::Float(f) => Value::Float(*f),
+            Value::Str(s) => Value::Str(s.clone()),
+            Value::Function(p, b, e) => Value::Function(p.clone(), b.clone(), e.clone()),
+            Value::NativeFunction(name, func) => Value::NativeFunction(name.clone(), *func),
+        }
+    }
+}
+
+// Manual Debug implementation
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Null => write!(f, "Null"),
+            Value::Bool(b) => write!(f, "Bool({:?})", b),
+            Value::Int(n) => write!(f, "Int({:?})", n),
+            Value::Float(fl) => write!(f, "Float({:?})", fl),
+            Value::Str(s) => write!(f, "Str({:?})", s),
+            Value::Function(params, body, _) => write!(f, "Function({:?}, {:?}, <env>)", params, body),
+            Value::NativeFunction(name, _) => write!(f, "NativeFunction({})", name),
+        }
+    }
 }
 
 impl PartialEq for Value {
@@ -124,6 +154,10 @@ impl PartialEq for Value {
             // Functions are compared by reference equality (pointer comparison)
             (Value::Function(_, _, env_a), Value::Function(_, _, env_b)) => {
                 Rc::ptr_eq(env_a, env_b)
+            }
+            // Native functions compared by name
+            (Value::NativeFunction(name_a, _), Value::NativeFunction(name_b, _)) => {
+                name_a == name_b
             }
             _ => false,
         }
@@ -142,8 +176,21 @@ impl std::fmt::Display for Value {
                 write!(f, "<function({})", params.join(", "))?;
                 write!(f, ">")
             }
+            Value::NativeFunction(name, _) => write!(f, "<native-fn:{}>", name),
         }
     }
+}
+
+// Built-in native functions
+fn native_print(args: &[Value]) -> Result<Value, &'static str> {
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            print!(" ");
+        }
+        print!("{}", arg);
+    }
+    println!();
+    Ok(Value::Null)
 }
 
 pub struct Axe {
@@ -152,9 +199,15 @@ pub struct Axe {
 
 impl Axe {
     pub fn new() -> Self {
-        Self {
-            globals: Environment::new(),
-        }
+        let globals = Environment::new();
+        
+        // Add built-in functions
+        globals.borrow_mut().set(
+            "print".to_string(),
+            Value::NativeFunction("print".to_string(), native_print),
+        );
+        
+        Self { globals }
     }
 
     pub fn eval(&self, expr: Expr) -> Result<Value, &'static str> {
@@ -279,15 +332,26 @@ impl Axe {
                 Ok(result)
             }
 
-            Expr::Function(params, body) => {
+            Expr::Function(name, params, body) => {
+                // Validate function name
+                if !Self::is_valid_var_name(&name) {
+                    return Err("invalid function name");
+                }
+                
                 // Validate parameter names
                 for param in &params {
                     if !Self::is_valid_var_name(param) {
                         return Err("invalid parameter name");
                     }
                 }
+                
                 // Create a closure capturing the current environment
-                Ok(Value::Function(params.clone(), body.clone(), env))
+                let func_value = Value::Function(params.clone(), body.clone(), env.clone());
+                
+                // Automatically add the function to the current environment
+                env.borrow_mut().set(name.clone(), func_value.clone());
+                
+                Ok(func_value)
             }
 
             Expr::FunctionCall(name, args) => {
@@ -322,6 +386,16 @@ impl Axe {
                         }
 
                         Ok(result)
+                    }
+                    Value::NativeFunction(_, native_fn) => {
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                        }
+
+                        // Call the native function
+                        native_fn(&arg_values)
                     }
                     _ => Err("not a function"),
                 }
@@ -388,6 +462,16 @@ impl Axe {
                         }
 
                         Ok(result)
+                    }
+                    Value::NativeFunction(_, native_fn) => {
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_condition(arg, Some(env.clone()))?);
+                        }
+
+                        // Call the native function
+                        native_fn(&arg_values)
                     }
                     _ => Err("not a function"),
                 }

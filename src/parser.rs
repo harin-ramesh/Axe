@@ -361,11 +361,17 @@ impl Parser {
     }
 
     fn parse_function(&mut self) -> Result<Expr, String> {
-        // Expect (fn (params...) body...)
+        // Expect (fn name (params...) body...)
+        // Parse function name
+        let name = match self.consume() {
+            Some(Token::Symbol(s)) => s,
+            _ => return Err("Expected function name after 'fn'".to_string()),
+        };
+        
         // Parse parameter list
         match self.consume() {
             Some(Token::LParen) => {}
-            _ => return Err("Expected '(' after 'fn'".to_string()),
+            _ => return Err("Expected '(' after function name".to_string()),
         }
         
         let mut params = Vec::new();
@@ -393,7 +399,7 @@ impl Parser {
             return Err("Function requires non-empty body".to_string());
         }
         
-        Ok(Expr::Function(params, body))
+        Ok(Expr::Function(name, params, body))
     }
 
     fn parse_function_call(&mut self) -> Result<Expr, String> {

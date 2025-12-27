@@ -1,16 +1,18 @@
 # 🪓 Axe Programming Language
 
-A lightweight S-expression based programming language interpreter written in Rust, featuring variables, control flow, and proper scoping.
+A lightweight S-expression based programming language interpreter written in Rust, featuring functions, variables, control flow, and proper scoping.
 
 ## Features
 
 - **S-Expression Syntax**: Clean Lisp-like syntax
+- **Functions**: First-class functions with closures and recursion support
 - **Arithmetic Operations**: `+`, `-`, `*`, `/` for integers and floats
 - **Comparison Operations**: `>`, `<`, `>=`, `<=`, `==`, `!=`
 - **Variables**: `set` for declaration, `assign` for updates
 - **Control Flow**: `if` expressions and `while` loops
 - **Block Scoping**: Lexical scoping with blocks
 - **Boolean Type**: `true` and `false` with proper truthiness rules
+- **Built-in Functions**: Native functions like `print` available globally
 - **Type Safety**: Strong type checking at runtime
 - **Interactive REPL**: Command-line interface for experimentation
 
@@ -47,6 +49,16 @@ axe> (* x 2)
 
 axe> (if (> x 3) "big" "small")
 => Str("big")
+
+axe> (fn add (a b) (+ a b))
+=> <function(a, b)>
+
+axe> (add 10 20)
+=> 30
+
+axe> (print "Hello, World!")
+Hello, World!
+=> null
 
 axe> quit
 Goodbye!
@@ -147,6 +159,40 @@ Blocks create new scopes:
     (+ x y))        ; Returns 30
 ```
 
+### Functions
+
+Define and call functions:
+
+```lisp
+; Simple function
+(fn add (a b) (+ a b))
+(add 5 3)           ; Returns 8
+
+; Recursive function
+(fn factorial (n)
+    (if (<= n 1)
+        1
+        (* n (factorial (- n 1)))))
+(factorial 5)       ; Returns 120
+
+; Function with closure
+(set x 10)
+(fn addX (y) (+ x y))
+(addX 5)            ; Returns 15
+
+; Higher-order function
+(fn makeAdder (x)
+    (fn adder (y) (+ x y)))
+(set add5 (makeAdder 5))
+(add5 10)           ; Returns 15
+```
+
+### Built-in Functions
+
+```lisp
+(print "Hello" "World" 42)  ; Prints: Hello World 42
+```
+
 ### Complete Example: Sum from 1 to 5
 
 ```lisp
@@ -176,6 +222,8 @@ Blocks create new scopes:
 - `Block(exprs)` - Block with new scope
 - `If(condition, then, else)` - Conditional
 - `While(condition, body)` - Loop
+- `Function(name, params, body)` - Function definition
+- `FunctionCall(name, args)` - Function call
 
 ## Truthiness Rules
 
@@ -220,82 +268,18 @@ local               ; Error: undefined variable
 - `exit` or `quit` - Exit the REPL
 - Any Axe expression - Evaluate and print result
 
-## Testing
-
-Run the comprehensive test suite:
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific test suites
-cargo test --test parser_tests
-cargo test --test while_tests
-cargo test --test if_tests
-cargo test --test comparison_tests
-cargo test --test block_tests
-```
-
-### Test Coverage
-
-113 tests covering:
-- **Parser**: 24 tests - S-expression parsing
-- **While Loops**: 10 tests - Loop execution
-- **If Expressions**: 18 tests - Conditionals
-- **Comparisons**: 29 tests - All comparison operators
-- **Blocks**: 11 tests - Scoping and nesting
-- **Variables**: 9 tests - Variable operations
-- **Evaluation**: 4 tests - Basic evaluation
-- **Assignments**: 8 tests - Variable updates
-
 ## Error Handling
 
 Descriptive error messages:
 - `"undefined variable"` - Variable not found
+- `"undefined function"` - Function not found
 - `"invalid variable name"` - Invalid identifier
+- `"invalid function name"` - Invalid function name
+- `"invalid parameter name"` - Invalid parameter name
+- `"argument count mismatch"` - Wrong number of arguments
 - `"division by zero"` - Division by zero
 - `"type error"` - Type mismatch
+- `"not a function"` - Attempted to call a non-function value
 - `"Unterminated string"` - Parse error
 - `"Expected operator"` - Syntax error
-
-## Architecture
-
-```
-axe/
-├── src/
-│   ├── lib.rs      - Core interpreter and evaluation
-│   ├── parser.rs   - S-expression parser
-│   └── main.rs     - REPL implementation
-├── tests/
-│   ├── parser_tests.rs
-│   ├── while_tests.rs
-│   ├── if_tests.rs
-│   ├── comparison_tests.rs
-│   ├── block_tests.rs
-│   ├── variable_tests.rs
-│   └── ... (8 test files total)
-└── Cargo.toml
-```
-
-## Implementation Details
-
-### Environment Model
-
-Uses Rc<RefCell<Environment>> for shared ownership with interior mutability:
-
-```rust
-type EnvRef = Rc<RefCell<Environment>>;
-
-pub struct Environment {
-    records: HashMap<String, Value>,
-    parent: Option<EnvRef>,
-}
-```
-
-### Variable Validation
-
-Variable names must:
-- Start with letter (a-z, A-Z) or underscore (_)
-- Contain only letters, digits, or underscores
-- Match regex: `^[a-zA-Z_][a-zA-Z0-9_]*$`
 
