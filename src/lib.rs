@@ -82,6 +82,7 @@ pub enum Condition {
     Str(String),
     Binary(Operation, Box<Condition>, Box<Condition>),
     Var(String),
+    FunctionCall(String, Vec<Condition>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -98,15 +99,51 @@ pub enum Expr {
     Block(Vec<Expr>),
     If(Condition, Vec<Expr>, Vec<Expr>),
     While(Condition, Vec<Expr>),
+    Function(Vec<String>, Vec<Expr>), // (fn (params...) body...)
+    FunctionCall(String, Vec<Expr>),  // (funcname args...)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Null,
     Bool(bool),
     Int(i64),
     Float(f64),
     Str(String),
+    Function(Vec<String>, Vec<Expr>, EnvRef), // parameters, body, closure environment
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Null, Value::Null) => true,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Str(a), Value::Str(b)) => a == b,
+            // Functions are compared by reference equality (pointer comparison)
+            (Value::Function(_, _, env_a), Value::Function(_, _, env_b)) => {
+                Rc::ptr_eq(env_a, env_b)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Null => write!(f, "null"),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Int(n) => write!(f, "{}", n),
+            Value::Float(fl) => write!(f, "{}", fl),
+            Value::Str(s) => write!(f, "\"{}\"", s),
+            Value::Function(params, _, _) => {
+                write!(f, "<function({})", params.join(", "))?;
+                write!(f, ">")
+            }
+        }
+    }
 }
 
 pub struct Axe {
@@ -241,6 +278,54 @@ impl Axe {
 
                 Ok(result)
             }
+
+            Expr::Function(params, body) => {
+                // Validate parameter names
+                for param in &params {
+                    if !Self::is_valid_var_name(param) {
+                        return Err("invalid parameter name");
+                    }
+                }
+                // Create a closure capturing the current environment
+                Ok(Value::Function(params.clone(), body.clone(), env))
+            }
+
+            Expr::FunctionCall(name, args) => {
+                // Get the function from the environment
+                let func = env.borrow().get(&name).ok_or("undefined function")?;
+
+                match func {
+                    Value::Function(params, body, closure_env) => {
+                        // Check argument count
+                        if params.len() != args.len() {
+                            return Err("argument count mismatch");
+                        }
+
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                        }
+
+                        // Create a new environment extending the closure environment
+                        let func_env = Environment::extend(closure_env);
+
+                        // Bind parameters to argument values
+                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                            func_env.borrow_mut().set(param.clone(), value.clone());
+                        }
+
+                        // Execute function body
+                        let mut result = Value::Null;
+                        for expr in &body {
+                            result = self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
+                        }
+
+                        Ok(result)
+                    }
+                    _ => Err("not a function"),
+                }
+            }
         }
     }
 
@@ -269,6 +354,43 @@ impl Axe {
                 let left = self.eval_condition(*lhs, Some(env.clone()))?;
                 let right = self.eval_condition(*rhs, Some(env))?;
                 Self::eval_binary(op, left, right)
+            }
+
+            Condition::FunctionCall(name, args) => {
+                // Get the function from the environment
+                let func = env.borrow().get(&name).ok_or("undefined function")?;
+
+                match func {
+                    Value::Function(params, body, closure_env) => {
+                        // Check argument count
+                        if params.len() != args.len() {
+                            return Err("argument count mismatch");
+                        }
+
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_condition(arg, Some(env.clone()))?);
+                        }
+
+                        // Create a new environment extending the closure environment
+                        let func_env = Environment::extend(closure_env);
+
+                        // Bind parameters to argument values
+                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                            func_env.borrow_mut().set(param.clone(), value.clone());
+                        }
+
+                        // Execute function body
+                        let mut result = Value::Null;
+                        for expr in &body {
+                            result = self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
+                        }
+
+                        Ok(result)
+                    }
+                    _ => Err("not a function"),
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-# Axe Programming Language
+# 🪓 Axe Programming Language
 
 A lightweight S-expression based programming language interpreter written in Rust, featuring variables, control flow, and proper scoping.
 

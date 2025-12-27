@@ -36,7 +36,7 @@ fn main() {
                 match Parser::new(trimmed) {
                     Ok(mut parser) => match parser.parse() {
                         Ok(expr) => match axe.eval(expr) {
-                            Ok(value) => println!("=> {:?}", value),
+                            Ok(value) => println!("=> {}", value),
                             Err(e) => println!("Error: {}", e),
                         },
                         Err(e) => println!("Parse error: {}", e),
@@ -91,6 +91,15 @@ fn print_help() {
     println!("    (set x 10)");
     println!("    (set y 20)");
     println!("    (+ x y))");
+    println!();
+    println!("Functions:");
+    println!("  (set add (fn (x y) (+ x y)))");
+    println!("  (add 10 20)     - Call function: 30");
+    println!("  (set factorial (fn (n)");
+    println!("    (if (<= n 1)");
+    println!("      1");
+    println!("      (* n (factorial (- n 1))))))");
+    println!("  (factorial 5)   - Recursive call: 120");
     println!();
     println!("Examples:");
     println!("  (set sum 0)");

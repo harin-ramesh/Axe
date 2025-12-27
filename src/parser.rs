@@ -171,7 +171,12 @@ impl Parser {
             "block" => self.parse_block()?,
             "if" => self.parse_if()?,
             "while" => self.parse_while()?,
-            _ => return Err(format!("Unknown operator: {}", op)),
+            "fn" => self.parse_function()?,
+            _ => {
+                // If not a keyword, treat as function call
+                self.pos -= 1; // put back the symbol
+                self.parse_function_call()?
+            }
         };
 
         match self.consume() {
@@ -336,7 +341,11 @@ impl Parser {
             "<=" => self.parse_condition_binary(Operation::Lte)?,
             "==" => self.parse_condition_binary(Operation::Eq)?,
             "!=" => self.parse_condition_binary(Operation::Neq)?,
-            _ => return Err(format!("Unknown operator in condition: {}", op)),
+            _ => {
+                // If not a keyword, treat as function call
+                self.pos -= 1; // put back the symbol
+                self.parse_condition_function_call()?
+            }
         };
 
         match self.consume() {
@@ -349,5 +358,77 @@ impl Parser {
         let left = Box::new(self.parse_condition()?);
         let right = Box::new(self.parse_condition()?);
         Ok(Condition::Binary(op, left, right))
+    }
+
+    fn parse_function(&mut self) -> Result<Expr, String> {
+        // Expect (fn (params...) body...)
+        // Parse parameter list
+        match self.consume() {
+            Some(Token::LParen) => {}
+            _ => return Err("Expected '(' after 'fn'".to_string()),
+        }
+        
+        let mut params = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                self.consume(); // consume ')'
+                break;
+            }
+            match self.consume() {
+                Some(Token::Symbol(s)) => params.push(s),
+                _ => return Err("Expected parameter name".to_string()),
+            }
+        }
+        
+        // Parse body (rest of the expressions until closing paren)
+        let mut body = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                break;
+            }
+            body.push(self.parse()?);
+        }
+        
+        if body.is_empty() {
+            return Err("Function requires non-empty body".to_string());
+        }
+        
+        Ok(Expr::Function(params, body))
+    }
+
+    fn parse_function_call(&mut self) -> Result<Expr, String> {
+        // Expect (funcname args...)
+        let name = match self.consume() {
+            Some(Token::Symbol(s)) => s,
+            _ => return Err("Expected function name".to_string()),
+        };
+        
+        let mut args = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                break;
+            }
+            args.push(self.parse()?);
+        }
+        
+        Ok(Expr::FunctionCall(name, args))
+    }
+
+    fn parse_condition_function_call(&mut self) -> Result<Condition, String> {
+        // Expect (funcname args...)
+        let name = match self.consume() {
+            Some(Token::Symbol(s)) => s,
+            _ => return Err("Expected function name in condition".to_string()),
+        };
+        
+        let mut args = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                break;
+            }
+            args.push(self.parse_condition()?);
+        }
+        
+        Ok(Condition::FunctionCall(name, args))
     }
 }
