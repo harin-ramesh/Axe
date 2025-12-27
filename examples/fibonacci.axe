@@ -1,0 +1,13 @@
+; Fibonacci sequence calculator
+
+(fn fibonacci (n)
+  (if (<= n 1)
+    n
+    (+ (fibonacci (- n 1))
+       (fibonacci (- n 2)))))
+
+(print "Fibonacci sequence:")
+(let i 0)
+(while (< i 10)
+  (print "fib(" i ") =" (fibonacci i))
+  (assign i (+ i 1)))

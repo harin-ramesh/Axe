@@ -26,7 +26,7 @@ fn test_empty_if_else_branch_error() {
 
 #[test]
 fn test_valid_while_with_body() {
-    let mut parser = Parser::new("(while (< x 5) (assign x (+ x 1)))").unwrap();
+    let mut parser = Parser::new("(while (< x 5) (let x (+ x 1)))").unwrap();
     let result = parser.parse();
     assert!(result.is_ok());
 }

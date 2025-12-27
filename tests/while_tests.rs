@@ -13,7 +13,7 @@ fn while_basic_countdown() {
     let expr = Expr::While(
         Condition::Var("counter".to_string()),
         vec![
-            Expr::Assign(
+            Expr::Set(
                 "counter".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Sub,
@@ -51,7 +51,7 @@ fn while_with_comparison_condition() {
             Box::new(Condition::Int(5)),
         ),
         vec![
-            Expr::Assign(
+            Expr::Set(
                 "sum".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Add,
@@ -59,7 +59,7 @@ fn while_with_comparison_condition() {
                     Box::new(Expr::Var("i".to_string())),
                 )),
             ),
-            Expr::Assign(
+            Expr::Set(
                 "i".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Add,
@@ -90,7 +90,7 @@ fn while_never_executes() {
     let expr = Expr::While(
         Condition::Int(0),
         vec![
-            Expr::Assign("x".to_string(), Box::new(Expr::Int(10))),
+            Expr::Set("x".to_string(), Box::new(Expr::Int(10))),
         ],
     );
     
@@ -114,7 +114,7 @@ fn while_with_false_condition() {
     let expr = Expr::While(
         Condition::Bool(false),
         vec![
-            Expr::Assign(
+            Expr::Set(
                 "count".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Add,
@@ -145,7 +145,7 @@ fn while_returns_last_expression_value() {
     let while_expr = Expr::While(
         Condition::Var("i".to_string()),
         vec![
-            Expr::Assign(
+            Expr::Set(
                 "i".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Sub,
@@ -198,7 +198,7 @@ fn while_with_nested_blocks() {
                         Box::new(Expr::Int(2)),
                     )),
                 ),
-                Expr::Assign(
+                Expr::Set(
                     "total".to_string(),
                     Box::new(Expr::Binary(
                         Operation::Add,
@@ -207,7 +207,7 @@ fn while_with_nested_blocks() {
                     )),
                 ),
             ]),
-            Expr::Assign(
+            Expr::Set(
                 "n".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Sub,
@@ -256,7 +256,7 @@ fn while_with_variable_modification() {
             Box::new(Condition::Int(100)),
         ),
         vec![
-            Expr::Assign(
+            Expr::Set(
                 "x".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Mul,
@@ -300,7 +300,7 @@ fn nested_while_loops() {
             Box::new(Condition::Int(0)),
         ),
         vec![
-            Expr::Assign("j".to_string(), Box::new(Expr::Int(2))),
+            Expr::Set("j".to_string(), Box::new(Expr::Int(2))),
             Expr::While(
                 Condition::Binary(
                     Operation::Gt,
@@ -308,7 +308,7 @@ fn nested_while_loops() {
                     Box::new(Condition::Int(0)),
                 ),
                 vec![
-                    Expr::Assign(
+                    Expr::Set(
                         "total".to_string(),
                         Box::new(Expr::Binary(
                             Operation::Add,
@@ -316,7 +316,7 @@ fn nested_while_loops() {
                             Box::new(Expr::Int(1)),
                         )),
                     ),
-                    Expr::Assign(
+                    Expr::Set(
                         "j".to_string(),
                         Box::new(Expr::Binary(
                             Operation::Sub,
@@ -326,7 +326,7 @@ fn nested_while_loops() {
                     ),
                 ],
             ),
-            Expr::Assign(
+            Expr::Set(
                 "i".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Sub,
@@ -389,7 +389,7 @@ fn while_with_if_inside() {
                     Box::new(Condition::Int(0)),
                 ),
                 vec![
-                    Expr::Assign(
+                    Expr::Set(
                         "evens".to_string(),
                         Box::new(Expr::Binary(
                             Operation::Add,
@@ -399,7 +399,7 @@ fn while_with_if_inside() {
                     ),
                 ],
                 vec![
-                    Expr::Assign(
+                    Expr::Set(
                         "odds".to_string(),
                         Box::new(Expr::Binary(
                             Operation::Add,
@@ -409,7 +409,7 @@ fn while_with_if_inside() {
                     ),
                 ],
             ),
-            Expr::Assign(
+            Expr::Set(
                 "i".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Add,

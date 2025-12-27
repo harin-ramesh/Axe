@@ -29,7 +29,7 @@ fn test_print_with_variables() {
     let axe = Axe::new();
     
     // Set a variable
-    let mut parser = Parser::new("(set x 10)").unwrap();
+    let mut parser = Parser::new("(let x 10)").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     

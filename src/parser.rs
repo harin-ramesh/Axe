@@ -29,6 +29,16 @@ impl Parser {
                 ' ' | '\t' | '\n' | '\r' => {
                     chars.next();
                 }
+                ';' => {
+                    // Comment - skip until end of line
+                    chars.next();
+                    while let Some(&ch) = chars.peek() {
+                        chars.next();
+                        if ch == '\n' {
+                            break;
+                        }
+                    }
+                }
                 '(' => {
                     tokens.push(Token::LParen);
                     chars.next();
@@ -166,8 +176,9 @@ impl Parser {
             "<=" => self.parse_binary(Operation::Lte)?,
             "==" => self.parse_binary(Operation::Eq)?,
             "!=" => self.parse_binary(Operation::Neq)?,
-            "set" => self.parse_set()?,
+            "let" => self.parse_set()?,
             "assign" => self.parse_assign()?,
+            "list" => self.parse_list_literal()?,
             "block" => self.parse_block()?,
             "if" => self.parse_if()?,
             "while" => self.parse_while()?,
@@ -207,6 +218,17 @@ impl Parser {
         };
         let value = Box::new(self.parse()?);
         Ok(Expr::Assign(name, value))
+    }
+
+    fn parse_list_literal(&mut self) -> Result<Expr, String> {
+        let mut elements = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                break;
+            }
+            elements.push(self.parse()?);
+        }
+        Ok(Expr::List(elements))
     }
 
     fn parse_block(&mut self) -> Result<Expr, String> {

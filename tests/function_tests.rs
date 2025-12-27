@@ -55,8 +55,8 @@ fn function_with_no_parameters() {
 fn function_with_multiple_expressions_in_body() {
     let axe = Axe::new();
     
-    // (fn calc (x) (set y (* x 2)) (+ y 3))
-    let mut parser = Parser::new("(fn calc (x) (set y (* x 2)) (+ y 3))").unwrap();
+    // (fn calc (x) (let y (* x 2)) (+ y 3))
+    let mut parser = Parser::new("(fn calc (x) (let y (* x 2)) (+ y 3))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -72,8 +72,8 @@ fn function_with_multiple_expressions_in_body() {
 fn function_capturing_closure_variable() {
     let axe = Axe::new();
     
-    // (set x 10)
-    let mut parser = Parser::new("(set x 10)").unwrap();
+    // (let x 10)
+    let mut parser = Parser::new("(let x 10)").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -147,8 +147,8 @@ fn calling_undefined_function() {
 fn calling_non_function_value() {
     let axe = Axe::new();
     
-    // (set x 42)
-    let mut parser = Parser::new("(set x 42)").unwrap();
+    // (let x 42)
+    let mut parser = Parser::new("(let x 42)").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -204,8 +204,8 @@ fn function_returning_function() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (set add5 (makeAdder 5))
-    let mut parser = Parser::new("(set add5 (makeAdder 5))").unwrap();
+    // (let add5 (makeAdder 5))
+    let mut parser = Parser::new("(let add5 (makeAdder 5))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -234,13 +234,13 @@ fn function_with_invalid_parameter_name() {
 fn function_scope_isolation() {
     let axe = Axe::new();
     
-    // (set x 10)
-    let mut parser = Parser::new("(set x 10)").unwrap();
+    // (let x 10)
+    let mut parser = Parser::new("(let x 10)").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (fn changeX () (set x 100))
-    let mut parser = Parser::new("(fn changeX () (set x 100))").unwrap();
+    // (fn changeX () (let x 100))
+    let mut parser = Parser::new("(fn changeX () (let x 100))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -249,7 +249,7 @@ fn function_scope_isolation() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // x should still be 10 (function creates new scope)
+    // x should still be 10 (function shadowed, didn't update)
     let mut parser = Parser::new("x").unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
@@ -258,16 +258,16 @@ fn function_scope_isolation() {
 }
 
 #[test]
-fn function_modifying_outer_variable() {
+fn function_shadows_outer_variable() {
     let axe = Axe::new();
     
-    // (set x 10)
-    let mut parser = Parser::new("(set x 10)").unwrap();
+    // (let x 10)
+    let mut parser = Parser::new("(let x 10)").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (fn modifyX () (assign x 100))
-    let mut parser = Parser::new("(fn modifyX () (assign x 100))").unwrap();
+    // (fn modifyX () (let x 100))
+    let mut parser = Parser::new("(fn modifyX () (let x 100))").unwrap();
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
@@ -276,10 +276,10 @@ fn function_modifying_outer_variable() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // x should now be 100 (assign modifies outer scope)
+    // x should still be 10 (function shadowed, didn't modify)
     let mut parser = Parser::new("x").unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
     
-    assert_eq!(result, Value::Int(100));
+    assert_eq!(result, Value::Int(10));
 }

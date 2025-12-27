@@ -41,21 +41,18 @@ impl Environment {
         self.records.insert(name, value);
     }
 
-    pub fn assign(&mut self, name: &str, value: Value) -> Result<(), &'static str> {
-        // Try to update in current scope
-        if self.records.contains_key(name) {
-            self.records.insert(name.to_string(), value);
-            return Ok(());
+    pub fn update(&mut self, name: String, value: Value) -> Result<(), &'static str> {
+        // Search for the variable in current scope
+        if self.records.contains_key(&name) {
+            self.records.insert(name, value);
+            Ok(())
+        } else if let Some(parent) = &self.parent {
+            // Search in parent scope
+            parent.borrow_mut().update(name, value)
+        } else {
+            // Variable not found in any scope
+            Err("undefined variable")
         }
-        
-        // Try to update in parent scope
-        if let Some(parent) = &self.parent {
-            parent.borrow_mut().assign(name, value)?;
-            return Ok(());
-        }
-        
-        // Variable not found in any scope
-        Err("undefined variable")
     }
 }
 
@@ -92,9 +89,10 @@ pub enum Expr {
     Int(i64),
     Float(f64),
     Str(String),
+    List(Vec<Expr>),  // (list expr1 expr2 ...)
     Binary(Operation, Box<Expr>, Box<Expr>),
-    Set(String, Box<Expr>),
-    Assign(String, Box<Expr>),
+    Set(String, Box<Expr>),      // let - creates or shadows variable in current scope
+    Assign(String, Box<Expr>),   // assign - updates existing variable in any scope
     Var(String),
     Block(Vec<Expr>),
     If(Condition, Vec<Expr>, Vec<Expr>),
@@ -109,6 +107,7 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Str(String),
+    List(Vec<Value>),
     Function(Vec<String>, Vec<Expr>, EnvRef), // parameters, body, closure environment
     NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>), // name, native function
 }
@@ -122,6 +121,7 @@ impl Clone for Value {
             Value::Int(n) => Value::Int(*n),
             Value::Float(f) => Value::Float(*f),
             Value::Str(s) => Value::Str(s.clone()),
+            Value::List(items) => Value::List(items.clone()),
             Value::Function(p, b, e) => Value::Function(p.clone(), b.clone(), e.clone()),
             Value::NativeFunction(name, func) => Value::NativeFunction(name.clone(), *func),
         }
@@ -137,6 +137,7 @@ impl std::fmt::Debug for Value {
             Value::Int(n) => write!(f, "Int({:?})", n),
             Value::Float(fl) => write!(f, "Float({:?})", fl),
             Value::Str(s) => write!(f, "Str({:?})", s),
+            Value::List(items) => write!(f, "List({:?})", items),
             Value::Function(params, body, _) => write!(f, "Function({:?}, {:?}, <env>)", params, body),
             Value::NativeFunction(name, _) => write!(f, "NativeFunction({})", name),
         }
@@ -151,10 +152,11 @@ impl PartialEq for Value {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Str(a), Value::Str(b)) => a == b,
-            // Functions are compared by reference equality (pointer comparison)
-            (Value::Function(_, _, env_a), Value::Function(_, _, env_b)) => {
-                Rc::ptr_eq(env_a, env_b)
-            }
+            (Value::List(a), Value::List(b)) => a == b,
+            // Functions are never equal (like in most languages)
+            // Even if they have the same definition, each function is unique
+            // Note: The language's == operator returns false for functions anyway (catch-all pattern)
+            (Value::Function(..), Value::Function(..)) => false,
             // Native functions compared by name
             (Value::NativeFunction(name_a, _), Value::NativeFunction(name_b, _)) => {
                 name_a == name_b
@@ -172,6 +174,16 @@ impl std::fmt::Display for Value {
             Value::Int(n) => write!(f, "{}", n),
             Value::Float(fl) => write!(f, "{}", fl),
             Value::Str(s) => write!(f, "\"{}\"", s),
+            Value::List(items) => {
+                write!(f, "[")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "]")
+            }
             Value::Function(params, _, _) => {
                 write!(f, "<function({})", params.join(", "))?;
                 write!(f, ">")
@@ -193,6 +205,152 @@ fn native_print(args: &[Value]) -> Result<Value, &'static str> {
     Ok(Value::Null)
 }
 
+fn native_len(args: &[Value]) -> Result<Value, &'static str> {
+    if args.len() != 1 {
+        return Err("len expects exactly 1 argument");
+    }
+    match &args[0] {
+        Value::List(items) => Ok(Value::Int(items.len() as i64)),
+        Value::Str(s) => Ok(Value::Int(s.len() as i64)),
+        _ => Err("len expects a list or string"),
+    }
+}
+
+fn native_push(args: &[Value]) -> Result<Value, &'static str> {
+    if args.len() != 2 {
+        return Err("push expects exactly 2 arguments");
+    }
+    match &args[0] {
+        Value::List(items) => {
+            let mut new_list = items.clone();
+            new_list.push(args[1].clone());
+            Ok(Value::List(new_list))
+        }
+        _ => Err("push expects a list as first argument"),
+    }
+}
+
+fn native_get(args: &[Value]) -> Result<Value, &'static str> {
+    if args.len() != 2 {
+        return Err("get expects exactly 2 arguments");
+    }
+    match (&args[0], &args[1]) {
+        (Value::List(items), Value::Int(idx)) => {
+            let index = if *idx < 0 {
+                (items.len() as i64 + idx) as usize
+            } else {
+                *idx as usize
+            };
+            items.get(index).cloned().ok_or("index out of bounds")
+        }
+        _ => Err("get expects a list and an integer index"),
+    }
+}
+
+fn native_type(args: &[Value]) -> Result<Value, &'static str> {
+    if args.len() != 1 {
+        return Err("type expects exactly 1 argument");
+    }
+    let type_name = match &args[0] {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Int(_) => "int",
+        Value::Float(_) => "float",
+        Value::Str(_) => "string",
+        Value::List(_) => "list",
+        Value::Function(..) => "function",
+        Value::NativeFunction(..) => "native-function",
+    };
+    Ok(Value::Str(type_name.to_string()))
+}
+
+fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
+    if args.is_empty() {
+        return Err("concat expects at least 1 argument");
+    }
+    
+    // Check if first argument is a string or list
+    match &args[0] {
+        Value::Str(_) => {
+            // Concatenate strings
+            let mut result = String::new();
+            for arg in args {
+                match arg {
+                    Value::Str(s) => result.push_str(s),
+                    _ => return Err("concat on strings requires all arguments to be strings"),
+                }
+            }
+            Ok(Value::Str(result))
+        }
+        Value::List(_) => {
+            // Concatenate lists
+            let mut result = Vec::new();
+            for arg in args {
+                match arg {
+                    Value::List(items) => result.extend(items.clone()),
+                    _ => return Err("concat on lists requires all arguments to be lists"),
+                }
+            }
+            Ok(Value::List(result))
+        }
+        _ => Err("concat expects strings or lists"),
+    }
+}
+
+fn native_range(args: &[Value]) -> Result<Value, &'static str> {
+    match args.len() {
+        1 => {
+            // range(n) -> [0, 1, ..., n-1]
+            match &args[0] {
+                Value::Int(n) => {
+                    if *n < 0 {
+                        return Err("range expects non-negative integer");
+                    }
+                    let values: Vec<Value> = (0..*n).map(Value::Int).collect();
+                    Ok(Value::List(values))
+                }
+                _ => Err("range expects integer argument"),
+            }
+        }
+        2 => {
+            // range(start, end) -> [start, start+1, ..., end-1]
+            match (&args[0], &args[1]) {
+                (Value::Int(start), Value::Int(end)) => {
+                    let values: Vec<Value> = (*start..*end).map(Value::Int).collect();
+                    Ok(Value::List(values))
+                }
+                _ => Err("range expects integer arguments"),
+            }
+        }
+        3 => {
+            // range(start, end, step) -> [start, start+step, ..., end-step]
+            match (&args[0], &args[1], &args[2]) {
+                (Value::Int(start), Value::Int(end), Value::Int(step)) => {
+                    if *step == 0 {
+                        return Err("range step cannot be zero");
+                    }
+                    let mut values = Vec::new();
+                    let mut current = *start;
+                    if *step > 0 {
+                        while current < *end {
+                            values.push(Value::Int(current));
+                            current += step;
+                        }
+                    } else {
+                        while current > *end {
+                            values.push(Value::Int(current));
+                            current += step;
+                        }
+                    }
+                    Ok(Value::List(values))
+                }
+                _ => Err("range expects integer arguments"),
+            }
+        }
+        _ => Err("range expects 1, 2, or 3 arguments"),
+    }
+}
+
 pub struct Axe {
     globals: EnvRef,
 }
@@ -205,6 +363,30 @@ impl Axe {
         globals.borrow_mut().set(
             "print".to_string(),
             Value::NativeFunction("print".to_string(), native_print),
+        );
+        globals.borrow_mut().set(
+            "len".to_string(),
+            Value::NativeFunction("len".to_string(), native_len),
+        );
+        globals.borrow_mut().set(
+            "push".to_string(),
+            Value::NativeFunction("push".to_string(), native_push),
+        );
+        globals.borrow_mut().set(
+            "get".to_string(),
+            Value::NativeFunction("get".to_string(), native_get),
+        );
+        globals.borrow_mut().set(
+            "type".to_string(),
+            Value::NativeFunction("type".to_string(), native_type),
+        );
+        globals.borrow_mut().set(
+            "concat".to_string(),
+            Value::NativeFunction("concat".to_string(), native_concat),
+        );
+        globals.borrow_mut().set(
+            "range".to_string(),
+            Value::NativeFunction("range".to_string(), native_range),
         );
         
         Self { globals }
@@ -240,6 +422,15 @@ impl Axe {
             Expr::Int(n) => Ok(Value::Int(n)),
             Expr::Float(f) => Ok(Value::Float(f)),
             Expr::Str(s) => Ok(Value::Str(s)),
+            
+            Expr::List(elements) => {
+                // Evaluate each element and create a list
+                let mut values = Vec::new();
+                for elem in elements {
+                    values.push(self.eval_with_env(elem, Some(env.clone()))?);
+                }
+                Ok(Value::List(values))
+            }
 
             Expr::Var(name) => {
                 if !Self::is_valid_var_name(&name) {
@@ -262,7 +453,7 @@ impl Axe {
                     return Err("invalid variable name");
                 }
                 let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                env.borrow_mut().assign(&name, value.clone())?;
+                env.borrow_mut().update(name, value.clone())?;
                 Ok(value)
             }
 
@@ -273,10 +464,11 @@ impl Axe {
             }
 
             Expr::Block(exprs) => {
-                let block_scope = Environment::extend(env);
+                // Don't create a new scope - execute in the current environment
+                // This allows variables to be updated within blocks
                 let mut result = Value::Null; // default value for empty block
                 for expr in exprs {
-                    result = self.eval_with_env(expr, Some(block_scope.clone()))?;
+                    result = self.eval_with_env(expr, Some(env.clone()))?;
                 }
                 Ok(result)
             }
@@ -293,22 +485,22 @@ impl Axe {
                     _ => true,
                 };
                 
-                // Evaluate the appropriate branch
+                // Evaluate the appropriate branch in current environment
                 let branch_exprs = if is_truthy { then_branch } else { else_branch };
-                let branch_scope = Environment::extend(env);
                 let mut result = Value::Null;
                 for expr in branch_exprs {
-                    result = self.eval_with_env(expr, Some(branch_scope.clone()))?;
+                    result = self.eval_with_env(expr, Some(env.clone()))?;
                 }
                 Ok(result)
             }
 
             Expr::While(condition, body) => {
-                let loop_scope = Environment::extend(env);
+                // Don't create a new scope - execute in the current environment
+                // This allows loop variables to be updated
                 let mut result = Value::Null;
 
                 loop {
-                    let cond_value = self.eval_condition(condition.clone(), Some(loop_scope.clone()))?;
+                    let cond_value = self.eval_condition(condition.clone(), Some(env.clone()))?;
                     
                     // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
                     let is_truthy = match cond_value {
@@ -323,9 +515,9 @@ impl Axe {
                         break;
                     }
 
-                    // Execute loop body
+                    // Execute loop body in current environment
                     for expr in &body {
-                        result = self.eval_with_env(expr.clone(), Some(loop_scope.clone()))?;
+                        result = self.eval_with_env(expr.clone(), Some(env.clone()))?;
                     }
                 }
 

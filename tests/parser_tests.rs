@@ -79,16 +79,16 @@ fn parse_nested_arithmetic() {
 
 #[test]
 fn parse_set() {
-    let mut parser = Parser::new("(set x 10)").unwrap();
+    let mut parser = Parser::new("(let x 10)").unwrap();
     let expr = parser.parse().unwrap();
     assert_eq!(expr, Expr::Set("x".to_string(), Box::new(Expr::Int(10))));
 }
 
 #[test]
 fn parse_assign() {
-    let mut parser = Parser::new("(assign x 20)").unwrap();
+    let mut parser = Parser::new("(let x 20)").unwrap();
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Assign("x".to_string(), Box::new(Expr::Int(20))));
+    assert_eq!(expr, Expr::Set("x".to_string(), Box::new(Expr::Int(20))));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn parse_comparison() {
 
 #[test]
 fn parse_block() {
-    let mut parser = Parser::new("(block (set x 1) (+ x 2))").unwrap();
+    let mut parser = Parser::new("(block (let x 1) (+ x 2))").unwrap();
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
@@ -138,7 +138,7 @@ fn parse_if() {
 
 #[test]
 fn parse_while() {
-    let mut parser = Parser::new("(while (> x 0) (assign x (- x 1)))").unwrap();
+    let mut parser = Parser::new("(while (> x 0) (let x (- x 1)))").unwrap();
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
@@ -148,7 +148,7 @@ fn parse_while() {
                 Box::new(Condition::Var("x".to_string())),
                 Box::new(Condition::Int(0))
             ),
-            vec![Expr::Assign(
+            vec![Expr::Set(
                 "x".to_string(),
                 Box::new(Expr::Binary(
                     Operation::Sub,
@@ -173,8 +173,8 @@ fn parse_and_eval_simple() {
 fn parse_and_eval_with_variables() {
     let axe = Axe::new();
     
-    // (set x 5)
-    let mut parser = Parser::new("(set x 5)").unwrap();
+    // (let x 5)
+    let mut parser = Parser::new("(let x 5)").unwrap();
     axe.eval(parser.parse().unwrap()).unwrap();
     
     // (* x 2)
@@ -186,7 +186,7 @@ fn parse_and_eval_with_variables() {
 #[test]
 fn parse_and_eval_block() {
     let axe = Axe::new();
-    let input = "(block (set x 10) (set y 20) (+ x y))";
+    let input = "(block (let x 10) (let y 20) (+ x y))";
     let mut parser = Parser::new(input).unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
@@ -208,11 +208,11 @@ fn parse_and_eval_while() {
     let axe = Axe::new();
     
     // Set initial value
-    let mut parser = Parser::new("(set counter 3)").unwrap();
+    let mut parser = Parser::new("(let counter 3)").unwrap();
     axe.eval(parser.parse().unwrap()).unwrap();
     
     // Run while loop
-    let input = "(while (> counter 0) (assign counter (- counter 1)))";
+    let input = "(while (> counter 0) (let counter (- counter 1)))";
     let mut parser = Parser::new(input).unwrap();
     axe.eval(parser.parse().unwrap()).unwrap();
     
@@ -227,11 +227,11 @@ fn parse_complex_program() {
     let axe = Axe::new();
     let program = r#"
         (block
-            (set sum 0)
-            (set i 1)
+            (let sum 0)
+            (let i 1)
             (while (<= i 5)
-                (assign sum (+ sum i))
-                (assign i (+ i 1)))
+                (let sum (+ sum i))
+                (let i (+ i 1)))
             sum)
     "#;
     

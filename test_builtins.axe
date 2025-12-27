@@ -1,0 +1,46 @@
+; Test new built-in functions
+
+; Test concat with strings
+(print "String concat:")
+(let hello "Hello")
+(let world "World")
+(let greeting (concat hello " " world "!"))
+(print greeting)
+
+; Test concat with lists
+(print "\nList concat:")
+(let list1 (list 1 2 3))
+(let list2 (list 4 5 6))
+(let combined (concat list1 list2))
+(print combined)
+
+; Test range with 1 argument
+(print "\nRange(5):")
+(print (range 5))
+
+; Test range with 2 arguments
+(print "Range(3, 8):")
+(print (range 3 8))
+
+; Test range with 3 arguments (step)
+(print "Range(0, 10, 2):")
+(print (range 0 10 2))
+
+; Test range with negative step
+(print "Range(10, 0, -2):")
+(print (range 10 0 -2))
+
+; Combine operations
+(print "\nCombined operations:")
+(let nums (range 1 6))
+(print "Numbers:" nums)
+(print "Length:" (len nums))
+(print "First:" (get nums 0))
+(print "Last:" (get nums -1))
+
+; String operations
+(print "\nString operations:")
+(let str "Hello")
+(print "String:" str)
+(print "Length:" (len str))
+(print "Type:" (type str))

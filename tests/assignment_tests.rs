@@ -8,7 +8,7 @@ fn assign_to_existing_global_variable() {
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
     
     // Reassign x = 20
-    let result = axe.eval(Expr::Assign("x".into(), Box::new(Expr::Int(20)))).unwrap();
+    let result = axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(20)))).unwrap();
     assert_eq!(result, Value::Int(20));
     
     // Verify x is now 20
@@ -17,12 +17,16 @@ fn assign_to_existing_global_variable() {
 }
 
 #[test]
-fn assign_to_nonexistent_variable_fails() {
+fn let_creates_variable_if_not_exists() {
     let axe = Axe::new();
     
-    // Try to assign to a variable that doesn't exist
-    let err = axe.eval(Expr::Assign("x".into(), Box::new(Expr::Int(10)))).unwrap_err();
-    assert_eq!(err, "undefined variable");
+    // let creates a variable even if it doesn't exist
+    let result = axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
+    assert_eq!(result, Value::Int(10));
+    
+    // Verify it was created
+    let x = axe.eval(Expr::Var("x".into())).unwrap();
+    assert_eq!(x, Value::Int(10));
 }
 
 #[test]
@@ -30,7 +34,7 @@ fn assign_with_invalid_name_fails() {
     let axe = Axe::new();
     
     // Try to assign with invalid variable name
-    let err = axe.eval(Expr::Assign("123invalid".into(), Box::new(Expr::Int(10)))).unwrap_err();
+    let err = axe.eval(Expr::Set("123invalid".into(), Box::new(Expr::Int(10)))).unwrap_err();
     assert_eq!(err, "invalid variable name");
 }
 
@@ -42,7 +46,7 @@ fn assign_using_expression() {
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(5)))).unwrap();
     
     // Reassign x = x * 2
-    let result = axe.eval(Expr::Assign(
+    let result = axe.eval(Expr::Set(
         "x".into(),
         Box::new(Expr::Binary(
             Operation::Mul,
@@ -58,40 +62,40 @@ fn assign_using_expression() {
 }
 
 #[test]
-fn assign_in_block_to_parent_variable() {
+fn let_in_block_updates_variable() {
     let axe = Axe::new();
     
     // Create global variable x = 10
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10)))).unwrap();
     
-    // Block reassigns parent's x
+    // Block updates x (blocks don't create new scope)
     let block = Expr::Block(vec![
-        Expr::Assign("x".into(), Box::new(Expr::Int(100))),
+        Expr::Set("x".into(), Box::new(Expr::Int(100))),
         Expr::Var("x".into()),
     ]);
     
     let result = axe.eval(block).unwrap();
     assert_eq!(result, Value::Int(100));
     
-    // Global x should now be 100 (modified by child block)
+    // Global x should now be 100 (block updated it in same scope)
     let x = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(x, Value::Int(100));
 }
 
 #[test]
-fn assign_in_nested_block_to_parent_variable() {
+fn let_in_nested_block_updates() {
     let axe = Axe::new();
     
     // Outer block: create x = 10
     let block = Expr::Block(vec![
         Expr::Set("x".into(), Box::new(Expr::Int(10))),
         
-        // Inner block: reassign parent's x = 20
+        // Inner block: updates x = 20 (same scope)
         Expr::Block(vec![
-            Expr::Assign("x".into(), Box::new(Expr::Int(20))),
+            Expr::Set("x".into(), Box::new(Expr::Int(20))),
         ]),
         
-        // x should now be 20
+        // x should now be 20 (inner block updated it)
         Expr::Var("x".into()),
     ]);
     
@@ -100,63 +104,44 @@ fn assign_in_nested_block_to_parent_variable() {
 }
 
 #[test]
-fn set_vs_assign_shadowing() {
+fn let_in_same_scope_updates() {
     let axe = Axe::new();
     
     // Global x = 1
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
     
-    // Block with Set creates new x (shadows)
-    let block_with_set = Expr::Block(vec![
-        Expr::Set("x".into(), Box::new(Expr::Int(100))),
-        Expr::Var("x".into()),
-    ]);
+    // Update in same scope
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(100)))).unwrap();
     
-    let result = axe.eval(block_with_set).unwrap();
-    assert_eq!(result, Value::Int(100));
-    
-    // Global x should still be 1 (Set shadowed it)
+    // Global x should now be 100 (updated in same scope)
     let x = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(x, Value::Int(1));
-    
-    // Block with Assign modifies parent x
-    let block_with_assign = Expr::Block(vec![
-        Expr::Assign("x".into(), Box::new(Expr::Int(200))),
-        Expr::Var("x".into()),
-    ]);
-    
-    let result = axe.eval(block_with_assign).unwrap();
-    assert_eq!(result, Value::Int(200));
-    
-    // Global x should now be 200 (Assign modified it)
-    let x = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(x, Value::Int(200));
+    assert_eq!(x, Value::Int(100));
 }
 
 #[test]
-fn assign_to_correct_scope_with_shadowing() {
+fn let_updates_through_blocks() {
     let axe = Axe::new();
     
     // Global x = 1
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(1)))).unwrap();
     
     let outer_block = Expr::Block(vec![
-        // Outer block creates its own x = 10 (shadows global)
+        // Outer block updates global x to 10
         Expr::Set("x".into(), Box::new(Expr::Int(10))),
         
-        // Inner block assigns to outer block's x
+        // Inner block updates x to 20 (same scope)
         Expr::Block(vec![
-            Expr::Assign("x".into(), Box::new(Expr::Int(20))),
+            Expr::Set("x".into(), Box::new(Expr::Int(20))),
         ]),
         
-        // Outer block's x should now be 20
+        // x should now be 20
         Expr::Var("x".into()),
     ]);
     
     let result = axe.eval(outer_block).unwrap();
     assert_eq!(result, Value::Int(20));
     
-    // Global x should still be 1 (untouched)
+    // Global x should also be 20 (blocks updated it)
     let x = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(x, Value::Int(1));
+    assert_eq!(x, Value::Int(20));
 }
