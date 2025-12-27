@@ -56,6 +56,7 @@ cargo run --release examples/hello.axe
 **More Examples:**
 - `examples/hello.axe` - Hello world with functions
 - `examples/fibonacci.axe` - Recursive fibonacci
+- `examples/builtins.axe` - **All built-in functions with simple examples** (start here!)
 - `examples/list_demo.axe` - Comprehensive list operations
 - `examples/assign_demo.axe` - Real-world assign patterns
 - `examples/scoping_explained.axe` - **Complete scoping guide** (highly recommended!)

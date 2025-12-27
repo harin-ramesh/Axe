@@ -199,7 +199,11 @@ fn native_print(args: &[Value]) -> Result<Value, &'static str> {
         if i > 0 {
             print!(" ");
         }
-        print!("{}", arg);
+        // Print strings without quotes, everything else with Display
+        match arg {
+            Value::Str(s) => print!("{}", s),
+            _ => print!("{}", arg),
+        }
     }
     println!();
     Ok(Value::Null)

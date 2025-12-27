@@ -53,6 +53,22 @@ impl Parser {
                     loop {
                         match chars.next() {
                             Some('"') => break,
+                            Some('\\') => {
+                                // Handle escape sequences
+                                match chars.next() {
+                                    Some('n') => string_val.push('\n'),
+                                    Some('t') => string_val.push('\t'),
+                                    Some('r') => string_val.push('\r'),
+                                    Some('\\') => string_val.push('\\'),
+                                    Some('"') => string_val.push('"'),
+                                    Some(ch) => {
+                                        // Unknown escape sequence, treat literally
+                                        string_val.push('\\');
+                                        string_val.push(ch);
+                                    }
+                                    None => return Err("Unterminated string".to_string()),
+                                }
+                            }
                             Some(ch) => string_val.push(ch),
                             None => return Err("Unterminated string".to_string()),
                         }
