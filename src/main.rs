@@ -210,7 +210,7 @@ fn print_help() {
     println!("  (while (> x 0) (let x (- x 1)))");
     println!();
     println!("Blocks:");
-    println!("  (block");
+    println!("  (begin");
     println!("    (let x 10)");
     println!("    (let y 20)");
     println!("    (+ x y))");

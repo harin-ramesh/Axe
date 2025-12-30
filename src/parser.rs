@@ -195,7 +195,7 @@ impl Parser {
             "let" => self.parse_set()?,
             "assign" => self.parse_assign()?,
             "list" => self.parse_list_literal()?,
-            "block" => self.parse_block()?,
+            "begin" => self.parse_block()?,
             "if" => self.parse_if()?,
             "while" => self.parse_while()?,
             "fn" => self.parse_function()?,

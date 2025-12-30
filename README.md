@@ -247,7 +247,7 @@ global                  ; Now 999 (was updated!)
 Blocks create new scopes:
 
 ```lisp
-(block
+(begin
     (let x 10)
     (let y 20)
     (+ x y))        ; Returns 30
@@ -447,7 +447,7 @@ counter             ; Now 2
 
 ### Key Scoping Rules
 
-1. **Only functions create new scopes** - `block`, `while`, and `if` do NOT create scopes
+1. **Only functions create new scopes** - `begin`, `while`, and `if` do NOT create scopes
 2. **`let` always creates/shadows** in the current scope
 3. **`assign` always updates** the existing variable (searches parent scopes)
 4. **Variable lookup** searches current scope, then parent scopes

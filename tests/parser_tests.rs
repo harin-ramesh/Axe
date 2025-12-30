@@ -103,7 +103,7 @@ fn parse_comparison() {
 
 #[test]
 fn parse_block() {
-    let mut parser = Parser::new("(block (let x 1) (+ x 2))").unwrap();
+    let mut parser = Parser::new("(begin (let x 1) (+ x 2))").unwrap();
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
@@ -186,7 +186,7 @@ fn parse_and_eval_with_variables() {
 #[test]
 fn parse_and_eval_block() {
     let axe = Axe::new();
-    let input = "(block (let x 10) (let y 20) (+ x y))";
+    let input = "(begin (let x 10) (let y 20) (+ x y))";
     let mut parser = Parser::new(input).unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
@@ -226,7 +226,7 @@ fn parse_and_eval_while() {
 fn parse_complex_program() {
     let axe = Axe::new();
     let program = r#"
-        (block
+        (begin
             (let sum 0)
             (let i 1)
             (while (<= i 5)
