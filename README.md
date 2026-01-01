@@ -102,22 +102,6 @@ axe> quit
 Goodbye!
 ```
 
-### As a Library
-
-```rust
-use axe::{Axe, Parser};
-
-fn main() {
-    let axe = Axe::new();
-    
-    // Parse and evaluate
-    let mut parser = Parser::new("(+ 10 20)").unwrap();
-    let expr = parser.parse().unwrap();
-    let result = axe.eval(expr).unwrap();
-    println!("{:?}", result); // Int(30)
-}
-```
-
 ## Language Syntax
 
 ### Comments
@@ -525,73 +509,4 @@ x                     ; Now 0
 (create_local)
 y                     ; Error: undefined variable
 ```
-
-## Syntactic Sugar
-
-Axe provides convenient syntactic sugar that transforms to core language features:
-
-### Functions (`fn`)
-Functions desugar to lambda expressions with `let` binding:
-
-```lisp
-; This:
-(fn add (a b) (+ a b))
-
-; Transforms to:
-(let add (lambda (a b) (+ a b)))
-```
-
-### Increment/Decrement (`++`/`--`)
-```lisp
-; This:
-(++ i)
-
-; Transforms to:
-(let i (+ i 1))
-
-; This:
-(-- count)
-
-; Transforms to:
-(let count (- count 1))
-```
-
-### For Loops
-For loops transform to `begin` blocks with `while` loops:
-
-```lisp
-; This:
-(for (let i 0) (< i 5) (++ i)
-    (print i))
-
-; Transforms to:
-(begin
-    (let i 0)
-    (while (< i 5)
-        (print i)
-        (++ i)))
-```
-
-All transformations happen **on-demand** during evaluation (lazy transformation).
-
-## REPL Commands
-
-- `help` - Show help message
-- `exit` or `quit` - Exit the REPL
-- Any Axe expression - Evaluate and print result
-
-## Error Handling
-
-Descriptive error messages:
-- `"undefined variable"` - Variable not found
-- `"undefined function"` - Function not found
-- `"invalid variable name"` - Invalid identifier
-- `"invalid function name"` - Invalid function name
-- `"invalid parameter name"` - Invalid parameter name
-- `"argument count mismatch"` - Wrong number of arguments
-- `"division by zero"` - Division by zero
-- `"type error"` - Type mismatch
-- `"not a function"` - Attempted to call a non-function value
-- `"Unterminated string"` - Parse error
-- `"Expected operator"` - Syntax error
 
