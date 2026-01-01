@@ -152,7 +152,7 @@ fn calling_non_function_value() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // (x 10) - should fail
+    // (x 10) - should fail since x is not a function
     let mut parser = Parser::new("(x 10)").unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr);
@@ -249,12 +249,12 @@ fn function_scope_isolation() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // x should still be 10 (function shadowed, didn't update)
+    // x should now be 100 (let now updates instead of shadowing)
     let mut parser = Parser::new("x").unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
     
-    assert_eq!(result, Value::Int(10));
+    assert_eq!(result, Value::Int(100));
 }
 
 #[test]
@@ -276,10 +276,10 @@ fn function_shadows_outer_variable() {
     let expr = parser.parse().unwrap();
     axe.eval(expr).unwrap();
     
-    // x should still be 10 (function shadowed, didn't modify)
+    // x should now be 100 (let now updates instead of shadowing)
     let mut parser = Parser::new("x").unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
     
-    assert_eq!(result, Value::Int(10));
+    assert_eq!(result, Value::Int(100));
 }

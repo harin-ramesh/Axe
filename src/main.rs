@@ -122,10 +122,12 @@ fn run_repl() {
                     // Parse and evaluate
                     match Parser::new(&accumulated_input) {
                         Ok(mut parser) => match parser.parse() {
-                            Ok(expr) => match axe.eval(expr) {
-                                // Ok(value) => println!("=> {}", value),
-                                Ok(_value) => {},
-                                Err(e) => println!("Error: {}", e),
+                            Ok(expr) => {
+                                match axe.eval(expr) {
+                                    // Ok(value) => println!("=> {}", value),
+                                    Ok(_value) => {},
+                                    Err(e) => println!("Error: {}", e),
+                                }
                             },
                             Err(e) => println!("Parse error: {}", e),
                         },

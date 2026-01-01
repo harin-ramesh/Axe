@@ -5,7 +5,10 @@ use std::rc::Rc;
 use regex::Regex;
 
 mod parser;
+mod transformer;
+
 pub use parser::Parser;
+pub use transformer::Transformer;
 
 type EnvRef = Rc<RefCell<Environment>>;
 
@@ -54,6 +57,15 @@ impl Environment {
             Err("undefined variable")
         }
     }
+
+    pub fn exists_in_current_scope(&self, name: &str) -> bool {
+        self.records.contains_key(name)
+    }
+
+    pub fn exists_in_any_scope(&self, name: &str) -> bool {
+        self.records.contains_key(name)
+            || self.parent.as_ref().map_or(false, |p| p.borrow().exists_in_any_scope(name))
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -89,16 +101,19 @@ pub enum Expr {
     Int(i64),
     Float(f64),
     Str(String),
-    List(Vec<Expr>),  // (list expr1 expr2 ...)
+    List(Vec<Expr>),
     Binary(Operation, Box<Expr>, Box<Expr>),
-    Set(String, Box<Expr>),      // let - creates or shadows variable in current scope
-    Assign(String, Box<Expr>),   // assign - updates existing variable in any scope
+    Set(String, Box<Expr>),
     Var(String),
     Block(Vec<Expr>),
     If(Condition, Vec<Expr>, Vec<Expr>),
     While(Condition, Vec<Expr>),
-    Function(String, Vec<String>, Vec<Expr>), // (fn name (params...) body...)
-    FunctionCall(String, Vec<Expr>),  // (funcname args...)
+    Lambda(Vec<String>, Vec<Expr>),
+    Function(String, Vec<String>, Vec<Expr>),
+    FunctionCall(String, Vec<Expr>),
+    Inc(String),  // i++ -> (let i (+ i 1))
+    Dec(String),  // i-- -> (let i (- i 1))
+    For(Box<Expr>, Condition, Box<Expr>, Vec<Expr>),  // (for init condition update body...) -> while loop
 }
 
 pub enum Value {
@@ -108,11 +123,10 @@ pub enum Value {
     Float(f64),
     Str(String),
     List(Vec<Value>),
-    Function(Vec<String>, Vec<Expr>, EnvRef), // parameters, body, closure environment
-    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>), // name, native function
+    Function(Vec<String>, Vec<Expr>, EnvRef),
+    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>),
 }
 
-// Manual Clone implementation because fn pointers are Copy
 impl Clone for Value {
     fn clone(&self) -> Self {
         match self {
@@ -128,7 +142,6 @@ impl Clone for Value {
     }
 }
 
-// Manual Debug implementation
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -153,11 +166,7 @@ impl PartialEq for Value {
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Str(a), Value::Str(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
-            // Functions are never equal (like in most languages)
-            // Even if they have the same definition, each function is unique
-            // Note: The language's == operator returns false for functions anyway (catch-all pattern)
             (Value::Function(..), Value::Function(..)) => false,
-            // Native functions compared by name
             (Value::NativeFunction(name_a, _), Value::NativeFunction(name_b, _)) => {
                 name_a == name_b
             }
@@ -357,6 +366,7 @@ fn native_range(args: &[Value]) -> Result<Value, &'static str> {
 
 pub struct Axe {
     globals: EnvRef,
+    transformer: Transformer,
 }
 
 impl Axe {
@@ -393,7 +403,10 @@ impl Axe {
             Value::NativeFunction("range".to_string(), native_range),
         );
         
-        Self { globals }
+        Self { 
+            globals,
+            transformer: Transformer,
+        }
     }
 
     pub fn eval(&self, expr: Expr) -> Result<Value, &'static str> {
@@ -448,16 +461,13 @@ impl Axe {
                     return Err("invalid variable name");
                 }
                 let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                env.borrow_mut().set(name, value.clone());
-                Ok(value)
-            }
-
-            Expr::Assign(name, expr) => {
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid variable name");
+                
+                // Try to update existing variable first (searches parent scopes)
+                // If not found, create new variable in current scope
+                if env.borrow_mut().update(name.clone(), value.clone()).is_err() {
+                    env.borrow_mut().set(name, value.clone());
                 }
-                let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                env.borrow_mut().update(name, value.clone())?;
+                
                 Ok(value)
             }
 
@@ -528,12 +538,7 @@ impl Axe {
                 Ok(result)
             }
 
-            Expr::Function(name, params, body) => {
-                // Validate function name
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid function name");
-                }
-                
+            Expr::Lambda(params, body) => {
                 // Validate parameter names
                 for param in &params {
                     if !Self::is_valid_var_name(param) {
@@ -544,10 +549,35 @@ impl Axe {
                 // Create a closure capturing the current environment
                 let func_value = Value::Function(params.clone(), body.clone(), env.clone());
                 
-                // Automatically add the function to the current environment
-                env.borrow_mut().set(name.clone(), func_value.clone());
-                
                 Ok(func_value)
+            }
+
+            Expr::Function(name, params, body) => {
+                // Transform syntactic sugar: (fn name params body) -> (let name (lambda params body))
+                // Then evaluate the transformed expression
+                let transformed = self.transformer.transform(Expr::Function(name, params, body));
+                self.eval_with_env(transformed, Some(env))
+            }
+
+            Expr::Inc(var) => {
+                // Transform syntactic sugar: i++ -> (let i (+ i 1))
+                // Then evaluate the transformed expression
+                let transformed = self.transformer.transform(Expr::Inc(var));
+                self.eval_with_env(transformed, Some(env))
+            }
+
+            Expr::Dec(var) => {
+                // Transform syntactic sugar: i-- -> (let i (- i 1))
+                // Then evaluate the transformed expression
+                let transformed = self.transformer.transform(Expr::Dec(var));
+                self.eval_with_env(transformed, Some(env))
+            }
+
+            Expr::For(init, condition, update, body) => {
+                // Transform syntactic sugar: for loop -> while loop
+                // Then evaluate the transformed expression
+                let transformed = self.transformer.transform(Expr::For(init, condition, update, body));
+                self.eval_with_env(transformed, Some(env))
             }
 
             Expr::FunctionCall(name, args) => {

@@ -1,0 +1,32 @@
+; Demonstrates the simplified syntax
+; Just use 'let' for both creating and updating variables!
+
+(print "Simple Counter Example")
+(print "")
+
+; Create a counter using 'let'
+(let counter 0)
+(print "Initial counter:" counter)
+
+; Update using 'let' - same keyword for create and update!
+(let counter 1)
+(print "After (let counter 1):" counter)
+
+(let counter 2)
+(print "After (let counter 2):" counter)
+
+; Can also use expressions
+(let counter (+ counter 10))
+(print "After (let counter (+ counter 10)):" counter)
+
+; Works in loops too
+(print "")
+(print "Counting from 0 to 5:")
+(let i 0)
+(while (< i 5)
+  (begin
+    (print "  i =" i)
+    (let i (+ i 1))))
+
+(print "")
+(print "Done!")

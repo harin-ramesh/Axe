@@ -124,8 +124,8 @@
 (let i 1)
 (while (<= i 5)
     (begin
-        (assign squares (push squares (* i i)))
-        (assign i (+ i 1))))
+        (let squares (push squares (* i i)))
+        (let i (+ i 1))))
 (print "Squares of 1-5:" squares)
 
 ; Example 3: Sum all elements in a list
@@ -137,8 +137,8 @@
 (let idx 0)
 (while (< idx (len nums))
     (begin
-        (assign sum (+ sum (get nums idx)))
-        (assign idx (+ idx 1))))
+        (let sum (+ sum (get nums idx)))
+        (let idx (+ idx 1))))
 (print "Sum:" sum)
 
 ; Example 4: Find maximum in a list
@@ -152,9 +152,9 @@
     (begin
         (let current (get values i))
         (if (> current max)
-            (assign max current)
-            (assign max max))
-        (assign i (+ i 1))))
+            (let max current)
+            (let max max))
+        (let i (+ i 1))))
 (print "Maximum:" max)
 
 ; Example 5: Reverse a list
@@ -166,8 +166,8 @@
 (let i (- (len original) 1))
 (while (>= i 0)
     (begin
-        (assign reversed (push reversed (get original i)))
-        (assign i (- i 1))))
+        (let reversed (push reversed (get original i)))
+        (let i (- i 1))))
 (print "Reversed:" reversed)
 
 ; Example 6: Type checking
@@ -195,9 +195,9 @@
 (while (< i (len words))
     (begin
         (if (> i 0)
-            (assign sentence (concat sentence " " (get words i)))
-            (assign sentence (get words i)))
-        (assign i (+ i 1))))
+            (let sentence (concat sentence " " (get words i)))
+            (let sentence (get words i)))
+        (let i (+ i 1))))
 (print "Sentence:" sentence)
 
 (print "\n✨ That's all the built-in functions! ✨")

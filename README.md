@@ -11,8 +11,9 @@ A lightweight S-expression based programming language interpreter written in Rus
 - **Lists**: First-class list data structure with built-in operations
 - **Arithmetic Operations**: `+`, `-`, `*`, `/` for integers and floats
 - **Comparison Operations**: `>`, `<`, `>=`, `<=`, `==`, `!=`
-- **Variables**: `let` for declaration/shadowing, `assign` for updating existing variables
-- **Control Flow**: `if` expressions and `while` loops
+- **Variables**: `let` for declaration and updates (auto-detects create vs update)
+- **Control Flow**: `if` expressions, `while` loops, and `for` loops
+- **Syntactic Sugar**: `++`/`--` for increment/decrement, `for` loops transform to `while`
 - **Block Scoping**: Lexical scoping with blocks
 - **Boolean Type**: `true` and `false` with proper truthiness rules
 - **Built-in Functions**: `print`, `len`, `get`, `push`, `type`, `concat`, `range`
@@ -161,61 +162,48 @@ null                ; Null value
 
 ### Variables
 
-Axe provides two keywords for working with variables:
-
-- **`let`** - Creates a new variable or shadows an existing one in the current scope
-- **`assign`** - Updates an existing variable (searches parent scopes)
+Axe uses `let` for both creating and updating variables:
 
 ```lisp
 ; Creating variables
 (let x 10)              ; Declare variable x = 10
 x                       ; Get value: 10
 
-; Updating in same scope
-(let x 20)              ; Shadows x in current scope (creates new binding)
-(assign x 30)           ; Updates the existing x
+; Updating variables
+(let x 20)              ; Update x to 20 (if exists, update; if not, create)
 
 ; Scoping behavior
 (let global 100)
 
-(fn my_func ()
-  (let global 999)      ; Creates NEW local variable (shadows)
-  global)               ; Returns 999
-
-(my_func)               ; Returns 999
-global                  ; Still 100 (unchanged)
-
 (fn update_global ()
-  (assign global 999)   ; Updates the ACTUAL global variable
+  (let global 999)      ; Updates global (variable exists in parent scope)
   global)               ; Returns 999
 
 (update_global)         ; Returns 999
 global                  ; Now 999 (was updated!)
+
+; Local variables
+(fn my_func ()
+  (let local 42)        ; Creates new local variable
+  local)                ; Returns 42
 ```
 
-**Key Difference:**
-- `let` in a function creates a **new local variable** (shadowing)
-- `assign` **updates the existing variable** wherever it was defined
+**How `let` works:**
+- If variable exists in current or parent scope → **updates** it
+- If variable doesn't exist → **creates** it in current scope
 
 **Quick Reference:**
 ```lisp
-; When to use let:
 (let x 10)              ; Declaring new variables
-(fn my_func ()
-  (let result 42)       ; Local variables in functions
-  result)
+(let x 20)              ; Updating existing variables
 
-; When to use assign:
 (let counter 0)
 (fn increment ()
-  (assign counter (+ counter 1)))  ; Updating global state
+  (let counter (+ counter 1)))  ; Updates global counter
 
-(let i 0)
-(while (< i 10)
-  (assign i (+ i 1)))   ; Updating loop variables
+(for (let i 0) (< i 10) (++ i)
+  (print i))            ; i is created by for loop
 ```
-
-**👉 For a complete guide with examples, see `examples/scoping_explained.axe`**
 
 ### Control Flow
 
@@ -242,6 +230,46 @@ global                  ; Now 999 (was updated!)
     (let i (+ i 1)))
 ```
 
+#### For Loops
+
+For loops are syntactic sugar that transform to `while` loops:
+
+```lisp
+; Basic for loop
+(for (let i 0) (< i 5) (++ i)
+    (print i))          ; Prints 0 1 2 3 4
+
+; For loop with decrement
+(for (let count 10) (> count 0) (-- count)
+    (print count))      ; Countdown from 10 to 1
+
+; Nested for loops
+(for (let i 1) (<= i 3) (++ i)
+    (for (let j 1) (<= j 3) (++ j)
+        (print i "*" j "=" (* i j))))
+
+; For loop with arrays
+(let numbers (list 1 2 3 4 5))
+(for (let i 0) (< i (len numbers)) (++ i)
+    (print (get numbers i)))
+```
+
+#### Increment/Decrement
+
+```lisp
+; Increment
+(let x 0)
+(++ x)                  ; x becomes 1
+
+; Decrement
+(let y 10)
+(-- y)                  ; y becomes 9
+
+; In loops
+(for (let i 0) (< i 5) (++ i)
+    (print i))
+```
+
 ### Blocks
 
 Blocks create new scopes:
@@ -255,7 +283,7 @@ Blocks create new scopes:
 
 ### Functions
 
-Define and call functions:
+Define and call functions (functions are syntactic sugar for lambdas):
 
 ```lisp
 ; Simple function
@@ -274,11 +302,15 @@ Define and call functions:
 (fn addX (y) (+ x y))
 (addX 5)            ; Returns 15
 
-; Higher-order function
+; Higher-order function (nested functions)
 (fn makeAdder (x)
     (fn adder (y) (+ x y)))
 (let add5 (makeAdder 5))
 (add5 10)           ; Returns 15
+
+; Lambda expressions (what fn desugars to)
+(let add (lambda (a b) (+ a b)))
+(add 5 3)           ; Returns 8
 ```
 
 ### Lists
@@ -368,16 +400,35 @@ Generates a list of integers:
 (range 0 10 2)               ; Returns [0, 2, 4, 6, 8]
 ```
 
-### Complete Example: Sum from 1 to 5
+### Complete Examples
 
+#### Sum from 1 to 5 (traditional)
 ```lisp
-; Using assign to update variables
 (let sum 0)
 (let i 1)
 (while (<= i 5)
-    (assign sum (+ sum i))
-    (assign i (+ i 1)))
+    (let sum (+ sum i))
+    (let i (+ i 1)))
 sum                 ; Returns 15
+```
+
+#### Sum from 1 to 5 (using for loop)
+```lisp
+(let sum 0)
+(for (let i 1) (<= i 5) (++ i)
+    (let sum (+ sum i)))
+sum                 ; Returns 15
+```
+
+#### Fibonacci with for loop
+```lisp
+(let a 0)
+(let b 1)
+(for (let i 0) (< i 10) (++ i)
+    (print a)
+    (let temp a)
+    (let a b)
+    (let b (+ temp b)))
 ```
 
 ## Expression Types
@@ -392,15 +443,18 @@ sum                 ; Returns 15
 
 ### Operations
 - `Binary(op, left, right)` - Binary operations
-- `Set(name, expr)` - Variable declaration/shadowing (`let`)
-- `Assign(name, expr)` - Variable update (`assign`)
+- `Set(name, expr)` - Variable declaration/update (`let`)
 - `Var(name)` - Variable reference
 - `List(elements)` - List literal
 - `Block(exprs)` - Block with new scope
 - `If(condition, then, else)` - Conditional
 - `While(condition, body)` - Loop
-- `Function(name, params, body)` - Function definition
+- `Lambda(params, body)` - Lambda expression (anonymous function)
+- `Function(name, params, body)` - Function definition (syntactic sugar for `let` + `lambda`)
 - `FunctionCall(name, args)` - Function call
+- `Inc(name)` - Increment (syntactic sugar: `i++` → `let i (+ i 1)`)
+- `Dec(name)` - Decrement (syntactic sugar: `i--` → `let i (- i 1)`)
+- `For(init, cond, update, body)` - For loop (syntactic sugar for `while`)
 
 ## Truthiness Rules
 
@@ -414,64 +468,111 @@ Everything else is truthy (including empty strings).
 
 ## Scoping Rules
 
-Axe implements lexical scoping with two important keywords:
+Axe implements lexical scoping with smart variable binding:
 
-### Variable Shadowing with `let`
-`let` creates a **new variable** in the current scope, even if one exists in a parent scope:
+### How `let` Works
 
-```lisp
-(let x 10)
-(fn my_func ()
-    (let x 100)     ; Creates NEW local x (shadows global)
-    x)              ; Returns 100
-
-(my_func)           ; Returns 100
-x                   ; Still 10 (global unchanged)
-```
-
-### Variable Updating with `assign`
-`assign` **updates an existing variable** by searching up the scope chain:
+`let` intelligently decides whether to create or update:
 
 ```lisp
-(let counter 0)
+(let x 10)          ; Creates x (doesn't exist)
+(let x 20)          ; Updates x (exists in current scope)
 
-(fn increment ()
-    (assign counter (+ counter 1)))  ; Updates global counter
+(fn test ()
+    (let x 100))    ; Updates x (exists in parent scope)
 
-(increment)
-counter             ; Now 1
-
-(increment)
-counter             ; Now 2
+(test)
+x                   ; Now 100 (was updated!)
 ```
 
 ### Key Scoping Rules
 
-1. **Only functions create new scopes** - `begin`, `while`, and `if` do NOT create scopes
-2. **`let` always creates/shadows** in the current scope
-3. **`assign` always updates** the existing variable (searches parent scopes)
-4. **Variable lookup** searches current scope, then parent scopes
-5. **Closures capture** their defining environment
+1. **Functions create new scopes** - Each function call has its own environment
+2. **`let` searches parent scopes** - If variable exists anywhere, it updates it; otherwise creates it
+3. **Variable lookup** searches current scope, then parent scopes recursively
+4. **Closures capture** their defining environment
+5. **Blocks, `while`, and `if` do NOT create new scopes**
 
-### Important Note
-Since only functions create scopes, this works:
+### Examples
 
+#### Updating parent scope from function:
+```lisp
+(let counter 0)
+
+(fn increment ()
+    (let counter (+ counter 1)))  ; Updates global counter
+
+(increment)
+counter             ; Now 1
+
+(increment)  
+counter             ; Now 2
+```
+
+#### Local variable in same scope as loop:
 ```lisp
 (let x 10)
 (while (> x 0)
-    (assign x (- x 1)))  ; Updates x in same scope
-x                         ; Now 0
+    (let x (- x 1)))  ; Updates x in same scope
+x                     ; Now 0
 ```
 
-But within a function, `let` creates a shadow:
+#### New variable in function:
+```lisp
+(fn create_local ()
+    (let y 42))       ; Creates new local y
+
+(create_local)
+y                     ; Error: undefined variable
+```
+
+## Syntactic Sugar
+
+Axe provides convenient syntactic sugar that transforms to core language features:
+
+### Functions (`fn`)
+Functions desugar to lambda expressions with `let` binding:
 
 ```lisp
-(let x 10)
-(fn test ()
-    (let x 20))     ; New local variable
-(test)
-x                   ; Still 10
+; This:
+(fn add (a b) (+ a b))
+
+; Transforms to:
+(let add (lambda (a b) (+ a b)))
 ```
+
+### Increment/Decrement (`++`/`--`)
+```lisp
+; This:
+(++ i)
+
+; Transforms to:
+(let i (+ i 1))
+
+; This:
+(-- count)
+
+; Transforms to:
+(let count (- count 1))
+```
+
+### For Loops
+For loops transform to `begin` blocks with `while` loops:
+
+```lisp
+; This:
+(for (let i 0) (< i 5) (++ i)
+    (print i))
+
+; Transforms to:
+(begin
+    (let i 0)
+    (while (< i 5)
+        (print i)
+        (++ i)))
+```
+
+All transformations happen **on-demand** during evaluation (lazy transformation).
 
 ## REPL Commands
 

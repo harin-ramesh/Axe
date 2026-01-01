@@ -88,11 +88,29 @@ impl Parser {
                     }
                     tokens.push(Token::Number(num));
                 }
+                '+' => {
+                    chars.next(); // consume '+'
+                    // Check if it's ++ (increment)
+                    if let Some(&next_ch) = chars.peek() {
+                        if next_ch == '+' {
+                            chars.next(); // consume second '+'
+                            tokens.push(Token::Symbol(String::from("++")));
+                        } else {
+                            tokens.push(Token::Symbol(String::from("+")));
+                        }
+                    } else {
+                        tokens.push(Token::Symbol(String::from("+")));
+                    }
+                }
                 '-' => {
-                    // Check if it's a negative number or minus operator
+                    // Check if it's -- (decrement), negative number, or minus operator
                     chars.next(); // consume '-'
                     if let Some(&next_ch) = chars.peek() {
-                        if next_ch.is_ascii_digit() {
+                        if next_ch == '-' {
+                            // It's -- (decrement)
+                            chars.next(); // consume second '-'
+                            tokens.push(Token::Symbol(String::from("--")));
+                        } else if next_ch.is_ascii_digit() {
                             // It's a negative number
                             let mut num = String::from("-");
                             while let Some(&ch) = chars.peek() {
@@ -193,12 +211,15 @@ impl Parser {
             "==" => self.parse_binary(Operation::Eq)?,
             "!=" => self.parse_binary(Operation::Neq)?,
             "let" => self.parse_set()?,
-            "assign" => self.parse_assign()?,
             "list" => self.parse_list_literal()?,
             "begin" => self.parse_block()?,
             "if" => self.parse_if()?,
             "while" => self.parse_while()?,
+            "lambda" => self.parse_lambda()?,
             "fn" => self.parse_function()?,
+            "++" => self.parse_inc()?,
+            "--" => self.parse_dec()?,
+            "for" => self.parse_for()?,
             _ => {
                 // If not a keyword, treat as function call
                 self.pos -= 1; // put back the symbol
@@ -225,15 +246,6 @@ impl Parser {
         };
         let value = Box::new(self.parse()?);
         Ok(Expr::Set(name, value))
-    }
-
-    fn parse_assign(&mut self) -> Result<Expr, String> {
-        let name = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected variable name".to_string()),
-        };
-        let value = Box::new(self.parse()?);
-        Ok(Expr::Assign(name, value))
     }
 
     fn parse_list_literal(&mut self) -> Result<Expr, String> {
@@ -440,6 +452,42 @@ impl Parser {
         Ok(Expr::Function(name, params, body))
     }
 
+    fn parse_lambda(&mut self) -> Result<Expr, String> {
+        // Expect (lambda (params...) body...)
+        // Parse parameter list
+        match self.consume() {
+            Some(Token::LParen) => {}
+            _ => return Err("Expected '(' after 'lambda'".to_string()),
+        }
+        
+        let mut params = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                self.consume(); // consume ')'
+                break;
+            }
+            match self.consume() {
+                Some(Token::Symbol(s)) => params.push(s),
+                _ => return Err("Expected parameter name".to_string()),
+            }
+        }
+        
+        // Parse body (rest of the expressions until closing paren)
+        let mut body = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                break;
+            }
+            body.push(self.parse()?);
+        }
+        
+        if body.is_empty() {
+            return Err("Lambda requires non-empty body".to_string());
+        }
+        
+        Ok(Expr::Lambda(params, body))
+    }
+
     fn parse_function_call(&mut self) -> Result<Expr, String> {
         // Expect (funcname args...)
         let name = match self.consume() {
@@ -475,4 +523,52 @@ impl Parser {
         
         Ok(Condition::FunctionCall(name, args))
     }
+
+    fn parse_inc(&mut self) -> Result<Expr, String> {
+        // (++ var)
+        let var = match self.consume() {
+            Some(Token::Symbol(s)) => s,
+            _ => return Err("Expected variable name after ++".to_string()),
+        };
+        Ok(Expr::Inc(var))
+    }
+
+    fn parse_dec(&mut self) -> Result<Expr, String> {
+        // (-- var)
+        let var = match self.consume() {
+            Some(Token::Symbol(s)) => s,
+            _ => return Err("Expected variable name after --".to_string()),
+        };
+        Ok(Expr::Dec(var))
+    }
+
+    fn parse_for(&mut self) -> Result<Expr, String> {
+        // (for init condition update body...)
+        // Example: (for (let i 0) (< i 10) (++ i) (print i))
+        
+        // Parse init expression (usually (let var value))
+        let init = self.parse()?;
+        
+        // Parse condition
+        let condition = self.parse_condition()?;
+        
+        // Parse update expression (usually (++ var) or (-- var))
+        let update = self.parse()?;
+        
+        // Parse body (rest of expressions until closing paren)
+        let mut body = Vec::new();
+        while let Some(token) = self.peek() {
+            if *token == Token::RParen {
+                break;
+            }
+            body.push(self.parse()?);
+        }
+        
+        if body.is_empty() {
+            return Err("For loop requires non-empty body".to_string());
+        }
+        
+        Ok(Expr::For(Box::new(init), condition, Box::new(update), body))
+    }
+
 }
