@@ -116,7 +116,6 @@ pub enum Expr {
     For(Box<Expr>, Condition, Box<Expr>, Vec<Expr>),  // (for init condition update body...) -> while loop
     Class(String, Option<String>, Vec<Expr>),
     New(String, Vec<Expr>),
-    Property(String, String),
 }
 
 pub enum Value {
@@ -642,7 +641,7 @@ impl Axe {
                         return Err("Parent class not found");
                     }
                 } else {
-                    Environment::extend(env)
+                    Environment::new()
                 };
                 self.globals.borrow_mut().set(name, Value::Environment(class_env.clone()));
 
@@ -669,45 +668,57 @@ impl Axe {
                 Ok(Value::Null)
             }
             Expr::New(class, args) => {
-                let Some(Value::Environment(class_env)) = self.globals.borrow().get(&class) else {
+                let Some(class_env) = self.globals.borrow().get(&class) else {
                     return Err("Class not found");
                 };
  
                 let instanc_env =  Value::Environment(Environment::extend(class_env.clone()));
 
-                let func = class_env.borrow().get("constructor").ok_or("undefined constructor")?;
+                let func = class_env.borrow().get("constructor").ok_or("undefined function")?;
 
-                if let Value::Function(params, body, closure_env) = func {
-                    if params.len() != args.len() {
-                        return Err("argument count mismatch");
-                    }
+                match func {
+                    Value::Function(params, body, closure_env) => {
+                        // Check argument count
+                        if params.len() != args.len() {
+                            return Err("argument count mismatch");
+                        }
 
-                    let mut arg_values = Vec::new();
-                    for arg in args {
-                        arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
-                    }
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                        }
 
-                    let func_env = Environment::extend(closure_env);
-                    for (param, value) in params.iter().zip(arg_values.iter()) {
-                        func_env.borrow_mut().set(param.clone(), value.clone());
+                        // Create a new environment extending the closure environment
+                        let func_env = Environment::extend(closure_env);
+
+                        // Bind parameters to argument values
+                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                            func_env.borrow_mut().set(param.clone(), value.clone());
+                        }
+
+                        // Execute function body
+                        let mut result = Value::Null;
+                        for expr in &body {
+                            result = self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
+                        }
+
+                        Ok(result)
                     }
-                    for expr in &body {
-                        self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
+                    Value::NativeFunction(_, native_fn) => {
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                        }
+
+                        // Call the native function
+                        native_fn(&arg_values)
                     }
+                    _ => Err("not a function"),
                 }
 
                 Ok(instanc_env)
-
-            }
-            Expr::Property(instance, name) => {                
-                let Some(Value::Environment(instance)) = self.globals.borrow().get(&instance) else {
-                    return Err("Class not found");
-                };
-                if let Some(p) = instance.borrow_mut().get(&name).clone() {
-                    Ok(p)
-                } else {
-                    return Err("Property not found");
-                }
             }
         }
     }
