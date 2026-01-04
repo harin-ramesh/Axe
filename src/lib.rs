@@ -6,6 +6,7 @@ use regex::Regex;
 
 mod parser;
 mod transformer;
+mod tokeniser;
 
 pub use parser::Parser;
 pub use transformer::Transformer;
@@ -642,7 +643,7 @@ impl Axe {
                         return Err("Parent class not found");
                     }
                 } else {
-                    Environment::extend(env)
+                    Environment::new()
                 };
                 self.globals.borrow_mut().set(name, Value::Environment(class_env.clone()));
 
@@ -673,12 +674,13 @@ impl Axe {
                     return Err("Class not found");
                 };
  
-                let instanc_env =  Value::Environment(Environment::extend(class_env.clone()));
+                //let instance =  Environment::extend(class_env.clone());
+                let instance =  Value::Environment(Environment::extend(class_env.clone()));
 
                 let func = class_env.borrow().get("constructor").ok_or("undefined constructor")?;
 
                 if let Value::Function(params, body, closure_env) = func {
-                    if params.len() != args.len() {
+                    if params.len() != (args.len() + 1) {
                         return Err("argument count mismatch");
                     }
 
@@ -686,6 +688,7 @@ impl Axe {
                     for arg in args {
                         arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
                     }
+                    arg_values.insert(0, instance.clone());
 
                     let func_env = Environment::extend(closure_env);
                     for (param, value) in params.iter().zip(arg_values.iter()) {
@@ -696,17 +699,16 @@ impl Axe {
                     }
                 }
 
-                Ok(instanc_env)
+                Ok(instance)
 
             }
             Expr::Property(instance, name) => {                
                 let Some(Value::Environment(instance)) = self.globals.borrow().get(&instance) else {
                     return Err("Class not found");
                 };
-                if let Some(p) = instance.borrow_mut().get(&name).clone() {
-                    Ok(p)
-                } else {
-                    return Err("Property not found");
+                match instance.borrow().get(&name) {
+                    Some(value) => Ok(value.clone()),
+                    None => Err("Property not found"),
                 }
             }
         }

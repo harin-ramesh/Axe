@@ -1,0 +1,213 @@
+use regex::Regex;
+use std::sync::LazyLock;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenKind {
+    LParen,
+    RParen,
+    Symbol,
+    Number,
+    String,
+    Increment,
+    Decrement,
+    Eof,
+}
+
+static SKIP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:[ \t\n\r]+|;[^\n]*\n?)+").unwrap()
+});
+
+static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
+    vec![
+        (TokenKind::LParen,    Regex::new(r"^\(").unwrap()),
+        (TokenKind::RParen,    Regex::new(r"^\)").unwrap()),
+        (TokenKind::String,    Regex::new(r#"^"((?:[^"\\]|\\.)*)""#).unwrap()),
+        (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
+        (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
+        (TokenKind::Number,    Regex::new(r"^[+-]?[0-9]+\.?[0-9]*").unwrap()),
+        (TokenKind::Symbol,    Regex::new(r"^[^\s()]+").unwrap()),
+    ]
+});
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Token<'src> {
+    pub kind: TokenKind,
+    pub lexeme: &'src str,
+    pub line: u32,
+}
+
+pub struct Tokeniser<'src> {
+    program: &'src str,
+    pos: usize,
+    line: u32,
+}
+
+impl<'src> Tokeniser<'src> {
+    pub fn new(program: &'src str) -> Self {
+        Tokeniser { program, pos: 0, line: 1 }
+    }
+
+    pub fn has_more_tokens(&self) -> bool {
+        self.program.len() > self.pos
+    }
+
+    fn remaining(&self) -> &'src str {
+        &self.program[self.pos..]
+    }
+
+    fn make_token(&self, kind: TokenKind, lexeme: &'src str) -> Token<'src> {
+        Token { kind, lexeme, line: self.line }
+    }
+
+    fn skip_whitespace_and_comments(&mut self) {
+        let remaining = self.remaining();
+        if let Some(m) = SKIP_RE.find(remaining) {
+            self.line += m.as_str().chars().filter(|&c| c == '\n').count() as u32;
+            self.pos += m.len();
+        }
+    }
+
+    pub fn get_next_token(&mut self) -> Result<Token<'src>, &'static str> {
+        self.skip_whitespace_and_comments();
+
+        let remaining = self.remaining();
+
+        if remaining.is_empty() {
+            return Ok(self.make_token(TokenKind::Eof, ""));
+        }
+
+        for (kind, regex) in TOKEN_PATTERNS.iter() {
+            if let Some(caps) = regex.captures(remaining) {
+                let full_match = caps.get(0).unwrap();
+                
+                // For strings, use capture group 1 (inner content), otherwise use full match
+                let lexeme_match = if *kind == TokenKind::String {
+                    caps.get(1).unwrap_or(full_match)
+                } else {
+                    full_match
+                };
+
+                // Handle signed number edge case: reject if it's just a sign
+                if *kind == TokenKind::Number {
+                    let s = full_match.as_str();
+                    if s.len() == 1 && (s == "+" || s == "-") {
+                        continue;
+                    }
+                }
+
+                let start = self.pos + lexeme_match.start();
+                let end = self.pos + lexeme_match.end();
+                self.pos += full_match.len();
+                return Ok(self.make_token(*kind, &self.program[start..end]));
+            }
+        }
+
+        // Check for unterminated string
+        if remaining.starts_with('"') {
+            return Err("Unterminated string");
+        }
+
+        Err("Unexpected character")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_tokens() {
+        let mut tokeniser = Tokeniser::new("(+ 1 2)");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::LParen);
+        assert_eq!(tok.lexeme, "(");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Symbol);
+        assert_eq!(tok.lexeme, "+");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Number);
+        assert_eq!(tok.lexeme, "1");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Number);
+        assert_eq!(tok.lexeme, "2");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::RParen);
+        assert_eq!(tok.lexeme, ")");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Eof);
+    }
+
+    #[test]
+    fn test_string() {
+        let mut tokeniser = Tokeniser::new(r#""hello world""#);
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::String);
+        assert_eq!(tok.lexeme, "hello world");
+    }
+
+    #[test]
+    fn test_string_with_escapes_raw() {
+        let mut tokeniser = Tokeniser::new(r#""hello\nworld""#);
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::String);
+        assert_eq!(tok.lexeme, r#"hello\nworld"#);
+    }
+
+    #[test]
+    fn test_comments() {
+        let mut tokeniser = Tokeniser::new("; comment\n42");
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Number);
+        assert_eq!(tok.lexeme, "42");
+        assert_eq!(tok.line, 2);
+    }
+
+    #[test]
+    fn test_signed_numbers() {
+        let mut tokeniser = Tokeniser::new("-42 +3.14");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Number);
+        assert_eq!(tok.lexeme, "-42");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Number);
+        assert_eq!(tok.lexeme, "+3.14");
+    }
+
+    #[test]
+    fn test_increment_decrement() {
+        let mut tokeniser = Tokeniser::new("++ --");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Increment);
+        assert_eq!(tok.lexeme, "++");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Decrement);
+        assert_eq!(tok.lexeme, "--");
+    }
+
+    #[test]
+    fn test_line_tracking() {
+        let mut tokeniser = Tokeniser::new("a\nb\n\nc");
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.lexeme, "a");
+        assert_eq!(tok.line, 1);
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.lexeme, "b");
+        assert_eq!(tok.line, 2);
+        
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.lexeme, "c");
+        assert_eq!(tok.line, 4);
+    }
+}
