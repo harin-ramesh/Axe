@@ -1,18 +1,18 @@
 use axe::{Axe, Parser};
-use std::io::{self, Write};
 use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::process;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    
+
     // Check if a file argument was provided
     if args.len() > 1 {
         run_file(&args[1]);
         return;
     }
-    
+
     // Otherwise, start REPL
     run_repl();
 }
@@ -26,16 +26,16 @@ fn run_file(filename: &str) {
             process::exit(1);
         }
     };
-    
+
     let axe = Axe::new();
-    
+
     // Parse and evaluate each expression in the file
     // We need to parse expressions one at a time from the file content
     let trimmed_content = content.trim();
     if trimmed_content.is_empty() {
         return; // Empty file is ok
     }
-    
+
     match Parser::new(&content) {
         Ok(mut parser) => {
             // Parse and execute each expression in the file
@@ -46,9 +46,12 @@ fn run_file(filename: &str) {
                     Ok(expr) => {
                         expression_count += 1;
                         match axe.eval(expr) {
-                            Ok(_) => {}, // Successfully evaluated
+                            Ok(_) => {} // Successfully evaluated
                             Err(e) => {
-                                eprintln!("Runtime error in expression {}: {}", expression_count, e);
+                                eprintln!(
+                                    "Runtime error in expression {}: {}",
+                                    expression_count, e
+                                );
                                 process::exit(1);
                             }
                         }
@@ -125,10 +128,10 @@ fn run_repl() {
                             Ok(expr) => {
                                 match axe.eval(expr) {
                                     // Ok(value) => println!("=> {}", value),
-                                    Ok(_value) => {},
+                                    Ok(_value) => {}
                                     Err(e) => println!("Error: {}", e),
                                 }
-                            },
+                            }
                             Err(e) => println!("Parse error: {}", e),
                         },
                         Err(e) => println!("Tokenize error: {}", e),

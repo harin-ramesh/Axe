@@ -1,4 +1,4 @@
-use axe::{Condition, Axe, Expr, Operation, Value};
+use axe::{Axe, Condition, Expr, Operation, Value};
 
 // Greater than tests
 #[test]
@@ -195,11 +195,7 @@ fn eq_bool_true() {
 #[test]
 fn eq_null_true() {
     let axe = Axe::new();
-    let expr = Expr::Binary(
-        Operation::Eq,
-        Box::new(Expr::Null),
-        Box::new(Expr::Null),
-    );
+    let expr = Expr::Binary(Operation::Eq, Box::new(Expr::Null), Box::new(Expr::Null));
     assert_eq!(axe.eval(expr).unwrap(), Value::Bool(true));
 }
 
@@ -253,8 +249,10 @@ fn neq_cross_type_true() {
 #[test]
 fn comparison_with_variables() {
     let axe = Axe::new();
-    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(10)))).unwrap();
-    axe.eval(Expr::Set("y".to_string(), Box::new(Expr::Int(5)))).unwrap();
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(10))))
+        .unwrap();
+    axe.eval(Expr::Set("y".to_string(), Box::new(Expr::Int(5))))
+        .unwrap();
 
     let expr = Expr::Binary(
         Operation::Gt,

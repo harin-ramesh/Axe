@@ -5,27 +5,38 @@ use std::sync::LazyLock;
 pub enum TokenKind {
     LParen,
     RParen,
+    WhiteSpace,
+    Comment,
     Symbol,
     Number,
     String,
     Increment,
     Decrement,
+    Delimeter,
     Eof,
 }
 
-static SKIP_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(?:[ \t\n\r]+|;[^\n]*\n?)+").unwrap()
-});
-
 static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
     vec![
-        (TokenKind::LParen,    Regex::new(r"^\(").unwrap()),
-        (TokenKind::RParen,    Regex::new(r"^\)").unwrap()),
-        (TokenKind::String,    Regex::new(r#"^"((?:[^"\\]|\\.)*)""#).unwrap()),
+        (TokenKind::WhiteSpace, Regex::new(r"^[ \t\n\r]+").unwrap()),
+        (
+            TokenKind::Comment,
+            Regex::new(r"^(?://[^\n]*|/\*[\s\S]*?\*/)").unwrap(),
+        ),
+        (TokenKind::LParen, Regex::new(r"^\(").unwrap()),
+        (TokenKind::RParen, Regex::new(r"^\)").unwrap()),
+        (
+            TokenKind::String,
+            Regex::new(r#"^"((?:[^"\\]|\\.)*)""#).unwrap(),
+        ),
         (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
         (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
-        (TokenKind::Number,    Regex::new(r"^[+-]?[0-9]+\.?[0-9]*").unwrap()),
-        (TokenKind::Symbol,    Regex::new(r"^[^\s()]+").unwrap()),
+        (
+            TokenKind::Number,
+            Regex::new(r"^[+-]?[0-9]+\.?[0-9]*").unwrap(),
+        ),
+        (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
+        (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
     ]
 });
 
@@ -44,7 +55,11 @@ pub struct Tokeniser<'src> {
 
 impl<'src> Tokeniser<'src> {
     pub fn new(program: &'src str) -> Self {
-        Tokeniser { program, pos: 0, line: 1 }
+        Tokeniser {
+            program,
+            pos: 0,
+            line: 1,
+        }
     }
 
     pub fn has_more_tokens(&self) -> bool {
@@ -56,22 +71,15 @@ impl<'src> Tokeniser<'src> {
     }
 
     fn make_token(&self, kind: TokenKind, lexeme: &'src str) -> Token<'src> {
-        Token { kind, lexeme, line: self.line }
-    }
-
-    fn skip_whitespace_and_comments(&mut self) {
-        let remaining = self.remaining();
-        if let Some(m) = SKIP_RE.find(remaining) {
-            self.line += m.as_str().chars().filter(|&c| c == '\n').count() as u32;
-            self.pos += m.len();
+        Token {
+            kind,
+            lexeme,
+            line: self.line,
         }
     }
 
     pub fn get_next_token(&mut self) -> Result<Token<'src>, &'static str> {
-        self.skip_whitespace_and_comments();
-
         let remaining = self.remaining();
-
         if remaining.is_empty() {
             return Ok(self.make_token(TokenKind::Eof, ""));
         }
@@ -79,7 +87,7 @@ impl<'src> Tokeniser<'src> {
         for (kind, regex) in TOKEN_PATTERNS.iter() {
             if let Some(caps) = regex.captures(remaining) {
                 let full_match = caps.get(0).unwrap();
-                
+
                 // For strings, use capture group 1 (inner content), otherwise use full match
                 let lexeme_match = if *kind == TokenKind::String {
                     caps.get(1).unwrap_or(full_match)
@@ -93,6 +101,12 @@ impl<'src> Tokeniser<'src> {
                     if s.len() == 1 && (s == "+" || s == "-") {
                         continue;
                     }
+                }
+
+                if *kind == TokenKind::WhiteSpace || *kind == TokenKind::Comment {
+                    self.line += full_match.as_str().chars().filter(|&c| c == '\n').count() as u32;
+                    self.pos += full_match.len();
+                    continue;
                 }
 
                 let start = self.pos + lexeme_match.start();
@@ -118,27 +132,27 @@ mod tests {
     #[test]
     fn test_basic_tokens() {
         let mut tokeniser = Tokeniser::new("(+ 1 2)");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::LParen);
         assert_eq!(tok.lexeme, "(");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Symbol);
         assert_eq!(tok.lexeme, "+");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "1");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "2");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::RParen);
         assert_eq!(tok.lexeme, ")");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Eof);
     }
@@ -171,11 +185,11 @@ mod tests {
     #[test]
     fn test_signed_numbers() {
         let mut tokeniser = Tokeniser::new("-42 +3.14");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "-42");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "+3.14");
@@ -184,11 +198,11 @@ mod tests {
     #[test]
     fn test_increment_decrement() {
         let mut tokeniser = Tokeniser::new("++ --");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Increment);
         assert_eq!(tok.lexeme, "++");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Decrement);
         assert_eq!(tok.lexeme, "--");
@@ -197,15 +211,15 @@ mod tests {
     #[test]
     fn test_line_tracking() {
         let mut tokeniser = Tokeniser::new("a\nb\n\nc");
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.lexeme, "a");
         assert_eq!(tok.line, 1);
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.lexeme, "b");
         assert_eq!(tok.line, 2);
-        
+
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.lexeme, "c");
         assert_eq!(tok.line, 4);

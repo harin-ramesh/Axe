@@ -17,11 +17,12 @@ impl<'src> Parser<'src> {
 
     pub fn parse(&mut self) -> Result<Expr, &'static str> {
         self.lookahead = Some(self.tokeniser.get_next_token()?);
+        let expr = self.parse_block()?;
 
-        Ok(Expr::Null)
+        Ok(expr)
     }
 
-    fn eat(&mut self, expected_token: TokenKind) -> Result<Token, &'static str> {
+    fn eat(&mut self, expected_token: TokenKind) -> Result<Token<'src>, &'static str> {
         let token = match self.lookahead.take() {
             None => return Err("Unexpected end of input"),
             Some(t) => t,
@@ -36,11 +37,43 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_block(&mut self) -> Result<Expr, &'static str> {
-        Ok(Expr::Block(self.literal()?))
+        let stmts = self.parse_statements()?;
+        Ok(Expr::Block(stmts))
+    }
+
+    // StatementList
+    //  : Statement
+    //  | StatemtnList Statement -> Statement Statement Statment 
+    fn parse_statements(&mut self) -> Result<Vec<Expr>, &'static str> {
+        let stmts = vec![self.parse_statement()?];
+
+        Ok(stmts)
+    }
+
+    // Statement
+    //  : ExpressionStatement
+    //  | BlockStatment
+    fn parse_statement(&mut self) -> Result<Expr, &'static str> {
+        let expr = self.parse_expression_statemnt()?;
+        Ok(expr)
+    }
+
+    // ExpressionStatement
+    //  : Expression ';'
+    fn parse_expression_statemnt(&mut self) -> Result<Expr, &'static str> {        
+        let expr = self.parse_expression()?; 
+        self.eat(TokenKind::Delimeter)?; 
+        Ok(expr)
+    }
+
+    // Expression
+    //  : Literal
+    fn parse_expression(&mut self) -> Result<Expr, &'static str> {
+        Ok(self.parse_literal()?)
     }
 
     // Literal
-    //    : NumericLiteral | StringLiteral
+    //  : NumericLiteral | StringLiteral
     fn parse_literal(&mut self) -> Result<Expr, &'static str> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal(),
@@ -50,7 +83,7 @@ impl<'src> Parser<'src> {
     }
 
     // NumericLiteral
-    //    : NUMBER
+    //  : NUMBER
     fn parse_numeric_literal(&mut self) -> Result<Expr, &'static str> {
         let token = self.eat(TokenKind::Number)?;
         let lexeme = token.lexeme;

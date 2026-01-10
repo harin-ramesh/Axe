@@ -4,10 +4,8 @@ use axe::{Axe, Expr, Operation, Value};
 fn set_and_get_variable() {
     let axe = Axe::new();
 
-    axe.eval(
-        Expr::Set("x".into(), Box::new(Expr::Int(42))),
-    )
-    .unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(42))))
+        .unwrap();
 
     let value = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(value, Value::Int(42));
@@ -17,10 +15,8 @@ fn set_and_get_variable() {
 fn nested_expression_with_variable() {
     let axe = Axe::new();
 
-    axe.eval(
-        Expr::Set("x".into(), Box::new(Expr::Int(3))),
-    )
-    .unwrap();
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(3))))
+        .unwrap();
 
     // (x + 2) * 4 = 20
     let expr = Expr::Binary(
@@ -47,9 +43,10 @@ fn undefined_variable_fails() {
 #[test]
 fn null_can_be_stored_in_variable() {
     let axe = Axe::new();
-    
-    axe.eval(Expr::Set("x".into(), Box::new(Expr::Null))).unwrap();
-    
+
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Null)))
+        .unwrap();
+
     let value = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(value, Value::Null);
 }

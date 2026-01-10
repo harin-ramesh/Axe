@@ -1,4 +1,4 @@
-use axe::{Condition, Axe, Expr, Operation, Parser, Value};
+use axe::{Axe, Condition, Expr, Operation, Parser, Value};
 
 #[test]
 fn parse_integer() {
@@ -55,7 +55,11 @@ fn parse_addition() {
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::Binary(Operation::Add, Box::new(Expr::Int(1)), Box::new(Expr::Int(2)))
+        Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Int(1)),
+            Box::new(Expr::Int(2))
+        )
     );
 }
 
@@ -97,7 +101,11 @@ fn parse_comparison() {
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::Binary(Operation::Gt, Box::new(Expr::Int(10)), Box::new(Expr::Int(5)))
+        Expr::Binary(
+            Operation::Gt,
+            Box::new(Expr::Int(10)),
+            Box::new(Expr::Int(5))
+        )
     );
 }
 
@@ -172,11 +180,11 @@ fn parse_and_eval_simple() {
 #[test]
 fn parse_and_eval_with_variables() {
     let axe = Axe::new();
-    
+
     // (let x 5)
     let mut parser = Parser::new("(let x 5)").unwrap();
     axe.eval(parser.parse().unwrap()).unwrap();
-    
+
     // (* x 2)
     let mut parser = Parser::new("(* x 2)").unwrap();
     let result = axe.eval(parser.parse().unwrap()).unwrap();
@@ -206,16 +214,16 @@ fn parse_and_eval_if() {
 #[test]
 fn parse_and_eval_while() {
     let axe = Axe::new();
-    
+
     // Set initial value
     let mut parser = Parser::new("(let counter 3)").unwrap();
     axe.eval(parser.parse().unwrap()).unwrap();
-    
+
     // Run while loop
     let input = "(while (> counter 0) (let counter (- counter 1)))";
     let mut parser = Parser::new(input).unwrap();
     axe.eval(parser.parse().unwrap()).unwrap();
-    
+
     // Check result
     let mut parser = Parser::new("counter").unwrap();
     let result = axe.eval(parser.parse().unwrap()).unwrap();
@@ -234,7 +242,7 @@ fn parse_complex_program() {
                 (let i (+ i 1)))
             sum)
     "#;
-    
+
     let mut parser = Parser::new(program).unwrap();
     let expr = parser.parse().unwrap();
     let result = axe.eval(expr).unwrap();
@@ -256,19 +264,19 @@ fn parse_nested_if() {
 fn parse_all_comparison_operators() {
     let mut parser = Parser::new("(< 1 2)").unwrap();
     parser.parse().unwrap();
-    
+
     let mut parser = Parser::new("(> 2 1)").unwrap();
     parser.parse().unwrap();
-    
+
     let mut parser = Parser::new("(<= 1 1)").unwrap();
     parser.parse().unwrap();
-    
+
     let mut parser = Parser::new("(>= 2 2)").unwrap();
     parser.parse().unwrap();
-    
+
     let mut parser = Parser::new("(== 5 5)").unwrap();
     parser.parse().unwrap();
-    
+
     let mut parser = Parser::new("(!= 3 4)").unwrap();
     parser.parse().unwrap();
 }
@@ -278,7 +286,7 @@ fn parse_negative_numbers() {
     let mut parser = Parser::new("-42").unwrap();
     let expr = parser.parse().unwrap();
     assert_eq!(expr, Expr::Int(-42));
-    
+
     let mut parser = Parser::new("-3.14").unwrap();
     let expr = parser.parse().unwrap();
     assert_eq!(expr, Expr::Float(-3.14));

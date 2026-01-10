@@ -5,8 +5,8 @@ use std::rc::Rc;
 use regex::Regex;
 
 mod parser;
-mod transformer;
 mod tokeniser;
+mod transformer;
 
 pub use parser::Parser;
 pub use transformer::Transformer;
@@ -65,7 +65,10 @@ impl Environment {
 
     pub fn exists_in_any_scope(&self, name: &str) -> bool {
         self.records.contains_key(name)
-            || self.parent.as_ref().map_or(false, |p| p.borrow().exists_in_any_scope(name))
+            || self
+                .parent
+                .as_ref()
+                .map_or(false, |p| p.borrow().exists_in_any_scope(name))
     }
 }
 
@@ -75,12 +78,12 @@ pub enum Operation {
     Sub,
     Mul,
     Div,
-    Gt,      // >
-    Lt,      // <
-    Gte,     // >=
-    Lte,     // <=
-    Eq,      // ==
-    Neq,     // !=
+    Gt,  // >
+    Lt,  // <
+    Gte, // >=
+    Lte, // <=
+    Eq,  // ==
+    Neq, // !=
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -112,9 +115,9 @@ pub enum Expr {
     Lambda(Vec<String>, Vec<Expr>),
     Function(String, Vec<String>, Vec<Expr>),
     FunctionCall(String, Vec<Expr>),
-    Inc(String),  // i++ -> (let i (+ i 1))
-    Dec(String),  // i-- -> (let i (- i 1))
-    For(Box<Expr>, Condition, Box<Expr>, Vec<Expr>),  // (for init condition update body...) -> while loop
+    Inc(String),                                     // i++ -> (let i (+ i 1))
+    Dec(String),                                     // i-- -> (let i (- i 1))
+    For(Box<Expr>, Condition, Box<Expr>, Vec<Expr>), // (for init condition update body...) -> while loop
     Class(String, Option<String>, Vec<Expr>),
     New(String, Vec<Expr>),
     Property(String, String),
@@ -157,7 +160,9 @@ impl std::fmt::Debug for Value {
             Value::Float(fl) => write!(f, "Float({:?})", fl),
             Value::Str(s) => write!(f, "Str({:?})", s),
             Value::List(items) => write!(f, "List({:?})", items),
-            Value::Function(params, body, _) => write!(f, "Function({:?}, {:?}, <env>)", params, body),
+            Value::Function(params, body, _) => {
+                write!(f, "Function({:?}, {:?}, <env>)", params, body)
+            }
             Value::NativeFunction(name, _) => write!(f, "NativeFunction({})", name),
             Value::Environment(_env_ref) => write!(f, "Enviroment"),
         }
@@ -290,7 +295,7 @@ fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
     if args.is_empty() {
         return Err("concat expects at least 1 argument");
     }
-    
+
     // Check if first argument is a string or list
     match &args[0] {
         Value::Str(_) => {
@@ -381,7 +386,7 @@ pub struct Axe {
 impl Axe {
     pub fn new() -> Self {
         let globals = Environment::new();
-        
+
         // Add built-in functions
         globals.borrow_mut().set(
             "print".to_string(),
@@ -411,8 +416,8 @@ impl Axe {
             "range".to_string(),
             Value::NativeFunction("range".to_string(), native_range),
         );
-        
-        Self { 
+
+        Self {
             globals,
             transformer: Transformer,
         }
@@ -422,11 +427,7 @@ impl Axe {
         self.eval_with_env(expr, None)
     }
 
-    pub fn eval_in_env(
-        &self,
-        expr: Expr,
-        env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    pub fn eval_in_env(&self, expr: Expr, env: EnvRef) -> Result<Value, &'static str> {
         self.eval_with_env(expr, Some(env))
     }
 
@@ -435,11 +436,7 @@ impl Axe {
         re.is_match(name)
     }
 
-    fn eval_with_env(
-        &self,
-        expr: Expr,
-        env: Option<EnvRef>,
-    ) -> Result<Value, &'static str> {
+    fn eval_with_env(&self, expr: Expr, env: Option<EnvRef>) -> Result<Value, &'static str> {
         let env = env.unwrap_or_else(|| self.globals.clone());
 
         match expr {
@@ -448,7 +445,7 @@ impl Axe {
             Expr::Int(n) => Ok(Value::Int(n)),
             Expr::Float(f) => Ok(Value::Float(f)),
             Expr::Str(s) => Ok(Value::Str(s)),
-            
+
             Expr::List(elements) => {
                 // Evaluate each element and create a list
                 let mut values = Vec::new();
@@ -470,13 +467,17 @@ impl Axe {
                     return Err("invalid variable name");
                 }
                 let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                
+
                 // Try to update existing variable first (searches parent scopes)
                 // If not found, create new variable in current scope
-                if env.borrow_mut().update(name.clone(), value.clone()).is_err() {
+                if env
+                    .borrow_mut()
+                    .update(name.clone(), value.clone())
+                    .is_err()
+                {
                     env.borrow_mut().set(name, value.clone());
                 }
-                
+
                 Ok(value)
             }
 
@@ -498,7 +499,7 @@ impl Axe {
 
             Expr::If(condition, then_branch, else_branch) => {
                 let cond_value = self.eval_condition(condition, Some(env.clone()))?;
-                
+
                 // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
                 let is_truthy = match cond_value {
                     Value::Null => false,
@@ -507,7 +508,7 @@ impl Axe {
                     Value::Float(f) if f == 0.0 => false,
                     _ => true,
                 };
-                
+
                 // Evaluate the appropriate branch in current environment
                 let branch_exprs = if is_truthy { then_branch } else { else_branch };
                 let mut result = Value::Null;
@@ -524,7 +525,7 @@ impl Axe {
 
                 loop {
                     let cond_value = self.eval_condition(condition.clone(), Some(env.clone()))?;
-                    
+
                     // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
                     let is_truthy = match cond_value {
                         Value::Null => false,
@@ -554,17 +555,19 @@ impl Axe {
                         return Err("invalid parameter name");
                     }
                 }
-                
+
                 // Create a closure capturing the current environment
                 let func_value = Value::Function(params.clone(), body.clone(), env.clone());
-                
+
                 Ok(func_value)
             }
 
             Expr::Function(name, params, body) => {
                 // Transform syntactic sugar: (fn name params body) -> (let name (lambda params body))
                 // Then evaluate the transformed expression
-                let transformed = self.transformer.transform(Expr::Function(name, params, body));
+                let transformed = self
+                    .transformer
+                    .transform(Expr::Function(name, params, body));
                 self.eval_with_env(transformed, Some(env))
             }
 
@@ -585,7 +588,9 @@ impl Axe {
             Expr::For(init, condition, update, body) => {
                 // Transform syntactic sugar: for loop -> while loop
                 // Then evaluate the transformed expression
-                let transformed = self.transformer.transform(Expr::For(init, condition, update, body));
+                let transformed = self
+                    .transformer
+                    .transform(Expr::For(init, condition, update, body));
                 self.eval_with_env(transformed, Some(env))
             }
 
@@ -638,14 +643,16 @@ impl Axe {
             Expr::Class(name, parent, body) => {
                 let class_env = if let Some(p) = parent {
                     if let Some(Value::Environment(p_env)) = self.globals.borrow().get(&p) {
-                        Environment::extend(p_env.clone()) 
+                        Environment::extend(p_env.clone())
                     } else {
                         return Err("Parent class not found");
                     }
                 } else {
                     Environment::new()
                 };
-                self.globals.borrow_mut().set(name, Value::Environment(class_env.clone()));
+                self.globals
+                    .borrow_mut()
+                    .set(name, Value::Environment(class_env.clone()));
 
                 for expr in body {
                     match expr {
@@ -654,13 +661,19 @@ impl Axe {
                                 return Err("invalid variable name");
                             }
                             let value = self.eval_with_env(*expr, Some(class_env.clone()))?;
- 
-                            if class_env.borrow_mut().update(name.clone(), value.clone()).is_err() {
+
+                            if class_env
+                                .borrow_mut()
+                                .update(name.clone(), value.clone())
+                                .is_err()
+                            {
                                 class_env.borrow_mut().set(name, value.clone());
-                            }     
+                            }
                         }
                         Expr::Function(name, params, body) => {
-                            let transformed = self.transformer.transform(Expr::Function(name, params, body));
+                            let transformed = self
+                                .transformer
+                                .transform(Expr::Function(name, params, body));
                             self.eval_with_env(transformed, Some(class_env.clone()))?;
                         }
                         _ => return Err("Invalid class definition"),
@@ -673,11 +686,14 @@ impl Axe {
                 let Some(Value::Environment(class_env)) = self.globals.borrow().get(&class) else {
                     return Err("Class not found");
                 };
- 
-                //let instance =  Environment::extend(class_env.clone());
-                let instance =  Value::Environment(Environment::extend(class_env.clone()));
 
-                let func = class_env.borrow().get("constructor").ok_or("undefined constructor")?;
+                //let instance =  Environment::extend(class_env.clone());
+                let instance = Value::Environment(Environment::extend(class_env.clone()));
+
+                let func = class_env
+                    .borrow()
+                    .get("constructor")
+                    .ok_or("undefined constructor")?;
 
                 if let Value::Function(params, body, closure_env) = func {
                     if params.len() != (args.len() + 1) {
@@ -700,10 +716,10 @@ impl Axe {
                 }
 
                 Ok(instance)
-
             }
-            Expr::Property(instance, name) => {                
-                let Some(Value::Environment(instance)) = self.globals.borrow().get(&instance) else {
+            Expr::Property(instance, name) => {
+                let Some(Value::Environment(instance)) = self.globals.borrow().get(&instance)
+                else {
                     return Err("Class not found");
                 };
                 match instance.borrow().get(&name) {
@@ -790,11 +806,7 @@ impl Axe {
         }
     }
 
-    fn eval_binary(
-        op: Operation,
-        left: Value,
-        right: Value,
-    ) -> Result<Value, &'static str> {
+    fn eval_binary(op: Operation, left: Value, right: Value) -> Result<Value, &'static str> {
         use Operation::*;
         use Value::*;
 
@@ -859,4 +871,3 @@ impl Axe {
         }
     }
 }
-
