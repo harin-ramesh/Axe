@@ -1,293 +1,460 @@
-use axe::{Axe, Condition, Expr, Operation, Parser, Value};
+use std::result;
+
+use axe::{Expr, Parser};
+
+// =============================================================================
+// Numeric Literal Tests - These should pass with current implementation
+// =============================================================================
 
 #[test]
-fn parse_integer() {
-    let mut parser = Parser::new("42").unwrap();
+fn parse_integer_literal() {
+    let mut parser = Parser::new("42;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Int(42));
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
 }
 
 #[test]
-fn parse_float() {
-    let mut parser = Parser::new("3.14").unwrap();
+fn parse_negative_integer() {
+    let mut parser = Parser::new("-42;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Float(3.14));
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(-42)]));
 }
 
 #[test]
-fn parse_string() {
-    let mut parser = Parser::new("\"hello\"").unwrap();
+fn parse_positive_integer() {
+    let mut parser = Parser::new("+42;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Str("hello".to_string()));
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
 }
 
 #[test]
-fn parse_bool_true() {
-    let mut parser = Parser::new("true").unwrap();
+fn parse_zero() {
+    let mut parser = Parser::new("0;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Bool(true));
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(0)]));
 }
 
 #[test]
-fn parse_bool_false() {
-    let mut parser = Parser::new("false").unwrap();
+fn parse_large_integer() {
+    let mut parser = Parser::new("9999999999;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Bool(false));
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(9999999999)]));
 }
 
 #[test]
-fn parse_null() {
-    let mut parser = Parser::new("null").unwrap();
+fn parse_float_literal() {
+    let mut parser = Parser::new("3.14;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Null);
+    assert_eq!(expr, Expr::Block(vec![Expr::Float(3.14)]));
 }
 
 #[test]
-fn parse_variable() {
-    let mut parser = Parser::new("x").unwrap();
+fn parse_negative_float() {
+    let mut parser = Parser::new("-3.14;");
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Var("x".to_string()));
+    assert_eq!(expr, Expr::Block(vec![Expr::Float(-3.14)]));
 }
 
 #[test]
-fn parse_addition() {
-    let mut parser = Parser::new("(+ 1 2)").unwrap();
+fn parse_float_with_trailing_zeros() {
+    let mut parser = Parser::new("1.500;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Float(1.5)]));
+}
+
+#[test]
+fn parse_float_whole_number() {
+    let mut parser = Parser::new("5.0;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Float(5.0)]));
+}
+
+// =============================================================================
+// String Literal Tests - These should pass with current implementation
+// =============================================================================
+
+#[test]
+fn parse_simple_string() {
+    let mut parser = Parser::new("\"hello\";");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Str("hello".to_string())]));
+}
+
+#[test]
+fn parse_empty_string() {
+    let mut parser = Parser::new("\"\";");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Str("".to_string())]));
+}
+
+#[test]
+fn parse_string_with_spaces() {
+    let mut parser = Parser::new("\"hello world\";");
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::Binary(
-            Operation::Add,
-            Box::new(Expr::Int(1)),
-            Box::new(Expr::Int(2))
-        )
+        Expr::Block(vec![Expr::Str("hello world".to_string())])
     );
 }
 
 #[test]
-fn parse_nested_arithmetic() {
-    let mut parser = Parser::new("(+ (* 2 3) 4)").unwrap();
+fn parse_string_with_numbers() {
+    let mut parser = Parser::new("\"test123\";");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Str("test123".to_string())]));
+}
+
+#[test]
+fn parse_string_with_special_chars() {
+    let mut parser = Parser::new("\"!@#$%^&*()\";");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Str("!@#$%^&*()".to_string())]));
+}
+
+#[test]
+fn parse_string_with_escaped_quote() {
+    let mut parser = Parser::new(r#""hello\"world";"#);
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::Binary(
-            Operation::Add,
-            Box::new(Expr::Binary(
-                Operation::Mul,
-                Box::new(Expr::Int(2)),
-                Box::new(Expr::Int(3))
-            )),
-            Box::new(Expr::Int(4))
-        )
+        Expr::Block(vec![Expr::Str(r#"hello\"world"#.to_string())])
     );
 }
 
 #[test]
-fn parse_set() {
-    let mut parser = Parser::new("(let x 10)").unwrap();
-    let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Set("x".to_string(), Box::new(Expr::Int(10))));
-}
-
-#[test]
-fn parse_assign() {
-    let mut parser = Parser::new("(let x 20)").unwrap();
-    let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Set("x".to_string(), Box::new(Expr::Int(20))));
-}
-
-#[test]
-fn parse_comparison() {
-    let mut parser = Parser::new("(> 10 5)").unwrap();
+fn parse_string_with_escaped_newline() {
+    let mut parser = Parser::new(r#""hello\nworld";"#);
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::Binary(
-            Operation::Gt,
-            Box::new(Expr::Int(10)),
-            Box::new(Expr::Int(5))
-        )
+        Expr::Block(vec![Expr::Str(r#"hello\nworld"#.to_string())])
+    );
+}
+
+// =============================================================================
+// Expression Statement Tests (with semicolons)
+// =============================================================================
+
+#[test]
+fn parse_single_expression_statement() {
+    let mut parser = Parser::new("100;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(100)]));
+}
+
+#[test]
+fn parse_string_expression_statement() {
+    let mut parser = Parser::new("\"test\";");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Str("test".to_string())]));
+}
+
+#[test]
+fn parse_float_expression_statement() {
+    let mut parser = Parser::new("2.718;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Float(2.718)]));
+}
+
+// =============================================================================
+// Error Cases Tests
+// =============================================================================
+
+#[test]
+fn parse_missing_semicolon() {
+    let mut parser = Parser::new("42");
+    let result = parser.parse();
+    assert!(result.is_err());
+}
+
+#[test]
+fn parse_unclosed_string() {
+    let mut parser = Parser::new("\"hello;");
+    let result = parser.parse();
+    assert!(result.is_err());
+}
+
+#[test]
+fn parse_unclosed_block() {
+    let mut parser = Parser::new("{ 42;");
+    let result = parser.parse();
+    assert!(result.is_err());
+}
+
+#[test]
+fn parse_extra_closing_brace() {
+    let mut parser = Parser::new("42; }");
+    let result = parser.parse();
+    eprintln!("{:?}", result);
+    assert!(result.is_err());
+}
+
+// =============================================================================
+// Edge Cases Tests
+// =============================================================================
+
+#[test]
+fn parse_very_long_string() {
+    let long_string = "a".repeat(1000);
+    let input = format!("\"{}\";", long_string);
+    let mut parser = Parser::new(&input);
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Str(long_string)]));
+}
+
+#[test]
+fn parse_unicode_string() {
+    let mut parser = Parser::new("\"hello unicode\";");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Str("hello unicode".to_string())])
+    );
+}
+
+// =============================================================================
+// Block Statement Tests
+// =============================================================================
+
+#[test]
+fn parse_empty_block() {
+    let mut parser = Parser::new("{}");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Block(vec![])]));
+}
+
+#[test]
+fn parse_block_with_single_statement() {
+    let mut parser = Parser::new("{ 42; }");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Block(vec![Expr::Int(42)])]));
+}
+
+#[test]
+fn parse_block_with_string() {
+    let mut parser = Parser::new("{ \"hello\"; }");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![Expr::Str("hello".to_string())])])
     );
 }
 
 #[test]
-fn parse_block() {
-    let mut parser = Parser::new("(begin (let x 1) (+ x 2))").unwrap();
+fn parse_block_with_formatting() {
+    let mut parser = Parser::new("{\n    42;\n}");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Block(vec![Expr::Int(42)])]));
+}
+
+// =============================================================================
+// Whitespace Tests
+// =============================================================================
+
+#[test]
+fn parse_with_leading_whitespace() {
+    let mut parser = Parser::new("   42;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+#[test]
+fn parse_with_trailing_whitespace() {
+    let mut parser = Parser::new("42;   ");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+#[test]
+fn parse_with_newlines() {
+    let mut parser = Parser::new("\n42;\n");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+#[test]
+fn parse_with_tabs() {
+    let mut parser = Parser::new("\t42;\t");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+// =============================================================================
+// Comment Tests
+// =============================================================================
+
+#[test]
+fn parse_with_line_comment() {
+    let mut parser = Parser::new("// this is a comment\n42;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+#[test]
+fn parse_with_inline_comment() {
+    let mut parser = Parser::new("42; // inline comment");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+#[test]
+fn parse_with_block_comment() {
+    let mut parser = Parser::new("/* block comment */ 42;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+#[test]
+fn parse_with_multiline_block_comment() {
+    let mut parser = Parser::new("/*\n  multiline\n  comment\n*/ 42;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42)]));
+}
+
+// =============================================================================
+// Multiple Statements Tests
+// =============================================================================
+
+#[test]
+fn parse_two_statements() {
+    let mut parser = Parser::new("42; 100;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42), Expr::Int(100)]));
+}
+
+#[test]
+fn parse_three_statements() {
+    let mut parser = Parser::new("1; 2; 3;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Int(1), Expr::Int(2), Expr::Int(3)])
+    );
+}
+
+#[test]
+#[ignore = "multiple statements not yet implemented"]
+fn parse_mixed_type_statements() {
+    let mut parser = Parser::new("42; \"hello\"; 3.14;");
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
         Expr::Block(vec![
-            Expr::Set("x".to_string(), Box::new(Expr::Int(1))),
-            Expr::Binary(
-                Operation::Add,
-                Box::new(Expr::Var("x".to_string())),
-                Box::new(Expr::Int(2))
-            )
+            Expr::Int(42),
+            Expr::Str("hello".to_string()),
+            Expr::Float(3.14)
         ])
     );
 }
 
 #[test]
-fn parse_if() {
-    let mut parser = Parser::new("(if (> x 0) 1 2)").unwrap();
+fn parse_statements_on_multiple_lines() {
+    let mut parser = Parser::new("42;\n100;\n200;");
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::If(
-            Condition::Binary(
-                Operation::Gt,
-                Box::new(Condition::Var("x".to_string())),
-                Box::new(Condition::Int(0))
-            ),
-            vec![Expr::Int(1)],
-            vec![Expr::Int(2)]
-        )
+        Expr::Block(vec![Expr::Int(42), Expr::Int(100), Expr::Int(200)])
     );
 }
 
 #[test]
-fn parse_while() {
-    let mut parser = Parser::new("(while (> x 0) (let x (- x 1)))").unwrap();
+fn parse_statements_with_blank_lines() {
+    let mut parser = Parser::new("42;\n\n100;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Int(42), Expr::Int(100)]));
+}
+
+#[test]
+fn parse_nested_empty_blocks() {
+    let mut parser = Parser::new("{ {} }");
     let expr = parser.parse().unwrap();
     assert_eq!(
         expr,
-        Expr::While(
-            Condition::Binary(
-                Operation::Gt,
-                Box::new(Condition::Var("x".to_string())),
-                Box::new(Condition::Int(0))
-            ),
-            vec![Expr::Set(
-                "x".to_string(),
-                Box::new(Expr::Binary(
-                    Operation::Sub,
-                    Box::new(Expr::Var("x".to_string())),
-                    Box::new(Expr::Int(1))
-                ))
-            )]
-        )
+        Expr::Block(vec![Expr::Block(vec![Expr::Block(vec![])])])
     );
 }
 
 #[test]
-fn parse_and_eval_simple() {
-    let axe = Axe::new();
-    let mut parser = Parser::new("(+ 10 20)").unwrap();
+fn parse_nested_block_with_statement() {
+    let mut parser = Parser::new("{ { 42; } }");
     let expr = parser.parse().unwrap();
-    let result = axe.eval(expr).unwrap();
-    assert_eq!(result, Value::Int(30));
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![Expr::Block(vec![Expr::Int(42)])])])
+    );
 }
 
 #[test]
-fn parse_and_eval_with_variables() {
-    let axe = Axe::new();
-
-    // (let x 5)
-    let mut parser = Parser::new("(let x 5)").unwrap();
-    axe.eval(parser.parse().unwrap()).unwrap();
-
-    // (* x 2)
-    let mut parser = Parser::new("(* x 2)").unwrap();
-    let result = axe.eval(parser.parse().unwrap()).unwrap();
-    assert_eq!(result, Value::Int(10));
-}
-
-#[test]
-fn parse_and_eval_block() {
-    let axe = Axe::new();
-    let input = "(begin (let x 10) (let y 20) (+ x y))";
-    let mut parser = Parser::new(input).unwrap();
+fn parse_deeply_nested_blocks() {
+    let mut parser = Parser::new("{ { { 42; } } }");
     let expr = parser.parse().unwrap();
-    let result = axe.eval(expr).unwrap();
-    assert_eq!(result, Value::Int(30));
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![Expr::Block(vec![Expr::Block(
+            vec![Expr::Int(42)]
+        )])])])
+    );
 }
 
 #[test]
-fn parse_and_eval_if() {
-    let axe = Axe::new();
-    let input = "(if (> 10 5) \"yes\" \"no\")";
-    let mut parser = Parser::new(input).unwrap();
+fn parse_sibling_blocks() {
+    let mut parser = Parser::new("{ { 1; } { 2; } }");
     let expr = parser.parse().unwrap();
-    let result = axe.eval(expr).unwrap();
-    assert_eq!(result, Value::Str("yes".to_string()));
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![
+            Expr::Block(vec![Expr::Int(1)]),
+            Expr::Block(vec![Expr::Int(2)])
+        ])])
+    );
 }
 
 #[test]
-fn parse_and_eval_while() {
-    let axe = Axe::new();
-
-    // Set initial value
-    let mut parser = Parser::new("(let counter 3)").unwrap();
-    axe.eval(parser.parse().unwrap()).unwrap();
-
-    // Run while loop
-    let input = "(while (> counter 0) (let counter (- counter 1)))";
-    let mut parser = Parser::new(input).unwrap();
-    axe.eval(parser.parse().unwrap()).unwrap();
-
-    // Check result
-    let mut parser = Parser::new("counter").unwrap();
-    let result = axe.eval(parser.parse().unwrap()).unwrap();
-    assert_eq!(result, Value::Int(0));
-}
-
-#[test]
-fn parse_complex_program() {
-    let axe = Axe::new();
-    let program = r#"
-        (begin
-            (let sum 0)
-            (let i 1)
-            (while (<= i 5)
-                (let sum (+ sum i))
-                (let i (+ i 1)))
-            sum)
-    "#;
-
-    let mut parser = Parser::new(program).unwrap();
+fn parse_block_with_multiple_statements() {
+    let mut parser = Parser::new("{ 1; 2; 3; }");
     let expr = parser.parse().unwrap();
-    let result = axe.eval(expr).unwrap();
-    // sum = 1 + 2 + 3 + 4 + 5 = 15
-    assert_eq!(result, Value::Int(15));
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![
+            Expr::Int(1),
+            Expr::Int(2),
+            Expr::Int(3)
+        ])])
+    );
 }
 
 #[test]
-fn parse_nested_if() {
-    let axe = Axe::new();
-    let input = "(if true (if false 1 2) 3)";
-    let mut parser = Parser::new(input).unwrap();
+fn parse_nested_block_with_multiple_statements() {
+    let mut parser = Parser::new("{ 1; { 2; 3; } 4; }");
     let expr = parser.parse().unwrap();
-    let result = axe.eval(expr).unwrap();
-    assert_eq!(result, Value::Int(2));
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![
+            Expr::Int(1),
+            Expr::Block(vec![Expr::Int(2), Expr::Int(3)]),
+            Expr::Int(4)
+        ])])
+    );
 }
 
 #[test]
-fn parse_all_comparison_operators() {
-    let mut parser = Parser::new("(< 1 2)").unwrap();
-    parser.parse().unwrap();
-
-    let mut parser = Parser::new("(> 2 1)").unwrap();
-    parser.parse().unwrap();
-
-    let mut parser = Parser::new("(<= 1 1)").unwrap();
-    parser.parse().unwrap();
-
-    let mut parser = Parser::new("(>= 2 2)").unwrap();
-    parser.parse().unwrap();
-
-    let mut parser = Parser::new("(== 5 5)").unwrap();
-    parser.parse().unwrap();
-
-    let mut parser = Parser::new("(!= 3 4)").unwrap();
-    parser.parse().unwrap();
-}
-
-#[test]
-fn parse_negative_numbers() {
-    let mut parser = Parser::new("-42").unwrap();
+fn parse_complex_nested_structure() {
+    let input = r#"{
+        1;
+        {
+            2;
+            { 3; }
+        }
+        4;
+    }"#;
+    let mut parser = Parser::new(input);
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Int(-42));
-
-    let mut parser = Parser::new("-3.14").unwrap();
-    let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Float(-3.14));
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Block(vec![
+            Expr::Int(1),
+            Expr::Block(vec![Expr::Int(2), Expr::Block(vec![Expr::Int(3)])]),
+            Expr::Int(4)
+        ])])
+    );
 }

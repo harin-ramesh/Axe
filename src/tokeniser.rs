@@ -5,6 +5,8 @@ use std::sync::LazyLock;
 pub enum TokenKind {
     LParen,
     RParen,
+    OpeningBrace,
+    ClosingBrace,
     WhiteSpace,
     Comment,
     Symbol,
@@ -25,6 +27,8 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         ),
         (TokenKind::LParen, Regex::new(r"^\(").unwrap()),
         (TokenKind::RParen, Regex::new(r"^\)").unwrap()),
+        (TokenKind::OpeningBrace, Regex::new(r"^\{").unwrap()),
+        (TokenKind::ClosingBrace, Regex::new(r"^\}").unwrap()),
         (
             TokenKind::String,
             Regex::new(r#"^"((?:[^"\\]|\\.)*)""#).unwrap(),
@@ -106,7 +110,7 @@ impl<'src> Tokeniser<'src> {
                 if *kind == TokenKind::WhiteSpace || *kind == TokenKind::Comment {
                     self.line += full_match.as_str().chars().filter(|&c| c == '\n').count() as u32;
                     self.pos += full_match.len();
-                    continue;
+                    return self.get_next_token();
                 }
 
                 let start = self.pos + lexeme_match.start();

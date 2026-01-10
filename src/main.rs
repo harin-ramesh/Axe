@@ -36,40 +36,30 @@ fn run_file(filename: &str) {
         return; // Empty file is ok
     }
 
-    match Parser::new(&content) {
-        Ok(mut parser) => {
-            // Parse and execute each expression in the file
-            let mut expression_count = 0;
-            loop {
-                // Try to parse the next expression
-                match parser.parse() {
-                    Ok(expr) => {
-                        expression_count += 1;
-                        match axe.eval(expr) {
-                            Ok(_) => {} // Successfully evaluated
-                            Err(e) => {
-                                eprintln!(
-                                    "Runtime error in expression {}: {}",
-                                    expression_count, e
-                                );
-                                process::exit(1);
-                            }
-                        }
-                    }
+    let mut parser = Parser::new(&content);
+    // Parse and execute each expression in the file
+    let mut expression_count = 0;
+    loop {
+        // Try to parse the next expression
+        match parser.parse() {
+            Ok(expr) => {
+                expression_count += 1;
+                match axe.eval(expr) {
+                    Ok(_) => {} // Successfully evaluated
                     Err(e) => {
-                        // Check if we've consumed all tokens (normal end of file)
-                        if e.contains("Unexpected end of input") || e.contains("Unexpected token") {
-                            break; // Normal end of file
-                        }
-                        eprintln!("Parse error in expression {}: {}", expression_count + 1, e);
+                        eprintln!("Runtime error in expression {}: {}", expression_count, e);
                         process::exit(1);
                     }
                 }
             }
-        }
-        Err(e) => {
-            eprintln!("Tokenize error: {}", e);
-            process::exit(1);
+            Err(e) => {
+                // Check if we've consumed all tokens (normal end of file)
+                if e.contains("Unexpected end of input") || e.contains("Unexpected token") {
+                    break; // Normal end of file
+                }
+                eprintln!("Parse error in expression {}: {}", expression_count + 1, e);
+                process::exit(1);
+            }
         }
     }
 }
@@ -123,18 +113,16 @@ fn run_repl() {
                 // Check if parentheses are balanced
                 if is_balanced(&accumulated_input) {
                     // Parse and evaluate
-                    match Parser::new(&accumulated_input) {
-                        Ok(mut parser) => match parser.parse() {
-                            Ok(expr) => {
-                                match axe.eval(expr) {
-                                    // Ok(value) => println!("=> {}", value),
-                                    Ok(_value) => {}
-                                    Err(e) => println!("Error: {}", e),
-                                }
+                    let mut parser = Parser::new(&accumulated_input);
+                    match parser.parse() {
+                        Ok(expr) => {
+                            match axe.eval(expr) {
+                                // Ok(value) => println!("=> {}", value),
+                                Ok(_value) => {}
+                                Err(e) => println!("Error: {}", e),
                             }
-                            Err(e) => println!("Parse error: {}", e),
-                        },
-                        Err(e) => println!("Tokenize error: {}", e),
+                        }
+                        Err(e) => println!("Parse error: {}", e),
                     }
                     accumulated_input.clear();
                 }
