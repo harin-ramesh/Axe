@@ -14,6 +14,7 @@ pub enum TokenKind {
     String,
     Increment,
     Decrement,
+    Plus,
     Delimeter,
     Eof,
 }
@@ -35,9 +36,10 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         ),
         (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
         (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
+        (TokenKind::Plus, Regex::new(r"^\+").unwrap()),
         (
             TokenKind::Number,
-            Regex::new(r"^[+-]?[0-9]+\.?[0-9]*").unwrap(),
+            Regex::new(r"^-?[0-9]+\.?[0-9]*").unwrap(),
         ),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
@@ -99,10 +101,10 @@ impl<'src> Tokeniser<'src> {
                     full_match
                 };
 
-                // Handle signed number edge case: reject if it's just a sign
+                // Handle signed number edge case: reject if it's just a minus sign
                 if *kind == TokenKind::Number {
                     let s = full_match.as_str();
-                    if s.len() == 1 && (s == "+" || s == "-") {
+                    if s.len() == 1 && s == "-" {
                         continue;
                     }
                 }

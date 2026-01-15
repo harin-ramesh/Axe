@@ -1,5 +1,5 @@
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
-use crate::{Condition, Expr, Operation};
+use crate::{Expr, Operation};
 
 pub struct Parser<'src> {
     tokeniser: Tokeniser<'src>,
@@ -41,6 +41,9 @@ impl<'src> Parser<'src> {
         Ok(Expr::Block(stmts))
     }
 
+    // StatementList
+    //  : Statement
+    //  | StatemtnList Statement -> Statement Statement Statment
     fn parse_statements(&mut self, stop_token: TokenKind) -> Result<Vec<Expr>, &'static str> {
         let mut stmts = vec![self.parse_statement()?];
 
@@ -54,6 +57,9 @@ impl<'src> Parser<'src> {
         Ok(stmts)
     }
 
+    // Statement
+    //  : ExpressionStatement
+    //  | BlockStatment
     fn parse_statement(&mut self) -> Result<Expr, &'static str> {
         let expr = if self.lookahead.map(|t| t.kind) == Some(TokenKind::OpeningBrace) {
             self.parse_block_statemnt()?
@@ -75,24 +81,65 @@ impl<'src> Parser<'src> {
         Ok(expr)
     }
 
+    // ExpressionStatement
+    //  : Expression ';'
     fn parse_expression_statemnt(&mut self) -> Result<Expr, &'static str> {
         let expr = self.parse_expression()?;
         self.eat(TokenKind::Delimeter)?;
         Ok(expr)
     }
 
+    // Expression
+    //  : AdditiveExpression
     fn parse_expression(&mut self) -> Result<Expr, &'static str> {
-        Ok(self.parse_literal()?)
+        self.parse_additive_expression()
     }
 
-    fn parse_literal(&mut self) -> Result<Expr, &'static str> {
+    // AdditiveExpression
+    //  : PrimaryExpression
+    //  | AdditiveExpression '+' PrimaryExpression
+    fn parse_additive_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_primary()?;
+
+        while let Some(token) = &self.lookahead {
+            if token.kind == TokenKind::Plus {
+                self.eat(TokenKind::Plus)?;
+                let right = self.parse_primary()?;
+                left = Expr::Binary(Operation::Add, Box::new(left), Box::new(right));
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    // PrimaryExpression
+    //  : NumericLiteral
+    //  | StringLiteral
+    //  | '(' Expression ')'
+    //  | '+' PrimaryExpression  (unary plus)
+    fn parse_primary(&mut self) -> Result<Expr, &'static str> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal(),
             Some(TokenKind::String) => self.parse_string_literal(),
-            _ => Err("Unexpected token: expected literal"),
+            Some(TokenKind::LParen) => {
+                self.eat(TokenKind::LParen)?;
+                let expr = self.parse_expression()?;
+                self.eat(TokenKind::RParen)?;
+                Ok(expr)
+            }
+            Some(TokenKind::Plus) => {
+                // Unary plus - just return the operand (no-op)
+                self.eat(TokenKind::Plus)?;
+                self.parse_primary()
+            }
+            _ => Err("Unexpected token: expected literal or '('"),
         }
     }
 
+    // NumericLiteral
+    //  : NUMBER
     fn parse_numeric_literal(&mut self) -> Result<Expr, &'static str> {
         let token = self.eat(TokenKind::Number)?;
         let lexeme = token.lexeme;
@@ -106,6 +153,8 @@ impl<'src> Parser<'src> {
         }
     }
 
+    // StringLiteral
+    //  : STRING
     fn parse_string_literal(&mut self) -> Result<Expr, &'static str> {
         let token = self.eat(TokenKind::String)?;
         Ok(Expr::Str(token.lexeme.to_string()))

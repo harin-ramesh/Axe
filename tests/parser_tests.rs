@@ -1,6 +1,4 @@
-use std::result;
-
-use axe::{Expr, Parser};
+use axe::{Expr, Operation, Parser};
 
 // =============================================================================
 // Numeric Literal Tests - These should pass with current implementation
@@ -457,4 +455,171 @@ fn parse_complex_nested_structure() {
             Expr::Int(4)
         ])])
     );
+}
+
+// =============================================================================
+// Addition Expression Tests
+// =============================================================================
+
+#[test]
+fn parse_simple_addition() {
+    let mut parser = Parser::new("1 + 2;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Int(1)),
+            Box::new(Expr::Int(2))
+        )])
+    );
+}
+
+#[test]
+fn parse_chained_addition() {
+    let mut parser = Parser::new("1 + 2 + 3;");
+    let expr = parser.parse().unwrap();
+    // Left-associative: (1 + 2) + 3
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Binary(
+                Operation::Add,
+                Box::new(Expr::Int(1)),
+                Box::new(Expr::Int(2))
+            )),
+            Box::new(Expr::Int(3))
+        )])
+    );
+}
+
+#[test]
+fn parse_parenthesized_addition() {
+    let mut parser = Parser::new("(1 + 2) + 3;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Binary(
+                Operation::Add,
+                Box::new(Expr::Int(1)),
+                Box::new(Expr::Int(2))
+            )),
+            Box::new(Expr::Int(3))
+        )])
+    );
+}
+
+#[test]
+fn parse_right_grouped_addition() {
+    let mut parser = Parser::new("1 + (2 + 3);");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Int(1)),
+            Box::new(Expr::Binary(
+                Operation::Add,
+                Box::new(Expr::Int(2)),
+                Box::new(Expr::Int(3))
+            ))
+        )])
+    );
+}
+
+#[test]
+fn parse_addition_no_spaces() {
+    let mut parser = Parser::new("1+2;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Int(1)),
+            Box::new(Expr::Int(2))
+        )])
+    );
+}
+
+#[test]
+fn parse_addition_with_floats() {
+    let mut parser = Parser::new("1.5 + 2.5;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Float(1.5)),
+            Box::new(Expr::Float(2.5))
+        )])
+    );
+}
+
+#[test]
+fn parse_nested_parentheses() {
+    let mut parser = Parser::new("((1 + 2));");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Binary(
+            Operation::Add,
+            Box::new(Expr::Int(1)),
+            Box::new(Expr::Int(2))
+        )])
+    );
+}
+
+// =============================================================================
+// Addition Evaluation Tests (end-to-end)
+// =============================================================================
+
+#[test]
+fn eval_simple_addition() {
+    use axe::{Axe, Value};
+    
+    let mut parser = Parser::new("1 + 2;");
+    let expr = parser.parse().unwrap();
+    
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(3));
+}
+
+#[test]
+fn eval_chained_addition() {
+    use axe::{Axe, Value};
+    
+    let mut parser = Parser::new("1 + 2 + 3;");
+    let expr = parser.parse().unwrap();
+    
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(6));
+}
+
+#[test]
+fn eval_parenthesized_addition() {
+    use axe::{Axe, Value};
+    
+    let mut parser = Parser::new("(10 + 20) + 30;");
+    let expr = parser.parse().unwrap();
+    
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(60));
+}
+
+#[test]
+fn eval_float_addition() {
+    use axe::{Axe, Value};
+    
+    let mut parser = Parser::new("1.5 + 2.5;");
+    let expr = parser.parse().unwrap();
+    
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Float(4.0));
 }
