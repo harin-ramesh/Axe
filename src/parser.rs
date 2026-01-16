@@ -96,19 +96,40 @@ impl<'src> Parser<'src> {
     }
 
     // AdditiveExpression
-    //  : PrimaryExpression
-    //  | AdditiveExpression '+' PrimaryExpression
+    //  : MultiplicativeExpression
+    //  | AdditiveExpression ('+' | '-') MultiplicativeExpression
     fn parse_additive_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_multiplicative_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            let op = match token.kind {
+                TokenKind::Plus => Operation::Add,
+                TokenKind::Minus => Operation::Sub,
+                _ => break,
+            };
+            self.eat(token.kind)?;
+            let right = self.parse_multiplicative_expression()?;
+            left = Expr::Binary(op, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // MultiplicativeExpression
+    //  : PrimaryExpression
+    //  | MultiplicativeExpression ('*' | '/') PrimaryExpression
+    fn parse_multiplicative_expression(&mut self) -> Result<Expr, &'static str> {
         let mut left = self.parse_primary()?;
 
         while let Some(token) = &self.lookahead {
-            if token.kind == TokenKind::Plus {
-                self.eat(TokenKind::Plus)?;
-                let right = self.parse_primary()?;
-                left = Expr::Binary(Operation::Add, Box::new(left), Box::new(right));
-            } else {
-                break;
-            }
+            let op = match token.kind {
+                TokenKind::Star => Operation::Mul,
+                TokenKind::Slash => Operation::Div,
+                _ => break,
+            };
+            self.eat(token.kind)?;
+            let right = self.parse_primary()?;
+            left = Expr::Binary(op, Box::new(left), Box::new(right));
         }
 
         Ok(left)
@@ -133,6 +154,16 @@ impl<'src> Parser<'src> {
                 // Unary plus - just return the operand (no-op)
                 self.eat(TokenKind::Plus)?;
                 self.parse_primary()
+            }
+            Some(TokenKind::Minus) => {
+                // Unary minus - represent as (0 - operand)
+                self.eat(TokenKind::Minus)?;
+                let operand = self.parse_primary()?;
+                Ok(Expr::Binary(
+                    Operation::Sub,
+                    Box::new(Expr::Int(0)),
+                    Box::new(operand),
+                ))
             }
             _ => Err("Unexpected token: expected literal or '('"),
         }

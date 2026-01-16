@@ -579,10 +579,10 @@ fn parse_nested_parentheses() {
 #[test]
 fn eval_simple_addition() {
     use axe::{Axe, Value};
-    
+
     let mut parser = Parser::new("1 + 2;");
     let expr = parser.parse().unwrap();
-    
+
     let axe = Axe::new();
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(3));
@@ -591,10 +591,10 @@ fn eval_simple_addition() {
 #[test]
 fn eval_chained_addition() {
     use axe::{Axe, Value};
-    
+
     let mut parser = Parser::new("1 + 2 + 3;");
     let expr = parser.parse().unwrap();
-    
+
     let axe = Axe::new();
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(6));
@@ -603,10 +603,10 @@ fn eval_chained_addition() {
 #[test]
 fn eval_parenthesized_addition() {
     use axe::{Axe, Value};
-    
+
     let mut parser = Parser::new("(10 + 20) + 30;");
     let expr = parser.parse().unwrap();
-    
+
     let axe = Axe::new();
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(60));
@@ -615,10 +615,10 @@ fn eval_parenthesized_addition() {
 #[test]
 fn eval_float_addition() {
     use axe::{Axe, Value};
-    
+
     let mut parser = Parser::new("1.5 + 2.5;");
     let expr = parser.parse().unwrap();
-    
+
     let axe = Axe::new();
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Float(4.0));

@@ -15,6 +15,9 @@ pub enum TokenKind {
     Increment,
     Decrement,
     Plus,
+    Minus,
+    Star,
+    Slash,
     Delimeter,
     Eof,
 }
@@ -37,10 +40,10 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
         (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
         (TokenKind::Plus, Regex::new(r"^\+").unwrap()),
-        (
-            TokenKind::Number,
-            Regex::new(r"^-?[0-9]+\.?[0-9]*").unwrap(),
-        ),
+        (TokenKind::Minus, Regex::new(r"^-").unwrap()),
+        (TokenKind::Star, Regex::new(r"^\*").unwrap()),
+        (TokenKind::Slash, Regex::new(r"^/").unwrap()),
+        (TokenKind::Number, Regex::new(r"^[0-9]+\.?[0-9]*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
     ]
