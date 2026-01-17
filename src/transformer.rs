@@ -12,8 +12,8 @@ impl Transformer {
                 Expr::Set(name, Box::new(Expr::Lambda(params, body)))
             }
 
-            // SYNTACTIC SUGAR: i++ -> (let i (+ i 1))
-            Expr::Inc(var) => Expr::Set(
+            // SYNTACTIC SUGAR: i++ -> (i = i + 1)
+            Expr::Inc(var) => Expr::Assign(
                 var.clone(),
                 Box::new(Expr::Binary(
                     crate::Operation::Add,
@@ -22,8 +22,8 @@ impl Transformer {
                 )),
             ),
 
-            // SYNTACTIC SUGAR: i-- -> (let i (- i 1))
-            Expr::Dec(var) => Expr::Set(
+            // SYNTACTIC SUGAR: i-- -> (i = i - 1)
+            Expr::Dec(var) => Expr::Assign(
                 var.clone(),
                 Box::new(Expr::Binary(
                     crate::Operation::Sub,

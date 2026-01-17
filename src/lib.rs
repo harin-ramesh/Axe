@@ -108,6 +108,8 @@ pub enum Expr {
     List(Vec<Expr>),
     Binary(Operation, Box<Expr>, Box<Expr>),
     Set(String, Box<Expr>),
+    Let(Vec<Expr>), // let x = 1, y = 2; -> Let(vec![Set("x", 1), Set("y", 2)])
+    Assign(String, Box<Expr>),
     Var(String),
     Block(Vec<Expr>),
     If(Condition, Vec<Expr>, Vec<Expr>),
@@ -467,17 +469,24 @@ impl Axe {
                     return Err("invalid variable name");
                 }
                 let value = self.eval_with_env(*expr, Some(env.clone()))?;
-
-                // Try to update existing variable first (searches parent scopes)
-                // If not found, create new variable in current scope
-                if env
-                    .borrow_mut()
-                    .update(name.clone(), value.clone())
-                    .is_err()
-                {
-                    env.borrow_mut().set(name, value.clone());
+                // Declare/create a new variable in current scope
+                env.borrow_mut().set(name, value.clone());
+                Ok(value)
+            }
+            Expr::Let(declarations) => {
+                let mut last_value = Value::Null;
+                for decl in declarations {
+                    last_value = self.eval_with_env(decl, Some(env.clone()))?;
                 }
-
+                Ok(last_value)
+            }
+            Expr::Assign(name, expr) => {
+                if !Self::is_valid_var_name(&name) {
+                    return Err("invalid variable name");
+                }
+                let value = self.eval_with_env(*expr, Some(env.clone()))?;
+                // Update existing variable (searches parent scopes)
+                env.borrow_mut().update(name.clone(), value.clone())?;
                 Ok(value)
             }
 
@@ -661,14 +670,8 @@ impl Axe {
                                 return Err("invalid variable name");
                             }
                             let value = self.eval_with_env(*expr, Some(class_env.clone()))?;
-
-                            if class_env
-                                .borrow_mut()
-                                .update(name.clone(), value.clone())
-                                .is_err()
-                            {
-                                class_env.borrow_mut().set(name, value.clone());
-                            }
+                            // Declare class field (overrides parent field if exists)
+                            class_env.borrow_mut().set(name, value.clone());
                         }
                         Expr::Function(name, params, body) => {
                             let transformed = self

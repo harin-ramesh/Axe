@@ -1249,3 +1249,49 @@ fn eval_nested_parentheses_complex() {
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(15)); // (5) * (3) = 15
 }
+
+// =============================================================================
+// Assignment Tests
+// ============================================================================
+
+#[test]
+fn parse_simple_assignment() {
+    let mut parser = Parser::new("x = 42;");
+    let expr = parser.parse().unwrap();
+    // The `=` operator is reassignment, which uses Expr::Assign
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Assign("x".to_string(), Box::new(Expr::Int(42)))])
+    );
+}
+
+#[test]
+fn parse_let_declaration() {
+    let mut parser = Parser::new("let x = 42;");
+    let expr = parser.parse().unwrap();
+    // The `let` keyword creates a new variable, which uses Expr::Let containing Expr::Set
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Let(vec![Expr::Set(
+            "x".to_string(),
+            Box::new(Expr::Int(42))
+        )])])
+    );
+}
+
+#[test]
+fn parse_let_with_expression() {
+    let mut parser = Parser::new("let x = 1 + 2;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Let(vec![Expr::Set(
+            "x".to_string(),
+            Box::new(Expr::Binary(
+                Operation::Add,
+                Box::new(Expr::Int(1)),
+                Box::new(Expr::Int(2))
+            ))
+        )])])
+    );
+}

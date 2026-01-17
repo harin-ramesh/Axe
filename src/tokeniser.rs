@@ -9,9 +9,12 @@ pub enum TokenKind {
     ClosingBrace,
     WhiteSpace,
     Comment,
+    Comma,
     Symbol,
     Number,
     String,
+    Identifier,
+    SimpleAssign,
     Increment,
     Decrement,
     Plus,
@@ -19,6 +22,7 @@ pub enum TokenKind {
     Star,
     Slash,
     Delimeter,
+    Let,
     Eof,
 }
 
@@ -31,19 +35,24 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         ),
         (TokenKind::LParen, Regex::new(r"^\(").unwrap()),
         (TokenKind::RParen, Regex::new(r"^\)").unwrap()),
+        (TokenKind::Comma, Regex::new(r"^\,").unwrap()),
         (TokenKind::OpeningBrace, Regex::new(r"^\{").unwrap()),
         (TokenKind::ClosingBrace, Regex::new(r"^\}").unwrap()),
         (
             TokenKind::String,
             Regex::new(r#"^"((?:[^"\\]|\\.)*)""#).unwrap(),
         ),
-        (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
+        (TokenKind::SimpleAssign, Regex::new(r"^=").unwrap()),
         (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
+        (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
         (TokenKind::Plus, Regex::new(r"^\+").unwrap()),
         (TokenKind::Minus, Regex::new(r"^-").unwrap()),
         (TokenKind::Star, Regex::new(r"^\*").unwrap()),
         (TokenKind::Slash, Regex::new(r"^/").unwrap()),
         (TokenKind::Number, Regex::new(r"^[0-9]+\.?[0-9]*").unwrap()),
+        // Keywords must come before generic Identifier
+        (TokenKind::Let, Regex::new(r"^let\b").unwrap()),
+        (TokenKind::Identifier, Regex::new(r"^[a-zA-Z_]\w*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
     ]
@@ -140,19 +149,19 @@ mod tests {
 
     #[test]
     fn test_basic_tokens() {
-        let mut tokeniser = Tokeniser::new("(+ 1 2)");
+        let mut tokeniser = Tokeniser::new("(1 + 2)");
 
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::LParen);
         assert_eq!(tok.lexeme, "(");
 
         let tok = tokeniser.get_next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Symbol);
-        assert_eq!(tok.lexeme, "+");
-
-        let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "1");
+
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Plus);
+        assert_eq!(tok.lexeme, "+");
 
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
@@ -184,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_comments() {
-        let mut tokeniser = Tokeniser::new("; comment\n42");
+        let mut tokeniser = Tokeniser::new("// comment\n42");
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "42");
@@ -192,16 +201,24 @@ mod tests {
     }
 
     #[test]
-    fn test_signed_numbers() {
+    fn test_operators() {
         let mut tokeniser = Tokeniser::new("-42 +3.14");
 
         let tok = tokeniser.get_next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Number);
-        assert_eq!(tok.lexeme, "-42");
+        assert_eq!(tok.kind, TokenKind::Minus);
+        assert_eq!(tok.lexeme, "-");
 
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
-        assert_eq!(tok.lexeme, "+3.14");
+        assert_eq!(tok.lexeme, "42");
+
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Plus);
+        assert_eq!(tok.lexeme, "+");
+
+        let tok = tokeniser.get_next_token().unwrap();
+        assert_eq!(tok.kind, TokenKind::Number);
+        assert_eq!(tok.lexeme, "3.14");
     }
 
     #[test]

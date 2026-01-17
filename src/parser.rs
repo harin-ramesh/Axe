@@ -60,15 +60,66 @@ impl<'src> Parser<'src> {
     // Statement
     //  : ExpressionStatement
     //  | BlockStatment
+    //  | LetStatement
     fn parse_statement(&mut self) -> Result<Expr, &'static str> {
-        let expr = if self.lookahead.map(|t| t.kind) == Some(TokenKind::OpeningBrace) {
-            self.parse_block_statemnt()?
-        } else {
-            self.parse_expression_statemnt()?
+        let expr = match self.lookahead.map(|t| t.kind) {
+            Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
+            Some(TokenKind::Let) => self.parse_let_statement()?,
+            _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
     }
 
+    // LetStatement
+    //  : 'let' DeclarationList ';'
+    fn parse_let_statement(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::Let)?;
+        let declarations = self.parse_declarations()?;
+        self.eat(TokenKind::Delimeter)?;
+        Ok(Expr::Let(declarations))
+    }
+
+    // DeclarationList
+    //  : Declaration
+    //  | DeclarationList ',' Declaration
+    fn parse_declarations(&mut self) -> Result<Vec<Expr>, &'static str> {
+        let mut decls = vec![self.parse_declaration()?];
+
+        while let Some(token) = &self.lookahead {
+            if token.kind != TokenKind::Comma {
+                break;
+            }
+            self.eat(TokenKind::Comma)?;
+            decls.push(self.parse_declaration()?);
+        }
+
+        Ok(decls)
+    }
+
+    // Declaration
+    //  : Identifier
+    //  | Identifier '=' Expression
+    fn parse_declaration(&mut self) -> Result<Expr, &'static str> {
+        let name_token = self.eat(TokenKind::Identifier)?;
+        let name = name_token.lexeme.to_string();
+        let value = match self.lookahead.map(|t| t.kind) {
+            Some(TokenKind::Comma) => Expr::Null,
+            Some(TokenKind::Delimeter) => Expr::Null,
+            _ => self.parse_declaration_value()?,
+        };
+        Ok(Expr::Set(name, Box::new(value)))
+    }
+
+    // DeclarationValue
+    //  : '=' Expression
+    fn parse_declaration_value(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::SimpleAssign)?;
+        self.parse_expression()
+    }
+
+    // BlockStatement
+    //  : '{' StatementList '}'
+    //  | '{' '}'
     fn parse_block_statemnt(&mut self) -> Result<Expr, &'static str> {
         self.eat(TokenKind::OpeningBrace)?;
         let expr = if self.lookahead.map(|t| t.kind) == Some(TokenKind::ClosingBrace) {
@@ -90,9 +141,33 @@ impl<'src> Parser<'src> {
     }
 
     // Expression
-    //  : AdditiveExpression
+    //  : AssignmentExpression
     fn parse_expression(&mut self) -> Result<Expr, &'static str> {
-        self.parse_additive_expression()
+        self.parse_assignment_expression()
+    }
+
+    // AssignmentExpression
+    //  : AdditiveExpression
+    //  | LeftHandSideExpression '=' AssignmentExpression
+    fn parse_assignment_expression(&mut self) -> Result<Expr, &'static str> {
+        let left = self.parse_additive_expression()?;
+
+        if let Some(token) = &self.lookahead {
+            if token.kind == TokenKind::SimpleAssign {
+                self.eat(TokenKind::SimpleAssign)?;
+
+                // Validate left-hand side is an identifier
+                let name = match left {
+                    Expr::Var(name) => name,
+                    _ => return Err("Invalid left-hand side in assignment"),
+                };
+
+                let right = self.parse_assignment_expression()?;
+                return Ok(Expr::Assign(name, Box::new(right)));
+            }
+        }
+
+        Ok(left)
     }
 
     // AdditiveExpression
@@ -138,12 +213,15 @@ impl<'src> Parser<'src> {
     // PrimaryExpression
     //  : NumericLiteral
     //  | StringLiteral
+    //  | Identifier
     //  | '(' Expression ')'
     //  | '+' PrimaryExpression  (unary plus)
+    //  | '-' PrimaryExpression  (unary minus)
     fn parse_primary(&mut self) -> Result<Expr, &'static str> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal(),
             Some(TokenKind::String) => self.parse_string_literal(),
+            Some(TokenKind::Identifier) => self.parse_identifier(),
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
                 let expr = self.parse_expression()?;
@@ -167,6 +245,13 @@ impl<'src> Parser<'src> {
             }
             _ => Err("Unexpected token: expected literal or '('"),
         }
+    }
+
+    // Identifier
+    //  : IDENTIFIER
+    fn parse_identifier(&mut self) -> Result<Expr, &'static str> {
+        let token = self.eat(TokenKind::Identifier)?;
+        Ok(Expr::Var(token.lexeme.to_string()))
     }
 
     // NumericLiteral

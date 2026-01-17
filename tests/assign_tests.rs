@@ -1,16 +1,48 @@
 use axe::{Axe, Condition, Expr};
 
 #[test]
-fn assign_updates_existing_variable() {
+fn set_creates_new_variable() {
     let axe = Axe::new();
 
-    // Create a variable with let
+    // Create a variable with Set (declaration)
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
         .unwrap();
 
-    // Update it with let (same keyword)
+    // Verify it was created
+    let check = axe.eval(Expr::Var("x".into())).unwrap();
+    assert_eq!(check.to_string(), "10");
+}
+
+#[test]
+fn set_overwrites_in_same_scope() {
+    let axe = Axe::new();
+
+    // Create a variable with Set
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
+        .unwrap();
+
+    // Set again in same scope overwrites
     let result = axe
         .eval(Expr::Set("x".into(), Box::new(Expr::Int(20))))
+        .unwrap();
+    assert_eq!(result.to_string(), "20");
+
+    // Verify it was updated
+    let check = axe.eval(Expr::Var("x".into())).unwrap();
+    assert_eq!(check.to_string(), "20");
+}
+
+#[test]
+fn assign_updates_existing_variable() {
+    let axe = Axe::new();
+
+    // Create a variable with Set
+    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
+        .unwrap();
+
+    // Update it with Assign (reassignment)
+    let result = axe
+        .eval(Expr::Assign("x".into(), Box::new(Expr::Int(20))))
         .unwrap();
     assert_eq!(result.to_string(), "20");
 
@@ -23,15 +55,11 @@ fn assign_updates_existing_variable() {
 fn assign_fails_on_undefined_variable() {
     let axe = Axe::new();
 
-    // Using let on undefined variable now creates it (not an error)
-    let result = axe
-        .eval(Expr::Set("undefined".into(), Box::new(Expr::Int(10))))
-        .unwrap();
-    assert_eq!(result.to_string(), "10");
-
-    // Verify it was created
-    let check = axe.eval(Expr::Var("undefined".into())).unwrap();
-    assert_eq!(check.to_string(), "10");
+    // Assign to undefined variable should fail
+    let err = axe
+        .eval(Expr::Assign("undefined".into(), Box::new(Expr::Int(10))))
+        .unwrap_err();
+    assert_eq!(err, "undefined variable");
 }
 
 #[test]
@@ -42,11 +70,11 @@ fn assign_updates_parent_scope() {
     axe.eval(Expr::Set("counter".into(), Box::new(Expr::Int(0))))
         .unwrap();
 
-    // Create function that uses let to update global
+    // Create function that uses Assign to update global
     let func = Expr::Function(
         "increment".into(),
         vec![],
-        vec![Expr::Set(
+        vec![Expr::Assign(
             "counter".into(),
             Box::new(Expr::Binary(
                 axe::Operation::Add,
@@ -73,44 +101,33 @@ fn assign_updates_parent_scope() {
 }
 
 #[test]
-fn let_shadows_assign_updates() {
+fn set_creates_local_variable_in_function() {
     let axe = Axe::new();
 
     // Create global variable
     axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
         .unwrap();
 
-    // Function with let (now updates instead of shadowing)
-    let func_update1 = Expr::Function(
-        "update1".into(),
+    // Function with Set creates a local variable (shadows global)
+    let func = Expr::Function(
+        "shadow".into(),
         vec![],
-        vec![Expr::Set("x".into(), Box::new(Expr::Int(999)))],
+        vec![
+            Expr::Set("x".into(), Box::new(Expr::Int(999))),
+            Expr::Var("x".into()),
+        ],
     );
-    axe.eval(func_update1).unwrap();
+    axe.eval(func).unwrap();
 
-    // Another function with let (also updates)
-    let func_update2 = Expr::Function(
-        "update2".into(),
-        vec![],
-        vec![Expr::Set("x".into(), Box::new(Expr::Int(777)))],
-    );
-    axe.eval(func_update2).unwrap();
-
-    // Call first update function
-    axe.eval(Expr::FunctionCall("update1".into(), vec![]))
+    // Call function - should return 999 (local)
+    let result = axe
+        .eval(Expr::FunctionCall("shadow".into(), vec![]))
         .unwrap();
-
-    // Global should now be 999 (let now updates)
-    let result = axe.eval(Expr::Var("x".into())).unwrap();
     assert_eq!(result.to_string(), "999");
 
-    // Call second update function
-    axe.eval(Expr::FunctionCall("update2".into(), vec![]))
-        .unwrap();
-
-    // Global should now be 777
+    // Global should still be 10 (Set creates local, doesn't update parent)
     let result = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(result.to_string(), "777");
+    assert_eq!(result.to_string(), "10");
 }
 
 #[test]
@@ -129,7 +146,7 @@ fn assign_in_while_loop() {
             Box::new(Condition::Int(5)),
         ),
         vec![
-            Expr::Set(
+            Expr::Assign(
                 "sum".into(),
                 Box::new(Expr::Binary(
                     axe::Operation::Add,
@@ -137,7 +154,7 @@ fn assign_in_while_loop() {
                     Box::new(Expr::Var("i".into())),
                 )),
             ),
-            Expr::Set(
+            Expr::Assign(
                 "i".into(),
                 Box::new(Expr::Binary(
                     axe::Operation::Add,
@@ -155,11 +172,21 @@ fn assign_in_while_loop() {
 }
 
 #[test]
-fn assign_with_invalid_name_fails() {
+fn set_with_invalid_name_fails() {
     let axe = Axe::new();
 
     let err = axe
         .eval(Expr::Set("123invalid".into(), Box::new(Expr::Int(10))))
+        .unwrap_err();
+    assert_eq!(err, "invalid variable name");
+}
+
+#[test]
+fn assign_with_invalid_name_fails() {
+    let axe = Axe::new();
+
+    let err = axe
+        .eval(Expr::Assign("123invalid".into(), Box::new(Expr::Int(10))))
         .unwrap_err();
     assert_eq!(err, "invalid variable name");
 }
@@ -182,7 +209,7 @@ fn assign_updates_through_multiple_scopes() {
                 "inner".into(),
                 Box::new(Expr::Lambda(
                     vec![],
-                    vec![Expr::Set("value".into(), Box::new(Expr::Int(100)))],
+                    vec![Expr::Assign("value".into(), Box::new(Expr::Int(100)))],
                 )),
             ),
             // Call inner
