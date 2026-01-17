@@ -1,574 +1,278 @@
-use crate::{Condition, Expr, Operation};
+use crate::tokeniser::{Token, TokenKind, Tokeniser};
+use crate::{Expr, Operation};
 
-#[derive(Debug, PartialEq, Clone)]
-enum Token {
-    LParen,
-    RParen,
-    Symbol(String),
-    Number(String),
-    String(String),
+pub struct Parser<'src> {
+    tokeniser: Tokeniser<'src>,
+    lookahead: Option<Token<'src>>,
 }
 
-pub struct Parser {
-    tokens: Vec<Token>,
-    pos: usize,
-}
-
-impl Parser {
-    pub fn new(input: &str) -> Result<Self, String> {
-        let tokens = Self::tokenize(input)?;
-        Ok(Self { tokens, pos: 0 })
+impl<'src> Parser<'src> {
+    pub fn new(input: &'src str) -> Self {
+        let tokeniser = Tokeniser::new(input);
+        Self {
+            tokeniser,
+            lookahead: None,
+        }
     }
 
-    fn tokenize(input: &str) -> Result<Vec<Token>, String> {
-        let mut tokens = Vec::new();
-        let mut chars = input.chars().peekable();
+    pub fn parse(&mut self) -> Result<Expr, &'static str> {
+        self.lookahead = Some(self.tokeniser.get_next_token()?);
+        let expr = self.parse_block()?;
 
-        while let Some(&ch) = chars.peek() {
-            match ch {
-                ' ' | '\t' | '\n' | '\r' => {
-                    chars.next();
-                }
-                ';' => {
-                    // Comment - skip until end of line
-                    chars.next();
-                    while let Some(&ch) = chars.peek() {
-                        chars.next();
-                        if ch == '\n' {
-                            break;
-                        }
-                    }
-                }
-                '(' => {
-                    tokens.push(Token::LParen);
-                    chars.next();
-                }
-                ')' => {
-                    tokens.push(Token::RParen);
-                    chars.next();
-                }
-                '"' => {
-                    chars.next(); // consume opening quote
-                    let mut string_val = String::new();
-                    loop {
-                        match chars.next() {
-                            Some('"') => break,
-                            Some('\\') => {
-                                // Handle escape sequences
-                                match chars.next() {
-                                    Some('n') => string_val.push('\n'),
-                                    Some('t') => string_val.push('\t'),
-                                    Some('r') => string_val.push('\r'),
-                                    Some('\\') => string_val.push('\\'),
-                                    Some('"') => string_val.push('"'),
-                                    Some(ch) => {
-                                        // Unknown escape sequence, treat literally
-                                        string_val.push('\\');
-                                        string_val.push(ch);
-                                    }
-                                    None => return Err("Unterminated string".to_string()),
-                                }
-                            }
-                            Some(ch) => string_val.push(ch),
-                            None => return Err("Unterminated string".to_string()),
-                        }
-                    }
-                    tokens.push(Token::String(string_val));
-                }
-                _ if ch.is_ascii_digit() => {
-                    let mut num = String::new();
-                    num.push(chars.next().unwrap());
-                    
-                    while let Some(&ch) = chars.peek() {
-                        if ch.is_ascii_digit() || ch == '.' {
-                            num.push(chars.next().unwrap());
-                        } else {
-                            break;
-                        }
-                    }
-                    tokens.push(Token::Number(num));
-                }
-                '+' => {
-                    chars.next(); // consume '+'
-                    // Check if it's ++ (increment)
-                    if let Some(&next_ch) = chars.peek() {
-                        if next_ch == '+' {
-                            chars.next(); // consume second '+'
-                            tokens.push(Token::Symbol(String::from("++")));
-                        } else {
-                            tokens.push(Token::Symbol(String::from("+")));
-                        }
-                    } else {
-                        tokens.push(Token::Symbol(String::from("+")));
-                    }
-                }
-                '-' => {
-                    // Check if it's -- (decrement), negative number, or minus operator
-                    chars.next(); // consume '-'
-                    if let Some(&next_ch) = chars.peek() {
-                        if next_ch == '-' {
-                            // It's -- (decrement)
-                            chars.next(); // consume second '-'
-                            tokens.push(Token::Symbol(String::from("--")));
-                        } else if next_ch.is_ascii_digit() {
-                            // It's a negative number
-                            let mut num = String::from("-");
-                            while let Some(&ch) = chars.peek() {
-                                if ch.is_ascii_digit() || ch == '.' {
-                                    num.push(chars.next().unwrap());
-                                } else {
-                                    break;
-                                }
-                            }
-                            tokens.push(Token::Number(num));
-                        } else {
-                            // It's a minus operator
-                            tokens.push(Token::Symbol(String::from("-")));
-                        }
-                    } else {
-                        // End of input, treat as symbol
-                        tokens.push(Token::Symbol(String::from("-")));
-                    }
-                }
-                _ => {
-                    let mut symbol = String::new();
-                    while let Some(&ch) = chars.peek() {
-                        if ch.is_whitespace() || ch == '(' || ch == ')' {
-                            break;
-                        }
-                        symbol.push(chars.next().unwrap());
-                    }
-                    tokens.push(Token::Symbol(symbol));
-                }
-            }
+        Ok(expr)
+    }
+
+    fn eat(&mut self, expected_token: TokenKind) -> Result<Token<'src>, &'static str> {
+        let token = match self.lookahead.take() {
+            None => return Err("Unexpected end of input"),
+            Some(t) => t,
+        };
+
+        if token.kind != expected_token {
+            return Err("Unexpected token");
         }
 
-        Ok(tokens)
+        self.lookahead = Some(self.tokeniser.get_next_token()?);
+        Ok(token)
     }
 
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos)
+    fn parse_block(&mut self) -> Result<Expr, &'static str> {
+        let stmts = self.parse_statements(TokenKind::Eof)?;
+        Ok(Expr::Block(stmts))
     }
 
-    fn consume(&mut self) -> Option<Token> {
-        if self.pos < self.tokens.len() {
-            let token = self.tokens[self.pos].clone();
-            self.pos += 1;
-            Some(token)
+    // StatementList
+    //  : Statement
+    //  | StatemtnList Statement -> Statement Statement Statment
+    fn parse_statements(&mut self, stop_token: TokenKind) -> Result<Vec<Expr>, &'static str> {
+        let mut stmts = vec![self.parse_statement()?];
+
+        while let Some(token) = &self.lookahead {
+            if token.kind == stop_token {
+                break;
+            }
+            stmts.push(self.parse_statement()?);
+        }
+
+        Ok(stmts)
+    }
+
+    // Statement
+    //  : ExpressionStatement
+    //  | BlockStatment
+    //  | LetStatement
+    fn parse_statement(&mut self) -> Result<Expr, &'static str> {
+        let expr = match self.lookahead.map(|t| t.kind) {
+            Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
+            Some(TokenKind::Let) => self.parse_let_statement()?,
+            _ => self.parse_expression_statemnt()?,
+        };
+        Ok(expr)
+    }
+
+    // LetStatement
+    //  : 'let' DeclarationList ';'
+    fn parse_let_statement(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::Let)?;
+        let declarations = self.parse_declarations()?;
+        self.eat(TokenKind::Delimeter)?;
+        Ok(Expr::Let(declarations))
+    }
+
+    // DeclarationList
+    //  : Declaration
+    //  | DeclarationList ',' Declaration
+    fn parse_declarations(&mut self) -> Result<Vec<Expr>, &'static str> {
+        let mut decls = vec![self.parse_declaration()?];
+
+        while let Some(token) = &self.lookahead {
+            if token.kind != TokenKind::Comma {
+                break;
+            }
+            self.eat(TokenKind::Comma)?;
+            decls.push(self.parse_declaration()?);
+        }
+
+        Ok(decls)
+    }
+
+    // Declaration
+    //  : Identifier
+    //  | Identifier '=' Expression
+    fn parse_declaration(&mut self) -> Result<Expr, &'static str> {
+        let name_token = self.eat(TokenKind::Identifier)?;
+        let name = name_token.lexeme.to_string();
+        let value = match self.lookahead.map(|t| t.kind) {
+            Some(TokenKind::Comma) => Expr::Null,
+            Some(TokenKind::Delimeter) => Expr::Null,
+            _ => self.parse_declaration_value()?,
+        };
+        Ok(Expr::Set(name, Box::new(value)))
+    }
+
+    // DeclarationValue
+    //  : '=' Expression
+    fn parse_declaration_value(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::SimpleAssign)?;
+        self.parse_expression()
+    }
+
+    // BlockStatement
+    //  : '{' StatementList '}'
+    //  | '{' '}'
+    fn parse_block_statemnt(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::OpeningBrace)?;
+        let expr = if self.lookahead.map(|t| t.kind) == Some(TokenKind::ClosingBrace) {
+            Expr::Block(vec![])
         } else {
-            None
-        }
-    }
-
-    pub fn parse(&mut self) -> Result<Expr, String> {
-        match self.peek() {
-            Some(Token::LParen) => self.parse_list(),
-            Some(Token::Number(n)) => {
-                let num = n.clone();
-                self.consume();
-                if num.contains('.') {
-                    Ok(Expr::Float(num.parse().map_err(|_| "Invalid float")?))
-                } else {
-                    Ok(Expr::Int(num.parse().map_err(|_| "Invalid integer")?))
-                }
-            }
-            Some(Token::String(s)) => {
-                let string = s.clone();
-                self.consume();
-                Ok(Expr::Str(string))
-            }
-            Some(Token::Symbol(s)) => {
-                let sym = s.clone();
-                self.consume();
-                match sym.as_str() {
-                    "null" => Ok(Expr::Null),
-                    "true" => Ok(Expr::Bool(true)),
-                    "false" => Ok(Expr::Bool(false)),
-                    _ => Ok(Expr::Var(sym)),
-                }
-            }
-            _ => Err("Unexpected token".to_string()),
-        }
-    }
-
-    fn parse_list(&mut self) -> Result<Expr, String> {
-        self.consume(); // consume '('
-
-        let op = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected operator".to_string()),
+            Expr::Block(self.parse_statements(TokenKind::ClosingBrace)?)
         };
+        self.eat(TokenKind::ClosingBrace)?;
 
-        let expr = match op.as_str() {
-            "+" => self.parse_binary(Operation::Add)?,
-            "-" => self.parse_binary(Operation::Sub)?,
-            "*" => self.parse_binary(Operation::Mul)?,
-            "/" => self.parse_binary(Operation::Div)?,
-            ">" => self.parse_binary(Operation::Gt)?,
-            "<" => self.parse_binary(Operation::Lt)?,
-            ">=" => self.parse_binary(Operation::Gte)?,
-            "<=" => self.parse_binary(Operation::Lte)?,
-            "==" => self.parse_binary(Operation::Eq)?,
-            "!=" => self.parse_binary(Operation::Neq)?,
-            "let" => self.parse_set()?,
-            "list" => self.parse_list_literal()?,
-            "begin" => self.parse_block()?,
-            "if" => self.parse_if()?,
-            "while" => self.parse_while()?,
-            "lambda" => self.parse_lambda()?,
-            "fn" => self.parse_function()?,
-            "++" => self.parse_inc()?,
-            "--" => self.parse_dec()?,
-            "for" => self.parse_for()?,
-            _ => {
-                // If not a keyword, treat as function call
-                self.pos -= 1; // put back the symbol
-                self.parse_function_call()?
+        Ok(expr)
+    }
+
+    // ExpressionStatement
+    //  : Expression ';'
+    fn parse_expression_statemnt(&mut self) -> Result<Expr, &'static str> {
+        let expr = self.parse_expression()?;
+        self.eat(TokenKind::Delimeter)?;
+        Ok(expr)
+    }
+
+    // Expression
+    //  : AssignmentExpression
+    fn parse_expression(&mut self) -> Result<Expr, &'static str> {
+        self.parse_assignment_expression()
+    }
+
+    // AssignmentExpression
+    //  : AdditiveExpression
+    //  | LeftHandSideExpression '=' AssignmentExpression
+    fn parse_assignment_expression(&mut self) -> Result<Expr, &'static str> {
+        let left = self.parse_additive_expression()?;
+
+        if let Some(token) = &self.lookahead {
+            if token.kind == TokenKind::SimpleAssign {
+                self.eat(TokenKind::SimpleAssign)?;
+
+                // Validate left-hand side is an identifier
+                let name = match left {
+                    Expr::Var(name) => name,
+                    _ => return Err("Invalid left-hand side in assignment"),
+                };
+
+                let right = self.parse_assignment_expression()?;
+                return Ok(Expr::Assign(name, Box::new(right)));
             }
-        };
+        }
 
-        match self.consume() {
-            Some(Token::RParen) => Ok(expr),
-            _ => Err("Expected ')'".to_string()),
+        Ok(left)
+    }
+
+    // AdditiveExpression
+    //  : MultiplicativeExpression
+    //  | AdditiveExpression ('+' | '-') MultiplicativeExpression
+    fn parse_additive_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_multiplicative_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            let op = match token.kind {
+                TokenKind::Plus => Operation::Add,
+                TokenKind::Minus => Operation::Sub,
+                _ => break,
+            };
+            self.eat(token.kind)?;
+            let right = self.parse_multiplicative_expression()?;
+            left = Expr::Binary(op, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // MultiplicativeExpression
+    //  : PrimaryExpression
+    //  | MultiplicativeExpression ('*' | '/') PrimaryExpression
+    fn parse_multiplicative_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_primary()?;
+
+        while let Some(token) = &self.lookahead {
+            let op = match token.kind {
+                TokenKind::Star => Operation::Mul,
+                TokenKind::Slash => Operation::Div,
+                _ => break,
+            };
+            self.eat(token.kind)?;
+            let right = self.parse_primary()?;
+            left = Expr::Binary(op, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // PrimaryExpression
+    //  : NumericLiteral
+    //  | StringLiteral
+    //  | Identifier
+    //  | '(' Expression ')'
+    //  | '+' PrimaryExpression  (unary plus)
+    //  | '-' PrimaryExpression  (unary minus)
+    fn parse_primary(&mut self) -> Result<Expr, &'static str> {
+        match self.lookahead.as_ref().map(|t| t.kind) {
+            Some(TokenKind::Number) => self.parse_numeric_literal(),
+            Some(TokenKind::String) => self.parse_string_literal(),
+            Some(TokenKind::Identifier) => self.parse_identifier(),
+            Some(TokenKind::LParen) => {
+                self.eat(TokenKind::LParen)?;
+                let expr = self.parse_expression()?;
+                self.eat(TokenKind::RParen)?;
+                Ok(expr)
+            }
+            Some(TokenKind::Plus) => {
+                // Unary plus - just return the operand (no-op)
+                self.eat(TokenKind::Plus)?;
+                self.parse_primary()
+            }
+            Some(TokenKind::Minus) => {
+                // Unary minus - represent as (0 - operand)
+                self.eat(TokenKind::Minus)?;
+                let operand = self.parse_primary()?;
+                Ok(Expr::Binary(
+                    Operation::Sub,
+                    Box::new(Expr::Int(0)),
+                    Box::new(operand),
+                ))
+            }
+            _ => Err("Unexpected token: expected literal or '('"),
         }
     }
 
-    fn parse_binary(&mut self, op: Operation) -> Result<Expr, String> {
-        let left = Box::new(self.parse()?);
-        let right = Box::new(self.parse()?);
-        Ok(Expr::Binary(op, left, right))
+    // Identifier
+    //  : IDENTIFIER
+    fn parse_identifier(&mut self) -> Result<Expr, &'static str> {
+        let token = self.eat(TokenKind::Identifier)?;
+        Ok(Expr::Var(token.lexeme.to_string()))
     }
 
-    fn parse_set(&mut self) -> Result<Expr, String> {
-        let name = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected variable name".to_string()),
-        };
-        let value = Box::new(self.parse()?);
-        Ok(Expr::Set(name, value))
-    }
+    // NumericLiteral
+    //  : NUMBER
+    fn parse_numeric_literal(&mut self) -> Result<Expr, &'static str> {
+        let token = self.eat(TokenKind::Number)?;
+        let lexeme = token.lexeme;
 
-    fn parse_list_literal(&mut self) -> Result<Expr, String> {
-        let mut elements = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            elements.push(self.parse()?);
-        }
-        Ok(Expr::List(elements))
-    }
-
-    fn parse_block(&mut self) -> Result<Expr, String> {
-        let mut exprs = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            exprs.push(self.parse()?);
-        }
-        Ok(Expr::Block(exprs))
-    }
-
-    fn parse_if(&mut self) -> Result<Expr, String> {
-        let condition = self.parse_condition()?;
-        
-        // Parse then branch
-        let mut then_branch = Vec::new();
-        match self.consume() {
-            Some(Token::LParen) => {
-                // Block syntax: (if condition (...) (...))
-                self.pos -= 1; // put back the LParen
-                let then_expr = self.parse()?;
-                if let Expr::Block(exprs) = then_expr {
-                    then_branch = exprs;
-                } else {
-                    then_branch.push(then_expr);
-                }
-            }
-            _ => {
-                self.pos -= 1;
-                then_branch.push(self.parse()?);
-            }
-        }
-        
-        // Parse else branch
-        let mut else_branch = Vec::new();
-        match self.consume() {
-            Some(Token::LParen) => {
-                self.pos -= 1;
-                let else_expr = self.parse()?;
-                if let Expr::Block(exprs) = else_expr {
-                    else_branch = exprs;
-                } else {
-                    else_branch.push(else_expr);
-                }
-            }
-            _ => {
-                self.pos -= 1;
-                else_branch.push(self.parse()?);
-            }
-        }
-        
-        // Validate branches are not empty
-        if then_branch.is_empty() {
-            return Err("If statement requires non-empty then branch".to_string());
-        }
-        if else_branch.is_empty() {
-            return Err("If statement requires non-empty else branch".to_string());
-        }
-        
-        Ok(Expr::If(condition, then_branch, else_branch))
-    }
-
-    fn parse_while(&mut self) -> Result<Expr, String> {
-        let condition = self.parse_condition()?;
-        
-        // Parse body
-        let mut body = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            body.push(self.parse()?);
-        }
-        
-        // Validate body is not empty
-        if body.is_empty() {
-            return Err("While loop requires non-empty body".to_string());
-        }
-        
-        Ok(Expr::While(condition, body))
-    }
-
-    fn parse_condition(&mut self) -> Result<Condition, String> {
-        match self.peek() {
-            Some(Token::LParen) => self.parse_condition_list(),
-            Some(Token::Number(n)) => {
-                let num = n.clone();
-                self.consume();
-                if num.contains('.') {
-                    Ok(Condition::Float(num.parse().map_err(|_| "Invalid float")?))
-                } else {
-                    Ok(Condition::Int(num.parse().map_err(|_| "Invalid integer")?))
-                }
-            }
-            Some(Token::String(s)) => {
-                let string = s.clone();
-                self.consume();
-                Ok(Condition::Str(string))
-            }
-            Some(Token::Symbol(s)) => {
-                let sym = s.clone();
-                self.consume();
-                match sym.as_str() {
-                    "null" => Ok(Condition::Null),
-                    "true" => Ok(Condition::Bool(true)),
-                    "false" => Ok(Condition::Bool(false)),
-                    _ => Ok(Condition::Var(sym)),
-                }
-            }
-            _ => Err("Unexpected token in condition".to_string()),
+        if let Ok(i) = lexeme.parse::<i64>() {
+            Ok(Expr::Int(i))
+        } else if let Ok(f) = lexeme.parse::<f64>() {
+            Ok(Expr::Float(f))
+        } else {
+            Err("Invalid number literal")
         }
     }
 
-    fn parse_condition_list(&mut self) -> Result<Condition, String> {
-        self.consume(); // consume '('
-
-        let op = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected operator in condition".to_string()),
-        };
-
-        let condition = match op.as_str() {
-            "+" => self.parse_condition_binary(Operation::Add)?,
-            "-" => self.parse_condition_binary(Operation::Sub)?,
-            "*" => self.parse_condition_binary(Operation::Mul)?,
-            "/" => self.parse_condition_binary(Operation::Div)?,
-            ">" => self.parse_condition_binary(Operation::Gt)?,
-            "<" => self.parse_condition_binary(Operation::Lt)?,
-            ">=" => self.parse_condition_binary(Operation::Gte)?,
-            "<=" => self.parse_condition_binary(Operation::Lte)?,
-            "==" => self.parse_condition_binary(Operation::Eq)?,
-            "!=" => self.parse_condition_binary(Operation::Neq)?,
-            _ => {
-                // If not a keyword, treat as function call
-                self.pos -= 1; // put back the symbol
-                self.parse_condition_function_call()?
-            }
-        };
-
-        match self.consume() {
-            Some(Token::RParen) => Ok(condition),
-            _ => Err("Expected ')' in condition".to_string()),
-        }
+    // StringLiteral
+    //  : STRING
+    fn parse_string_literal(&mut self) -> Result<Expr, &'static str> {
+        let token = self.eat(TokenKind::String)?;
+        Ok(Expr::Str(token.lexeme.to_string()))
     }
-
-    fn parse_condition_binary(&mut self, op: Operation) -> Result<Condition, String> {
-        let left = Box::new(self.parse_condition()?);
-        let right = Box::new(self.parse_condition()?);
-        Ok(Condition::Binary(op, left, right))
-    }
-
-    fn parse_function(&mut self) -> Result<Expr, String> {
-        // Expect (fn name (params...) body...)
-        // Parse function name
-        let name = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected function name after 'fn'".to_string()),
-        };
-        
-        // Parse parameter list
-        match self.consume() {
-            Some(Token::LParen) => {}
-            _ => return Err("Expected '(' after function name".to_string()),
-        }
-        
-        let mut params = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                self.consume(); // consume ')'
-                break;
-            }
-            match self.consume() {
-                Some(Token::Symbol(s)) => params.push(s),
-                _ => return Err("Expected parameter name".to_string()),
-            }
-        }
-        
-        // Parse body (rest of the expressions until closing paren)
-        let mut body = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            body.push(self.parse()?);
-        }
-        
-        if body.is_empty() {
-            return Err("Function requires non-empty body".to_string());
-        }
-        
-        Ok(Expr::Function(name, params, body))
-    }
-
-    fn parse_lambda(&mut self) -> Result<Expr, String> {
-        // Expect (lambda (params...) body...)
-        // Parse parameter list
-        match self.consume() {
-            Some(Token::LParen) => {}
-            _ => return Err("Expected '(' after 'lambda'".to_string()),
-        }
-        
-        let mut params = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                self.consume(); // consume ')'
-                break;
-            }
-            match self.consume() {
-                Some(Token::Symbol(s)) => params.push(s),
-                _ => return Err("Expected parameter name".to_string()),
-            }
-        }
-        
-        // Parse body (rest of the expressions until closing paren)
-        let mut body = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            body.push(self.parse()?);
-        }
-        
-        if body.is_empty() {
-            return Err("Lambda requires non-empty body".to_string());
-        }
-        
-        Ok(Expr::Lambda(params, body))
-    }
-
-    fn parse_function_call(&mut self) -> Result<Expr, String> {
-        // Expect (funcname args...)
-        let name = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected function name".to_string()),
-        };
-        
-        let mut args = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            args.push(self.parse()?);
-        }
-        
-        Ok(Expr::FunctionCall(name, args))
-    }
-
-    fn parse_condition_function_call(&mut self) -> Result<Condition, String> {
-        // Expect (funcname args...)
-        let name = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected function name in condition".to_string()),
-        };
-        
-        let mut args = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            args.push(self.parse_condition()?);
-        }
-        
-        Ok(Condition::FunctionCall(name, args))
-    }
-
-    fn parse_inc(&mut self) -> Result<Expr, String> {
-        // (++ var)
-        let var = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected variable name after ++".to_string()),
-        };
-        Ok(Expr::Inc(var))
-    }
-
-    fn parse_dec(&mut self) -> Result<Expr, String> {
-        // (-- var)
-        let var = match self.consume() {
-            Some(Token::Symbol(s)) => s,
-            _ => return Err("Expected variable name after --".to_string()),
-        };
-        Ok(Expr::Dec(var))
-    }
-
-    fn parse_for(&mut self) -> Result<Expr, String> {
-        // (for init condition update body...)
-        // Example: (for (let i 0) (< i 10) (++ i) (print i))
-        
-        // Parse init expression (usually (let var value))
-        let init = self.parse()?;
-        
-        // Parse condition
-        let condition = self.parse_condition()?;
-        
-        // Parse update expression (usually (++ var) or (-- var))
-        let update = self.parse()?;
-        
-        // Parse body (rest of expressions until closing paren)
-        let mut body = Vec::new();
-        while let Some(token) = self.peek() {
-            if *token == Token::RParen {
-                break;
-            }
-            body.push(self.parse()?);
-        }
-        
-        if body.is_empty() {
-            return Err("For loop requires non-empty body".to_string());
-        }
-        
-        Ok(Expr::For(Box::new(init), condition, Box::new(update), body))
-    }
-
 }

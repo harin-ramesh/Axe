@@ -1,14 +1,10 @@
-use axe::{Condition, Axe, Expr, Operation, Value};
+use axe::{Axe, Condition, Expr, Operation, Value};
 
 #[test]
 fn if_with_truthy_condition() {
     let axe = Axe::new();
     // if (Int(1)) { Int(10) } else { Int(20) }
-    let expr = Expr::If(
-        Condition::Int(1),
-        vec![Expr::Int(10)],
-        vec![Expr::Int(20)],
-    );
+    let expr = Expr::If(Condition::Int(1), vec![Expr::Int(10)], vec![Expr::Int(20)]);
 
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(10));
@@ -18,11 +14,7 @@ fn if_with_truthy_condition() {
 fn if_with_null_condition() {
     let axe = Axe::new();
     // if (Null) { Int(10) } else { Int(20) }
-    let expr = Expr::If(
-        Condition::Null,
-        vec![Expr::Int(10)],
-        vec![Expr::Int(20)],
-    );
+    let expr = Expr::If(Condition::Null, vec![Expr::Int(10)], vec![Expr::Int(20)]);
 
     let result = axe.eval(expr).unwrap();
     assert_eq!(result, Value::Int(20));
@@ -49,11 +41,11 @@ fn if_with_expression_condition() {
 #[test]
 fn if_with_block_branches() {
     let axe = Axe::new();
-    // if (Int(1)) { 
+    // if (Int(1)) {
     //     x = 10
     //     x + 5
-    // } else { 
-    //     Int(0) 
+    // } else {
+    //     Int(0)
     // }
     let expr = Expr::If(
         Condition::Int(1),
@@ -115,21 +107,13 @@ fn if_with_variable_condition() {
 #[test]
 fn if_non_zero_numbers_are_truthy() {
     let axe = Axe::new();
-    
+
     // Test Int(1) is truthy
-    let expr = Expr::If(
-        Condition::Int(1),
-        vec![Expr::Int(1)],
-        vec![Expr::Int(2)],
-    );
+    let expr = Expr::If(Condition::Int(1), vec![Expr::Int(1)], vec![Expr::Int(2)]);
     assert_eq!(axe.eval(expr).unwrap(), Value::Int(1));
 
     // Test negative Int is truthy
-    let expr = Expr::If(
-        Condition::Int(-1),
-        vec![Expr::Int(1)],
-        vec![Expr::Int(2)],
-    );
+    let expr = Expr::If(Condition::Int(-1), vec![Expr::Int(1)], vec![Expr::Int(2)]);
     assert_eq!(axe.eval(expr).unwrap(), Value::Int(1));
 
     // Test Float(1.5) is truthy
@@ -232,8 +216,9 @@ fn if_with_bool_variable() {
     let axe = Axe::new();
     // x = true
     // if (x) { "yes" } else { "no" }
-    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Bool(true)))).unwrap();
-    
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Bool(true))))
+        .unwrap();
+
     let expr = Expr::If(
         Condition::Var("x".to_string()),
         vec![Expr::Str("yes".to_string())],
@@ -247,8 +232,9 @@ fn if_with_false_bool_variable() {
     let axe = Axe::new();
     // x = false
     // if (x) { "yes" } else { "no" }
-    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Bool(false)))).unwrap();
-    
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Bool(false))))
+        .unwrap();
+
     let expr = Expr::If(
         Condition::Var("x".to_string()),
         vec![Expr::Str("yes".to_string())],
@@ -260,13 +246,9 @@ fn if_with_false_bool_variable() {
 #[test]
 fn if_falsy_values() {
     let axe = Axe::new();
-    
+
     // Test Null is falsy
-    let expr = Expr::If(
-        Condition::Null,
-        vec![Expr::Int(1)],
-        vec![Expr::Int(2)],
-    );
+    let expr = Expr::If(Condition::Null, vec![Expr::Int(1)], vec![Expr::Int(2)]);
     assert_eq!(axe.eval(expr).unwrap(), Value::Int(2));
 
     // Test Bool(false) is falsy
@@ -278,11 +260,7 @@ fn if_falsy_values() {
     assert_eq!(axe.eval(expr).unwrap(), Value::Int(2));
 
     // Test Int(0) is falsy
-    let expr = Expr::If(
-        Condition::Int(0),
-        vec![Expr::Int(1)],
-        vec![Expr::Int(2)],
-    );
+    let expr = Expr::If(Condition::Int(0), vec![Expr::Int(1)], vec![Expr::Int(2)]);
     assert_eq!(axe.eval(expr).unwrap(), Value::Int(2));
 
     // Test Float(0.0) is falsy
@@ -306,14 +284,18 @@ fn if_with_comparison_result_in_variable() {
             Box::new(Expr::Int(10)),
             Box::new(Expr::Int(5)),
         )),
-    )).unwrap();
-    
+    ))
+    .unwrap();
+
     let expr = Expr::If(
         Condition::Var("result".to_string()),
         vec![Expr::Str("true branch".to_string())],
         vec![Expr::Str("false branch".to_string())],
     );
-    assert_eq!(axe.eval(expr).unwrap(), Value::Str("true branch".to_string()));
+    assert_eq!(
+        axe.eval(expr).unwrap(),
+        Value::Str("true branch".to_string())
+    );
 }
 
 #[test]
@@ -321,8 +303,9 @@ fn if_zero_variable_is_falsy() {
     let axe = Axe::new();
     // x = 0
     // if (x) { "truthy" } else { "falsy" }
-    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(0)))).unwrap();
-    
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Int(0))))
+        .unwrap();
+
     let expr = Expr::If(
         Condition::Var("x".to_string()),
         vec![Expr::Str("truthy".to_string())],
@@ -336,8 +319,9 @@ fn if_zero_float_variable_is_falsy() {
     let axe = Axe::new();
     // x = 0.0
     // if (x) { "truthy" } else { "falsy" }
-    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Float(0.0)))).unwrap();
-    
+    axe.eval(Expr::Set("x".to_string(), Box::new(Expr::Float(0.0))))
+        .unwrap();
+
     let expr = Expr::If(
         Condition::Var("x".to_string()),
         vec![Expr::Str("truthy".to_string())],
