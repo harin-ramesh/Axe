@@ -1,5 +1,5 @@
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
-use crate::{Expr, Operation};
+use crate::{Condition, Expr, Operation};
 
 pub struct Parser<'src> {
     tokeniser: Tokeniser<'src>,
@@ -61,10 +61,12 @@ impl<'src> Parser<'src> {
     //  : ExpressionStatement
     //  | BlockStatment
     //  | LetStatement
+    //  | IfStatement
     fn parse_statement(&mut self) -> Result<Expr, &'static str> {
         let expr = match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
             Some(TokenKind::Let) => self.parse_let_statement()?,
+            Some(TokenKind::If) => self.parse_if_statement()?,
             _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
@@ -115,6 +117,81 @@ impl<'src> Parser<'src> {
     fn parse_declaration_value(&mut self) -> Result<Expr, &'static str> {
         self.eat(TokenKind::SimpleAssign)?;
         self.parse_expression()
+    }
+
+    // IfStatement
+    //  : 'if' '(' Expression ')' Statements
+    //  : 'if' '(' Expression ')' Statements 'else' Statements
+    fn parse_if_statement(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::If)?;
+        self.eat(TokenKind::LParen)?;
+
+        let condition = self.parse_condition()?;
+
+        self.eat(TokenKind::RParen)?;
+        self.eat(TokenKind::OpeningBrace)?;
+
+        let consequent = self.parse_statements(TokenKind::ClosingBrace)?;
+        self.eat(TokenKind::ClosingBrace)?;
+
+        let alternate = if self.lookahead.map(|t| t.kind) == Some(TokenKind::Else) {
+            self.eat(TokenKind::Else)?;
+            self.eat(TokenKind::OpeningBrace)?;
+            let alt = self.parse_statements(TokenKind::ClosingBrace)?;
+            self.eat(TokenKind::ClosingBrace)?;
+            alt
+        } else {
+            vec![]
+        };
+
+        Ok(Expr::If(condition, consequent, alternate))
+    }
+
+    // Condition
+    //  : ConditionPrimary
+    //  | ConditionPrimary ('>' | '<' | '>=' | '<=' | '==' | '!=') ConditionPrimary
+    fn parse_condition(&mut self) -> Result<Condition, &'static str> {
+        let left = self.parse_condition_primary()?;
+
+        // Check for comparison operator
+        if let Some(token) = &self.lookahead {
+            let op = match token.kind {
+                TokenKind::Gt => Some(Operation::Gt),
+                TokenKind::Lt => Some(Operation::Lt),
+                TokenKind::Gte => Some(Operation::Gte),
+                TokenKind::Lte => Some(Operation::Lte),
+                TokenKind::Eq => Some(Operation::Eq),
+                TokenKind::Neq => Some(Operation::Neq),
+                _ => None,
+            };
+
+            if let Some(op) = op {
+                self.eat(token.kind)?;
+                let right = self.parse_condition_primary()?;
+                return Ok(Condition::Binary(op, Box::new(left), Box::new(right)));
+            }
+        }
+
+        Ok(left)
+    }
+
+    // ConditionPrimary - reuses parse_primary and converts to Condition
+    fn parse_condition_primary(&mut self) -> Result<Condition, &'static str> {
+        let expr = self.parse_primary()?;
+        Self::expr_to_condition(expr)
+    }
+
+    // Convert an Expr to a Condition (only certain Expr variants are valid)
+    fn expr_to_condition(expr: Expr) -> Result<Condition, &'static str> {
+        match expr {
+            Expr::Null => Ok(Condition::Null),
+            Expr::Bool(b) => Ok(Condition::Bool(b)),
+            Expr::Int(n) => Ok(Condition::Int(n)),
+            Expr::Float(f) => Ok(Condition::Float(f)),
+            Expr::Str(s) => Ok(Condition::Str(s)),
+            Expr::Var(name) => Ok(Condition::Var(name)),
+            _ => Err("Expression cannot be used as condition"),
+        }
     }
 
     // BlockStatement

@@ -1,4 +1,4 @@
-use axe::{Expr, Operation, Parser};
+use axe::{Condition, Expr, Operation, Parser};
 
 // =============================================================================
 // Numeric Literal Tests - These should pass with current implementation
@@ -1293,5 +1293,31 @@ fn parse_let_with_expression() {
                 Box::new(Expr::Int(2))
             ))
         )])])
+    );
+}
+
+// =============================================================================
+// If conditional Tests
+// =============================================================================
+
+#[test]
+fn parse_simple_if_statement() {
+    let mut parser = Parser::new("let y; let x = 10; if (x > 1) { y = 42; } else { y = 0; }");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![
+            Expr::Let(vec![Expr::Set("y".to_string(), Box::new(Expr::Null))]),
+            Expr::Let(vec![Expr::Set("x".to_string(), Box::new(Expr::Int(10)))]),
+            Expr::If(
+                Condition::Binary(
+                    Operation::Gt,
+                    Box::new(Condition::Var("x".to_string())),
+                    Box::new(Condition::Int(1))
+                ),
+                vec![Expr::Assign("y".to_string(), Box::new(Expr::Int(42)))],
+                vec![Expr::Assign("y".to_string(), Box::new(Expr::Int(0)))]
+            )
+        ])
     );
 }

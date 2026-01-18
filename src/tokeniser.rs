@@ -23,6 +23,15 @@ pub enum TokenKind {
     Slash,
     Delimeter,
     Let,
+    If,
+    Else,
+    // Comparison operators
+    Eq,  // ==
+    Neq, // !=
+    Gt,  // >
+    Lt,  // <
+    Gte, // >=
+    Lte, // <=
     Eof,
 }
 
@@ -42,6 +51,13 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
             TokenKind::String,
             Regex::new(r#"^"((?:[^"\\]|\\.)*)""#).unwrap(),
         ),
+        // Comparison operators (must come before SimpleAssign)
+        (TokenKind::Eq, Regex::new(r"^==").unwrap()),
+        (TokenKind::Neq, Regex::new(r"^!=").unwrap()),
+        (TokenKind::Gte, Regex::new(r"^>=").unwrap()),
+        (TokenKind::Lte, Regex::new(r"^<=").unwrap()),
+        (TokenKind::Gt, Regex::new(r"^>").unwrap()),
+        (TokenKind::Lt, Regex::new(r"^<").unwrap()),
         (TokenKind::SimpleAssign, Regex::new(r"^=").unwrap()),
         (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
         (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
@@ -52,6 +68,8 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Number, Regex::new(r"^[0-9]+\.?[0-9]*").unwrap()),
         // Keywords must come before generic Identifier
         (TokenKind::Let, Regex::new(r"^let\b").unwrap()),
+        (TokenKind::If, Regex::new(r"^if\b").unwrap()),
+        (TokenKind::Else, Regex::new(r"^else\b").unwrap()),
         (TokenKind::Identifier, Regex::new(r"^[a-zA-Z_]\w*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
