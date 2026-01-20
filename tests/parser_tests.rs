@@ -1203,6 +1203,139 @@ fn eval_precedence_with_parentheses() {
 }
 
 #[test]
+fn eval_parentheses_override_logical_or() {
+    use axe::{Axe, Value};
+
+    // Test with booleans to avoid type mixing issues
+    // Without parens: true || false && false = true || (false && false) = true || false = true
+    let mut parser = Parser::new("true || false && false;");
+    let expr = parser.parse().unwrap();
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // With parens: (true || false) && false = true && false = false
+    let mut parser = Parser::new("(true || false) && false;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(false));
+
+    // Another test: false || true && true = false || (true && true) = false || true = true
+    let mut parser = Parser::new("false || true && true;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // With parens: (false || true) && true = true && true = true (same result but different grouping)
+    let mut parser = Parser::new("(false || true) && true;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // Definitive test: false || false && true vs (false || false) && true
+    // Without parens: false || (false && true) = false || false = false
+    let mut parser = Parser::new("false || false && true;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(false));
+
+    // With parens: (false || false) && true = false && true = false (same result)
+    // Let's use: true || false && false vs (true || false) && false - these differ!
+    // Already tested above
+}
+
+#[test]
+fn eval_parentheses_override_bitwise() {
+    use axe::{Axe, Value};
+
+    // Without parens: 1 | 2 & 3 = 1 | (2 & 3) = 1 | 2 = 3
+    let mut parser = Parser::new("1 | 2 & 3;");
+    let expr = parser.parse().unwrap();
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(3));
+
+    // With parens: (1 | 2) & 3 = 3 & 3 = 3
+    let mut parser = Parser::new("(1 | 2) & 3;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(3));
+
+    // Different example: (5 | 2) & 4 = 7 & 4 = 4
+    let mut parser = Parser::new("(5 | 2) & 4;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(4));
+
+    // Without parens: 5 | 2 & 4 = 5 | (2 & 4) = 5 | 0 = 5
+    let mut parser = Parser::new("5 | 2 & 4;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(5));
+}
+
+#[test]
+fn eval_parentheses_override_additive_in_bitwise() {
+    use axe::{Axe, Value};
+
+    // Without parens: 1 + 2 & 3 = (1 + 2) & 3 = 3 & 3 = 3
+    // (additive has higher precedence than bitwise)
+    let mut parser = Parser::new("1 + 2 & 3;");
+    let expr = parser.parse().unwrap();
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(3));
+
+    // With parens: 1 + (2 & 3) = 1 + 2 = 3
+    let mut parser = Parser::new("1 + (2 & 3);");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(3));
+
+    // Different example: 4 + 3 & 5 = (4 + 3) & 5 = 7 & 5 = 5
+    let mut parser = Parser::new("4 + 3 & 5;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(5));
+
+    // With parens: 4 + (3 & 5) = 4 + 1 = 5
+    let mut parser = Parser::new("4 + (3 & 5);");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(5));
+}
+
+#[test]
+fn eval_parentheses_modulo_precedence() {
+    use axe::{Axe, Value};
+
+    // Without parens: 10 + 7 % 3 = 10 + (7 % 3) = 10 + 1 = 11
+    let mut parser = Parser::new("10 + 7 % 3;");
+    let expr = parser.parse().unwrap();
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(11));
+
+    // With parens: (10 + 7) % 3 = 17 % 3 = 2
+    let mut parser = Parser::new("(10 + 7) % 3;");
+    let expr = parser.parse().unwrap();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(2));
+}
+
+#[test]
+fn eval_nested_parentheses_precedence() {
+    use axe::{Axe, Value};
+
+    // ((1 + 2) * 3 + 4) * 2 = ((3) * 3 + 4) * 2 = (9 + 4) * 2 = 13 * 2 = 26
+    let mut parser = Parser::new("((1 + 2) * 3 + 4) * 2;");
+    let expr = parser.parse().unwrap();
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Int(26));
+}
+
+#[test]
 fn eval_complex_expression() {
     use axe::{Axe, Value};
 
@@ -1292,6 +1425,133 @@ fn parse_let_with_expression() {
                 Box::new(Expr::Int(1)),
                 Box::new(Expr::Int(2))
             ))
+        )])])
+    );
+}
+
+// =============================================================================
+// Boolean Literal Tests
+// =============================================================================
+
+#[test]
+fn parse_true_literal() {
+    let mut parser = Parser::new("true;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Bool(true)]));
+}
+
+#[test]
+fn parse_false_literal() {
+    let mut parser = Parser::new("false;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Bool(false)]));
+}
+
+#[test]
+fn parse_boolean_in_let() {
+    let mut parser = Parser::new("let x = true;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Let(vec![Expr::Set(
+            "x".to_string(),
+            Box::new(Expr::Bool(true))
+        )])])
+    );
+}
+
+#[test]
+fn parse_boolean_in_assignment() {
+    let mut parser = Parser::new("x = false;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Assign(
+            "x".to_string(),
+            Box::new(Expr::Bool(false))
+        )])
+    );
+}
+
+#[test]
+fn eval_true_literal() {
+    use axe::{Axe, Value};
+
+    let mut parser = Parser::new("true;");
+    let expr = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(true));
+}
+
+#[test]
+fn eval_false_literal() {
+    use axe::{Axe, Value};
+
+    let mut parser = Parser::new("false;");
+    let expr = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Bool(false));
+}
+
+// =============================================================================
+// Null Literal Tests
+// =============================================================================
+
+#[test]
+fn parse_null_literal() {
+    let mut parser = Parser::new("null;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(expr, Expr::Block(vec![Expr::Null]));
+}
+
+#[test]
+fn parse_null_in_let() {
+    let mut parser = Parser::new("let x = null;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Let(vec![Expr::Set(
+            "x".to_string(),
+            Box::new(Expr::Null)
+        )])])
+    );
+}
+
+#[test]
+fn parse_null_in_assignment() {
+    let mut parser = Parser::new("x = null;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Assign("x".to_string(), Box::new(Expr::Null))])
+    );
+}
+
+#[test]
+fn eval_null_literal() {
+    use axe::{Axe, Value};
+
+    let mut parser = Parser::new("null;");
+    let expr = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.eval(expr).unwrap();
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn parse_let_without_initializer_is_null() {
+    let mut parser = Parser::new("let x;");
+    let expr = parser.parse().unwrap();
+    assert_eq!(
+        expr,
+        Expr::Block(vec![Expr::Let(vec![Expr::Set(
+            "x".to_string(),
+            Box::new(Expr::Null)
         )])])
     );
 }

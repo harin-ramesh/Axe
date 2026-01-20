@@ -21,6 +21,7 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    Percent,
     Delimeter,
     Let,
     If,
@@ -33,6 +34,13 @@ pub enum TokenKind {
     Gte, // >=
     Lte, // <=
     Eof,
+    True,
+    False,
+    Null,
+    And,
+    Or,
+    BitwiseAnd,
+    BitwiseOr,
 }
 
 static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
@@ -65,11 +73,19 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Minus, Regex::new(r"^-").unwrap()),
         (TokenKind::Star, Regex::new(r"^\*").unwrap()),
         (TokenKind::Slash, Regex::new(r"^/").unwrap()),
+        (TokenKind::Percent, Regex::new(r"^%").unwrap()),
+        (TokenKind::And, Regex::new(r"^&&").unwrap()),
+        (TokenKind::Or, Regex::new(r"^\|\|").unwrap()),
+        (TokenKind::BitwiseAnd, Regex::new(r"^&").unwrap()),
+        (TokenKind::BitwiseOr, Regex::new(r"^\|").unwrap()),
         (TokenKind::Number, Regex::new(r"^[0-9]+\.?[0-9]*").unwrap()),
         // Keywords must come before generic Identifier
         (TokenKind::Let, Regex::new(r"^let\b").unwrap()),
         (TokenKind::If, Regex::new(r"^if\b").unwrap()),
         (TokenKind::Else, Regex::new(r"^else\b").unwrap()),
+        (TokenKind::True, Regex::new(r"^true\b").unwrap()),
+        (TokenKind::False, Regex::new(r"^false\b").unwrap()),
+        (TokenKind::Null, Regex::new(r"^null\b").unwrap()),
         (TokenKind::Identifier, Regex::new(r"^[a-zA-Z_]\w*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
@@ -98,6 +114,7 @@ impl<'src> Tokeniser<'src> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn has_more_tokens(&self) -> bool {
         self.program.len() > self.pos
     }
@@ -130,14 +147,6 @@ impl<'src> Tokeniser<'src> {
                 } else {
                     full_match
                 };
-
-                // Handle signed number edge case: reject if it's just a minus sign
-                if *kind == TokenKind::Number {
-                    let s = full_match.as_str();
-                    if s.len() == 1 && s == "-" {
-                        continue;
-                    }
-                }
 
                 if *kind == TokenKind::WhiteSpace || *kind == TokenKind::Comment {
                     self.line += full_match.as_str().chars().filter(|&c| c == '\n').count() as u32;

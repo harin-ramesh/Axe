@@ -224,10 +224,10 @@ impl<'src> Parser<'src> {
     }
 
     // AssignmentExpression
-    //  : AdditiveExpression
+    //  : LogicalOrExpression
     //  | LeftHandSideExpression '=' AssignmentExpression
     fn parse_assignment_expression(&mut self) -> Result<Expr, &'static str> {
-        let left = self.parse_additive_expression()?;
+        let left = self.parse_logical_or_expression()?;
 
         if let Some(token) = &self.lookahead {
             if token.kind == TokenKind::SimpleAssign {
@@ -242,6 +242,78 @@ impl<'src> Parser<'src> {
                 let right = self.parse_assignment_expression()?;
                 return Ok(Expr::Assign(name, Box::new(right)));
             }
+        }
+
+        Ok(left)
+    }
+
+    // LogicalOrExpression (lowest precedence of these operators)
+    //  : LogicalAndExpression
+    //  | LogicalOrExpression '||' LogicalAndExpression
+    fn parse_logical_or_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_logical_and_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            if token.kind != TokenKind::Or {
+                break;
+            }
+            self.eat(TokenKind::Or)?;
+            let right = self.parse_logical_and_expression()?;
+            left = Expr::Binary(Operation::Or, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // LogicalAndExpression
+    //  : BitwiseOrExpression
+    //  | LogicalAndExpression '&&' BitwiseOrExpression
+    fn parse_logical_and_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_bitwise_or_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            if token.kind != TokenKind::And {
+                break;
+            }
+            self.eat(TokenKind::And)?;
+            let right = self.parse_bitwise_or_expression()?;
+            left = Expr::Binary(Operation::And, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // BitwiseOrExpression
+    //  : BitwiseAndExpression
+    //  | BitwiseOrExpression '|' BitwiseAndExpression
+    fn parse_bitwise_or_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_bitwise_and_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            if token.kind != TokenKind::BitwiseOr {
+                break;
+            }
+            self.eat(TokenKind::BitwiseOr)?;
+            let right = self.parse_bitwise_and_expression()?;
+            left = Expr::Binary(Operation::BitwiseOr, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // BitwiseAndExpression
+    //  : AdditiveExpression
+    //  | BitwiseAndExpression '&' AdditiveExpression
+    fn parse_bitwise_and_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_additive_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            if token.kind != TokenKind::BitwiseAnd {
+                break;
+            }
+            self.eat(TokenKind::BitwiseAnd)?;
+            let right = self.parse_additive_expression()?;
+            left = Expr::Binary(Operation::BitwiseAnd, Box::new(left), Box::new(right));
         }
 
         Ok(left)
@@ -269,15 +341,17 @@ impl<'src> Parser<'src> {
 
     // MultiplicativeExpression
     //  : PrimaryExpression
-    //  | MultiplicativeExpression ('*' | '/') PrimaryExpression
+    //  | MultiplicativeExpression ('*' | '/' | '%') PrimaryExpression
     fn parse_multiplicative_expression(&mut self) -> Result<Expr, &'static str> {
         let mut left = self.parse_primary()?;
 
         while let Some(token) = &self.lookahead {
+            // Match multiplicative operators; break on anything else
             let op = match token.kind {
                 TokenKind::Star => Operation::Mul,
                 TokenKind::Slash => Operation::Div,
-                _ => break,
+                TokenKind::Percent => Operation::Mod,
+                _ => break, // Not a multiplicative operator, exit loop
             };
             self.eat(token.kind)?;
             let right = self.parse_primary()?;
@@ -285,6 +359,30 @@ impl<'src> Parser<'src> {
         }
 
         Ok(left)
+    }
+
+    // BooleanLiteral
+    //  : 'true'
+    //  | 'false'
+    fn parse_boolean_literal(&mut self) -> Result<Expr, &'static str> {
+        match self.lookahead.as_ref().map(|t| t.kind) {
+            Some(TokenKind::True) => {
+                self.eat(TokenKind::True)?;
+                Ok(Expr::Bool(true))
+            }
+            Some(TokenKind::False) => {
+                self.eat(TokenKind::False)?;
+                Ok(Expr::Bool(false))
+            }
+            _ => Err("Unexpected token: expected boolean literal"),
+        }
+    }
+
+    // NullLiteral
+    //  : 'null'
+    fn parse_null_literal(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::Null)?;
+        Ok(Expr::Null)
     }
 
     // PrimaryExpression
@@ -298,6 +396,8 @@ impl<'src> Parser<'src> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal(),
             Some(TokenKind::String) => self.parse_string_literal(),
+            Some(TokenKind::True) | Some(TokenKind::False) => self.parse_boolean_literal(),
+            Some(TokenKind::Null) => self.parse_null_literal(),
             Some(TokenKind::Identifier) => self.parse_identifier(),
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
