@@ -67,6 +67,19 @@ impl Environment {
     }
 }
 
+pub struct Program {
+    pub stmts: Vec<Stmt>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Literal {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(String),
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Operation {
     Add,
@@ -87,6 +100,86 @@ pub enum Operation {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum UnaryOp {
+    Neg,  // -x
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expr {
+    Literal(Literal),
+    List(Vec<Expr>),
+    Var(String),
+    Binary(Operation, Box<Expr>, Box<Expr>),
+    Unary(UnaryOp, Box<Expr>),
+    Call(String, Vec<Expr>),
+    Lambda(Vec<String>, Vec<Stmt>),
+    Property(Box<Expr>, String),
+    New(String, Vec<Expr>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Stmt {
+    Expr(Expr),
+    Block(Vec<Stmt>),
+    Let(String, Expr),
+    Assign(String, Expr),
+    If(Expr, Vec<Stmt>, Vec<Stmt>),
+    While(Expr, Vec<Stmt>),
+    Function(String, Vec<String>, Vec<Stmt>),
+    Class(String, Option<String>, Vec<Stmt>),
+}
+
+#[derive(Debug)]
+pub enum Value {
+    Literal(Literal),
+    List(Vec<Value>),
+    Function(Vec<String>, Vec<Stmt>, EnvRef),
+    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>),
+    Object(EnvRef),
+}
+
+impl Clone for Value {
+    fn clone(&self) -> Self {
+        match self {
+            Value::Literal(lit) => Value::Literal(lit.clone()),
+            Value::List(items) => Value::List(items.clone()),
+            Value::Function(params, body, env) => {
+                Value::Function(params.clone(), body.clone(), env.clone())
+            }
+            Value::NativeFunction(name, func) => Value::NativeFunction(name.clone(), *func),
+            Value::Object(env) => Value::Object(env.clone()),
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Literal(lit) => match lit {
+                Literal::Null => write!(f, "null"),
+                Literal::Bool(b) => write!(f, "{}", b),
+                Literal::Int(n) => write!(f, "{}", n),
+                Literal::Float(fl) => write!(f, "{}", fl),
+                Literal::Str(s) => write!(f, "\"{}\"", s),
+            },
+            Value::List(items) => {
+                let item_strs: Vec<String> = items.iter().map(|item| format!("{}", item)).collect();
+                write!(f, "[{}]", item_strs.join(", "))
+            }
+            Value::Function(params, _, _) => {
+                write!(f, "<function({})>", params.join(", "))
+            }
+            Value::NativeFunction(name, _) => {
+                write!(f, "<native-function {}>", name)
+            }
+            Value::Object(_) => {
+                write!(f, "<object>")
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Condition {
     Null,
     Bool(bool),
@@ -98,139 +191,25 @@ pub enum Condition {
     FunctionCall(String, Vec<Condition>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
-    Null,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Str(String),
-    List(Vec<Expr>),
-    Binary(Operation, Box<Expr>, Box<Expr>),
-    Set(String, Box<Expr>),
-    Let(Vec<Expr>), // let x = 1, y = 2; -> Let(vec![Set("x", 1), Set("y", 2)])
-    Assign(String, Box<Expr>),
-    Var(String),
-    Block(Vec<Expr>),
-    If(Condition, Vec<Expr>, Vec<Expr>),
-    While(Condition, Vec<Expr>),
-    Lambda(Vec<String>, Vec<Expr>),
-    Function(String, Vec<String>, Vec<Expr>),
-    FunctionCall(String, Vec<Expr>),
-    Inc(String),                                     // i++ -> (let i (+ i 1))
-    Dec(String),                                     // i-- -> (let i (- i 1))
-    For(Box<Expr>, Condition, Box<Expr>, Vec<Expr>), // (for init condition update body...) -> while loop
-    Class(String, Option<String>, Vec<Expr>),
-    New(String, Vec<Expr>),
-    Property(String, String),
-}
-
-pub enum Value {
-    Null,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Str(String),
-    List(Vec<Value>),
-    Function(Vec<String>, Vec<Expr>, EnvRef),
-    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>),
-    Environment(EnvRef),
-}
-
-impl Clone for Value {
-    fn clone(&self) -> Self {
-        match self {
-            Value::Null => Value::Null,
-            Value::Bool(b) => Value::Bool(*b),
-            Value::Int(n) => Value::Int(*n),
-            Value::Float(f) => Value::Float(*f),
-            Value::Str(s) => Value::Str(s.clone()),
-            Value::List(items) => Value::List(items.clone()),
-            Value::Function(p, b, e) => Value::Function(p.clone(), b.clone(), e.clone()),
-            Value::NativeFunction(name, func) => Value::NativeFunction(name.clone(), *func),
-            Value::Environment(env_ref) => Value::Environment(env_ref.clone()),
-        }
-    }
-}
-
-impl std::fmt::Debug for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Null => write!(f, "Null"),
-            Value::Bool(b) => write!(f, "Bool({:?})", b),
-            Value::Int(n) => write!(f, "Int({:?})", n),
-            Value::Float(fl) => write!(f, "Float({:?})", fl),
-            Value::Str(s) => write!(f, "Str({:?})", s),
-            Value::List(items) => write!(f, "List({:?})", items),
-            Value::Function(params, body, _) => {
-                write!(f, "Function({:?}, {:?}, <env>)", params, body)
-            }
-            Value::NativeFunction(name, _) => write!(f, "NativeFunction({})", name),
-            Value::Environment(_env_ref) => write!(f, "Enviroment"),
-        }
-    }
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Null, Value::Null) => true,
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Int(a), Value::Int(b)) => a == b,
-            (Value::Float(a), Value::Float(b)) => a == b,
-            (Value::Str(a), Value::Str(b)) => a == b,
-            (Value::List(a), Value::List(b)) => a == b,
-            (Value::Function(..), Value::Function(..)) => false,
-            (Value::NativeFunction(name_a, _), Value::NativeFunction(name_b, _)) => {
-                name_a == name_b
-            }
-            _ => false,
-        }
-    }
-}
-
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Null => write!(f, "null"),
-            Value::Bool(b) => write!(f, "{}", b),
-            Value::Int(n) => write!(f, "{}", n),
-            Value::Float(fl) => write!(f, "{}", fl),
-            Value::Str(s) => write!(f, "\"{}\"", s),
-            Value::List(items) => {
-                write!(f, "[")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", item)?;
-                }
-                write!(f, "]")
-            }
-            Value::Function(params, _, _) => {
-                write!(f, "<function({})", params.join(", "))?;
-                write!(f, ">")
-            }
-            Value::NativeFunction(name, _) => write!(f, "<native-fn:{}>", name),
-            Value::Environment(_env_ref) => write!(f, "Enviroment"),
-        }
-    }
-}
-
-// Built-in native functions
 fn native_print(args: &[Value]) -> Result<Value, &'static str> {
     for (i, arg) in args.iter().enumerate() {
         if i > 0 {
             print!(" ");
         }
-        // Print strings without quotes, everything else with Display
+
         match arg {
-            Value::Str(s) => print!("{}", s),
+            Value::Literal(s) => {
+                if let Literal::Str(s) = s {
+                    print!("{}", s);
+                } else {
+                    print!("{}", arg);
+                }
+            },
             _ => print!("{}", arg),
         }
     }
     println!();
-    Ok(Value::Null)
+    Ok(Value::Literal(Literal::Null))
 }
 
 fn native_len(args: &[Value]) -> Result<Value, &'static str> {
@@ -238,8 +217,13 @@ fn native_len(args: &[Value]) -> Result<Value, &'static str> {
         return Err("len expects exactly 1 argument");
     }
     match &args[0] {
-        Value::List(items) => Ok(Value::Int(items.len() as i64)),
-        Value::Str(s) => Ok(Value::Int(s.len() as i64)),
+        Value::List(items) => Ok(Value::Literal(Literal::Int(items.len() as i64))),
+        Value::Literal(s) => {
+            match s {
+                Literal::Str(s) => Ok(Value::Literal(Literal::Int(s.len() as i64))),
+                _ => Err("len expects a list or string"),
+            }
+        }
         _ => Err("len expects a list or string"),
     }
 }
@@ -263,13 +247,18 @@ fn native_get(args: &[Value]) -> Result<Value, &'static str> {
         return Err("get expects exactly 2 arguments");
     }
     match (&args[0], &args[1]) {
-        (Value::List(items), Value::Int(idx)) => {
-            let index = if *idx < 0 {
-                (items.len() as i64 + idx) as usize
-            } else {
-                *idx as usize
-            };
-            items.get(index).cloned().ok_or("index out of bounds")
+        (Value::List(items), Value::Literal(i)) => {
+            match i {
+                Literal::Int(idx) => {
+                    let index = if *idx < 0 {
+                        (items.len() as i64 + idx) as usize
+                    } else {
+                        *idx as usize
+                    };
+                    items.get(index).cloned().ok_or("index out of bounds")
+                }
+                _ => Err("get expects an integer index as second argument"),
+            }
         }
         _ => Err("get expects a list and an integer index"),
     }
@@ -280,17 +269,19 @@ fn native_type(args: &[Value]) -> Result<Value, &'static str> {
         return Err("type expects exactly 1 argument");
     }
     let type_name = match &args[0] {
-        Value::Null => "null",
-        Value::Bool(_) => "bool",
-        Value::Int(_) => "int",
-        Value::Float(_) => "float",
-        Value::Str(_) => "string",
+        Value::Literal(lit) => match lit {
+            Literal::Null => "null",
+            Literal::Bool(_) => "bool",
+            Literal::Int(_) => "int",
+            Literal::Float(_) => "float",
+            Literal::Str(_) => "string",
+        },
         Value::List(_) => "list",
         Value::Function(..) => "function",
         Value::NativeFunction(..) => "native-function",
-        Value::Environment(..) => "env",
+        Value::Object(..) => "object", // Updated to match your 'Object' rename
     };
-    Ok(Value::Str(type_name.to_string()))
+    Ok(Value::Literal(Literal::Str(type_name.to_string())))
 }
 
 fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
@@ -300,16 +291,25 @@ fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
 
     // Check if first argument is a string or list
     match &args[0] {
-        Value::Str(_) => {
-            // Concatenate strings
-            let mut result = String::new();
-            for arg in args {
-                match arg {
-                    Value::Str(s) => result.push_str(s),
-                    _ => return Err("concat on strings requires all arguments to be strings"),
+        Value::Literal(s) => {
+            match s {
+                Literal::Str(_) => {
+                    let mut result = String::new();
+                    for arg in args {
+                        match arg {
+                            Value::Literal(s) => {
+                                match s {
+                                    Literal::Str(s) => result.push_str(s),
+                                    _ => return Err("concat on strings requires all arguments to be strings"),
+                                }
+                            }
+                            _ => return Err("concat on strings requires all arguments to be strings"),
+                        }
+                    }
+                    Ok(Value::Literal(Literal::Str(result)))
                 }
+                _ => Err("concat expects strings or lists"),
             }
-            Ok(Value::Str(result))
         }
         Value::List(_) => {
             // Concatenate lists
@@ -329,14 +329,21 @@ fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
 fn native_range(args: &[Value]) -> Result<Value, &'static str> {
     match args.len() {
         1 => {
-            // range(n) -> [0, 1, ..., n-1]
             match &args[0] {
-                Value::Int(n) => {
-                    if *n < 0 {
-                        return Err("range expects non-negative integer");
+                Value::Literal(n) => {
+                    match n {
+                        Literal::Int(n_val) => {
+                            if *n_val < 0 {
+                                return Err("range expects non-negative integer");
+                            }
+                            let values: Vec<Value> = (0..*n_val)
+                                .map(|i| Value::Literal(Literal::Int(i))) 
+                                .collect();
+
+                            Ok(Value::List(values))
+                        }
+                        _ => Err("range expects integer argument"),
                     }
-                    let values: Vec<Value> = (0..*n).map(Value::Int).collect();
-                    Ok(Value::List(values))
                 }
                 _ => Err("range expects integer argument"),
             }
@@ -344,9 +351,16 @@ fn native_range(args: &[Value]) -> Result<Value, &'static str> {
         2 => {
             // range(start, end) -> [start, start+1, ..., end-1]
             match (&args[0], &args[1]) {
-                (Value::Int(start), Value::Int(end)) => {
-                    let values: Vec<Value> = (*start..*end).map(Value::Int).collect();
-                    Ok(Value::List(values))
+                (Value::Literal(s), Value::Literal(e)) => {
+                    match(s, e) {
+                        (Literal::Int(start), Literal::Int(end)) => {
+                            let values: Vec<Value> = (*start..*end)
+                                .map(|i| Value::Literal(Literal::Int(i)))
+                                .collect();
+                            Ok(Value::List(values))
+                        }
+                        _ => Err("range expects integer arguments"),
+                    }
                 }
                 _ => Err("range expects integer arguments"),
             }
@@ -354,24 +368,29 @@ fn native_range(args: &[Value]) -> Result<Value, &'static str> {
         3 => {
             // range(start, end, step) -> [start, start+step, ..., end-step]
             match (&args[0], &args[1], &args[2]) {
-                (Value::Int(start), Value::Int(end), Value::Int(step)) => {
-                    if *step == 0 {
-                        return Err("range step cannot be zero");
-                    }
-                    let mut values = Vec::new();
-                    let mut current = *start;
-                    if *step > 0 {
-                        while current < *end {
-                            values.push(Value::Int(current));
-                            current += step;
+                (Value::Literal(start), Value::Literal(end), Value::Literal(step)) => {
+                    match (start, end, step) {
+                        (Literal::Int(start), Literal::Int(end), Literal::Int(step)) => {
+                            if *step == 0 {
+                                return Err("range step cannot be zero");
+                            }
+                            let mut values = Vec::new();
+                            let mut current = *start;
+                            if *step > 0 {
+                                while current < *end {
+                                    values.push(Value::Literal(Literal::Int(current)));
+                                    current += step;
+                                }
+                            } else {
+                                while current > *end {
+                                    values.push(Value::Literal(Literal::Int(current)));
+                                    current += step;
+                                }
+                            }
+                            Ok(Value::List(values))
                         }
-                    } else {
-                        while current > *end {
-                            values.push(Value::Int(current));
-                            current += step;
-                        }
+                        _ => Err("range expects integer arguments"),
                     }
-                    Ok(Value::List(values))
                 }
                 _ => Err("range expects integer arguments"),
             }
@@ -442,11 +461,7 @@ impl Axe {
         let env = env.unwrap_or_else(|| self.globals.clone());
 
         match expr {
-            Expr::Null => Ok(Value::Null),
-            Expr::Bool(b) => Ok(Value::Bool(b)),
-            Expr::Int(n) => Ok(Value::Int(n)),
-            Expr::Float(f) => Ok(Value::Float(f)),
-            Expr::Str(s) => Ok(Value::Str(s)),
+            Expr::Literal(lit) => Ok(Self::eval_literal(lit)),
 
             Expr::List(elements) => {
                 // Evaluate each element and create a list
@@ -474,7 +489,7 @@ impl Axe {
                 Ok(value)
             }
             Expr::Let(declarations) => {
-                let mut last_value = Value::Null;
+                let mut last_value = Value::Literal(Literal::Null);
                 for decl in declarations {
                     last_value = self.eval_with_env(decl, Some(env.clone()))?;
                 }
@@ -809,6 +824,10 @@ impl Axe {
         }
     }
 
+    fn eval_literal(lit: Literal) -> Value {
+        Value::Literal(lit)
+    }
+
     fn eval_binary(op: Operation, left: Value, right: Value) -> Result<Value, &'static str> {
         use Operation::*;
         use Value::*;
@@ -876,15 +895,11 @@ impl Axe {
             (Eq, Bool(a), Bool(b)) => Ok(Bool(a == b)),
             (Neq, Bool(a), Bool(b)) => Ok(Bool(a != b)),
 
-            // Equality operations for Null
-            (Eq, Null, Null) => Ok(Bool(true)),
-            (Neq, Null, Null) => Ok(Bool(false)),
-
             // Cross-type equality checks (always false for Eq, true for Neq)
             (Eq, _, _) => Ok(Bool(false)),
             (Neq, _, _) => Ok(Bool(true)),
 
-            _ => Err("type error"),
+            _ => Err("Invalid operation"),
         }
     }
 }
