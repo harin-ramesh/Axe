@@ -9,7 +9,7 @@ A lightweight programming language interpreter written in Rust.
 cargo build --release
 
 # Run an example
-cargo run --release examples/hello.axe
+cargo run --release examples/hello.ax
 ```
 
 ## Documentation
