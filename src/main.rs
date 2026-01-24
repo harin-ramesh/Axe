@@ -1,4 +1,4 @@
-use axe::{Axe, Parser};
+use axe::{Axe, Literal, Parser, Value};
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -37,7 +37,7 @@ fn run_file(filename: &str) {
     // Parse the entire file as a program
     let mut parser = Parser::new(&content);
     match parser.parse() {
-        Ok(expr) => match axe.eval(expr) {
+        Ok(program) => match axe.run(program) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Runtime error: {}", e);
@@ -109,10 +109,10 @@ fn run_repl() {
                     // Parse and evaluate
                     let mut parser = Parser::new(&accumulated_input);
                     match parser.parse() {
-                        Ok(expr) => match axe.eval(expr) {
+                        Ok(program) => match axe.run(program) {
                             Ok(value) => {
                                 // Only print non-null values
-                                if !matches!(value, axe::Value::Null) {
+                                if !matches!(value, Value::Literal(Literal::Null)) {
                                     println!("=> {}", value);
                                 }
                             }

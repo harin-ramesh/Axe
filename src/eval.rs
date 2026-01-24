@@ -99,6 +99,7 @@ pub enum Operation {
     Mod,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum UnaryOp {
     Neg, // -x
@@ -382,6 +383,7 @@ fn is_valid_var_name(name: &str) -> bool {
     re.is_match(name)
 }
 
+#[allow(dead_code)]
 pub struct Axe {
     globals: EnvRef,
     transformer: Transformer,
@@ -570,6 +572,7 @@ impl Axe {
         Ok(func_value)
     }
 
+    #[allow(dead_code)]
     fn eval_function_call(
         &self,
         name: String,

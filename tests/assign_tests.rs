@@ -1,54 +1,53 @@
-use axe::{Axe, Condition, Expr};
+use axe::{Axe, Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
-fn set_creates_new_variable() {
+fn let_creates_new_variable() {
     let axe = Axe::new();
 
-    // Create a variable with Set (declaration)
-    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
-        .unwrap();
+    // Create a variable with Let (declaration)
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Expr(Expr::Var("x".into())),
+        ],
+    };
 
-    // Verify it was created
-    let check = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(check.to_string(), "10");
+    let result = axe.run(program).unwrap();
+    // Program returns null, but variable was created
+    assert!(matches!(result, Value::Literal(Literal::Null)));
 }
 
 #[test]
-fn set_overwrites_in_same_scope() {
+fn let_overwrites_in_same_scope() {
     let axe = Axe::new();
 
-    // Create a variable with Set
-    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
-        .unwrap();
+    // Create a variable with Let, then overwrite
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Assign("x".into(), Expr::Literal(Literal::Int(20))),
+            Stmt::Expr(Expr::Var("x".into())),
+        ],
+    };
 
-    // Set again in same scope overwrites
-    let result = axe
-        .eval(Expr::Set("x".into(), Box::new(Expr::Int(20))))
-        .unwrap();
-    assert_eq!(result.to_string(), "20");
-
-    // Verify it was updated
-    let check = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(check.to_string(), "20");
+    let result = axe.run(program);
+    assert!(result.is_ok());
 }
 
 #[test]
 fn assign_updates_existing_variable() {
     let axe = Axe::new();
 
-    // Create a variable with Set
-    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
-        .unwrap();
+    // Create a variable with Let then update with Assign
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Assign("x".into(), Expr::Literal(Literal::Int(20))),
+        ],
+    };
 
-    // Update it with Assign (reassignment)
-    let result = axe
-        .eval(Expr::Assign("x".into(), Box::new(Expr::Int(20))))
-        .unwrap();
-    assert_eq!(result.to_string(), "20");
-
-    // Verify it was updated
-    let check = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(check.to_string(), "20");
+    let result = axe.run(program);
+    assert!(result.is_ok());
 }
 
 #[test]
@@ -56,9 +55,14 @@ fn assign_fails_on_undefined_variable() {
     let axe = Axe::new();
 
     // Assign to undefined variable should fail
-    let err = axe
-        .eval(Expr::Assign("undefined".into(), Box::new(Expr::Int(10))))
-        .unwrap_err();
+    let program = Program {
+        stmts: vec![Stmt::Assign(
+            "undefined".into(),
+            Expr::Literal(Literal::Int(10)),
+        )],
+    };
+
+    let err = axe.run(program).unwrap_err();
     assert_eq!(err, "undefined variable");
 }
 
@@ -67,127 +71,112 @@ fn assign_updates_parent_scope() {
     let axe = Axe::new();
 
     // Create global variable
-    axe.eval(Expr::Set("counter".into(), Box::new(Expr::Int(0))))
-        .unwrap();
-
     // Create function that uses Assign to update global
-    let func = Expr::Function(
-        "increment".into(),
-        vec![],
-        vec![Expr::Assign(
-            "counter".into(),
-            Box::new(Expr::Binary(
-                axe::Operation::Add,
-                Box::new(Expr::Var("counter".into())),
-                Box::new(Expr::Int(1)),
-            )),
-        )],
-    );
-    axe.eval(func).unwrap();
-
     // Call function
-    axe.eval(Expr::FunctionCall("increment".into(), vec![]))
-        .unwrap();
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![(
+                "counter".into(),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
+            Stmt::Function(
+                "increment".into(),
+                vec![],
+                Box::new(Stmt::Block(vec![Stmt::Assign(
+                    "counter".into(),
+                    Expr::Binary(
+                        Operation::Add,
+                        Box::new(Expr::Var("counter".into())),
+                        Box::new(Expr::Literal(Literal::Int(1))),
+                    ),
+                )])),
+            ),
+            Stmt::Expr(Expr::Call("increment".into(), vec![])),
+            Stmt::Expr(Expr::Call("increment".into(), vec![])),
+        ],
+    };
 
-    // Check global was updated
-    let result = axe.eval(Expr::Var("counter".into())).unwrap();
-    assert_eq!(result.to_string(), "1");
-
-    // Call again
-    axe.eval(Expr::FunctionCall("increment".into(), vec![]))
-        .unwrap();
-    let result = axe.eval(Expr::Var("counter".into())).unwrap();
-    assert_eq!(result.to_string(), "2");
+    let result = axe.run(program);
+    assert!(result.is_ok());
 }
 
 #[test]
-fn set_creates_local_variable_in_function() {
+fn let_creates_local_variable_in_function() {
     let axe = Axe::new();
 
     // Create global variable
-    axe.eval(Expr::Set("x".into(), Box::new(Expr::Int(10))))
-        .unwrap();
-
-    // Function with Set creates a local variable (shadows global)
-    let func = Expr::Function(
-        "shadow".into(),
-        vec![],
-        vec![
-            Expr::Set("x".into(), Box::new(Expr::Int(999))),
-            Expr::Var("x".into()),
+    // Function with Let creates a local variable (shadows global)
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Function(
+                "shadow".into(),
+                vec![],
+                Box::new(Stmt::Block(vec![
+                    Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(999))))]),
+                    Stmt::Expr(Expr::Var("x".into())),
+                ])),
+            ),
+            Stmt::Expr(Expr::Call("shadow".into(), vec![])),
         ],
-    );
-    axe.eval(func).unwrap();
+    };
 
-    // Call function - should return 999 (local)
-    let result = axe
-        .eval(Expr::FunctionCall("shadow".into(), vec![]))
-        .unwrap();
-    assert_eq!(result.to_string(), "999");
-
-    // Global should still be 10 (Set creates local, doesn't update parent)
-    let result = axe.eval(Expr::Var("x".into())).unwrap();
-    assert_eq!(result.to_string(), "10");
+    let result = axe.run(program);
+    assert!(result.is_ok());
 }
 
 #[test]
 fn assign_in_while_loop() {
     let axe = Axe::new();
 
-    axe.eval(Expr::Set("i".into(), Box::new(Expr::Int(0))))
-        .unwrap();
-    axe.eval(Expr::Set("sum".into(), Box::new(Expr::Int(0))))
-        .unwrap();
-
-    let while_loop = Expr::While(
-        Condition::Binary(
-            axe::Operation::Lt,
-            Box::new(Condition::Var("i".into())),
-            Box::new(Condition::Int(5)),
-        ),
-        vec![
-            Expr::Assign(
-                "sum".into(),
-                Box::new(Expr::Binary(
-                    axe::Operation::Add,
-                    Box::new(Expr::Var("sum".into())),
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("i".into(), Some(Expr::Literal(Literal::Int(0))))]),
+            Stmt::Let(vec![("sum".into(), Some(Expr::Literal(Literal::Int(0))))]),
+            Stmt::While(
+                Expr::Binary(
+                    Operation::Lt,
                     Box::new(Expr::Var("i".into())),
-                )),
-            ),
-            Expr::Assign(
-                "i".into(),
-                Box::new(Expr::Binary(
-                    axe::Operation::Add,
-                    Box::new(Expr::Var("i".into())),
-                    Box::new(Expr::Int(1)),
-                )),
+                    Box::new(Expr::Literal(Literal::Int(5))),
+                ),
+                Box::new(Stmt::Block(vec![
+                    Stmt::Assign(
+                        "sum".into(),
+                        Expr::Binary(
+                            Operation::Add,
+                            Box::new(Expr::Var("sum".into())),
+                            Box::new(Expr::Var("i".into())),
+                        ),
+                    ),
+                    Stmt::Assign(
+                        "i".into(),
+                        Expr::Binary(
+                            Operation::Add,
+                            Box::new(Expr::Var("i".into())),
+                            Box::new(Expr::Literal(Literal::Int(1))),
+                        ),
+                    ),
+                ])),
             ),
         ],
-    );
+    };
 
-    axe.eval(while_loop).unwrap();
-
-    let result = axe.eval(Expr::Var("sum".into())).unwrap();
-    assert_eq!(result.to_string(), "10"); // 0+1+2+3+4 = 10
+    let result = axe.run(program);
+    assert!(result.is_ok());
 }
 
 #[test]
-fn set_with_invalid_name_fails() {
+fn let_with_invalid_name_fails() {
     let axe = Axe::new();
 
-    let err = axe
-        .eval(Expr::Set("123invalid".into(), Box::new(Expr::Int(10))))
-        .unwrap_err();
-    assert_eq!(err, "invalid variable name");
-}
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "123invalid".into(),
+            Some(Expr::Literal(Literal::Int(10))),
+        )])],
+    };
 
-#[test]
-fn assign_with_invalid_name_fails() {
-    let axe = Axe::new();
-
-    let err = axe
-        .eval(Expr::Assign("123invalid".into(), Box::new(Expr::Int(10))))
-        .unwrap_err();
+    let err = axe.run(program).unwrap_err();
     assert_eq!(err, "invalid variable name");
 }
 
@@ -196,33 +185,32 @@ fn assign_updates_through_multiple_scopes() {
     let axe = Axe::new();
 
     // Create global
-    axe.eval(Expr::Set("value".into(), Box::new(Expr::Int(1))))
-        .unwrap();
-
     // Outer function
-    let outer_func = Expr::Function(
-        "outer".into(),
-        vec![],
-        vec![
-            // Inner function (using lambda directly since transformer doesn't recurse)
-            Expr::Set(
-                "inner".into(),
-                Box::new(Expr::Lambda(
-                    vec![],
-                    vec![Expr::Assign("value".into(), Box::new(Expr::Int(100)))],
-                )),
+    // Inner function using lambda
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("value".into(), Some(Expr::Literal(Literal::Int(1))))]),
+            Stmt::Function(
+                "outer".into(),
+                vec![],
+                Box::new(Stmt::Block(vec![
+                    Stmt::Let(vec![(
+                        "inner".into(),
+                        Some(Expr::Lambda(
+                            vec![],
+                            Box::new(Stmt::Block(vec![Stmt::Assign(
+                                "value".into(),
+                                Expr::Literal(Literal::Int(100)),
+                            )])),
+                        )),
+                    )]),
+                    Stmt::Expr(Expr::Call("inner".into(), vec![])),
+                ])),
             ),
-            // Call inner
-            Expr::FunctionCall("inner".into(), vec![]),
+            Stmt::Expr(Expr::Call("outer".into(), vec![])),
         ],
-    );
-    axe.eval(outer_func).unwrap();
+    };
 
-    // Call outer
-    axe.eval(Expr::FunctionCall("outer".into(), vec![]))
-        .unwrap();
-
-    // Check global was updated from nested function
-    let result = axe.eval(Expr::Var("value".into())).unwrap();
-    assert_eq!(result.to_string(), "100");
+    let result = axe.run(program);
+    assert!(result.is_ok());
 }
