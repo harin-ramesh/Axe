@@ -101,7 +101,7 @@ pub enum Operation {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum UnaryOp {
-    Neg,  // -x
+    Neg, // -x
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -110,9 +110,9 @@ pub enum Expr {
     List(Vec<Expr>),
     Var(String),
     Binary(Operation, Box<Expr>, Box<Expr>),
-    Unary(UnaryOp, Box<Expr>),
+    // Unary(UnaryOp, Box<Expr>),
     Call(String, Vec<Expr>),
-    Lambda(Vec<String>, Vec<Stmt>),
+    Lambda(Vec<String>, Box<Stmt>),
     Property(Box<Expr>, String),
     New(String, Vec<Expr>),
 }
@@ -121,19 +121,19 @@ pub enum Expr {
 pub enum Stmt {
     Expr(Expr),
     Block(Vec<Stmt>),
-    Let(Vec<String, Option<Expr>>),
+    Let(Vec<(String, Option<Expr>)>),
     Assign(String, Expr),
     If(Expr, Box<Stmt>, Box<Stmt>),
-    While(Expr, Stmt),
+    While(Expr, Box<Stmt>),
     Function(String, Vec<String>, Box<Stmt>),
-    Class(String, Option<String>, Box<Stmt>),
+    Class(String, Option<String>, Vec<Stmt>),
 }
 
 #[derive(Debug)]
 pub enum Value {
     Literal(Literal),
     List(Vec<Value>),
-    Function(Vec<String>, Vec<Stmt>, EnvRef),
+    Function(Vec<String>, Box<Stmt>, EnvRef),
     NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>),
     Object(EnvRef),
 }
@@ -179,18 +179,6 @@ impl std::fmt::Display for Value {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Condition {
-    Null,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Str(String),
-    Binary(Operation, Box<Condition>, Box<Condition>),
-    Var(String),
-    FunctionCall(String, Vec<Condition>),
-}
-
 fn native_print(args: &[Value]) -> Result<Value, &'static str> {
     for (i, arg) in args.iter().enumerate() {
         if i > 0 {
@@ -204,7 +192,7 @@ fn native_print(args: &[Value]) -> Result<Value, &'static str> {
                 } else {
                     print!("{}", arg);
                 }
-            },
+            }
             _ => print!("{}", arg),
         }
     }
@@ -218,12 +206,10 @@ fn native_len(args: &[Value]) -> Result<Value, &'static str> {
     }
     match &args[0] {
         Value::List(items) => Ok(Value::Literal(Literal::Int(items.len() as i64))),
-        Value::Literal(s) => {
-            match s {
-                Literal::Str(s) => Ok(Value::Literal(Literal::Int(s.len() as i64))),
-                _ => Err("len expects a list or string"),
-            }
-        }
+        Value::Literal(s) => match s {
+            Literal::Str(s) => Ok(Value::Literal(Literal::Int(s.len() as i64))),
+            _ => Err("len expects a list or string"),
+        },
         _ => Err("len expects a list or string"),
     }
 }
@@ -247,19 +233,17 @@ fn native_get(args: &[Value]) -> Result<Value, &'static str> {
         return Err("get expects exactly 2 arguments");
     }
     match (&args[0], &args[1]) {
-        (Value::List(items), Value::Literal(i)) => {
-            match i {
-                Literal::Int(idx) => {
-                    let index = if *idx < 0 {
-                        (items.len() as i64 + idx) as usize
-                    } else {
-                        *idx as usize
-                    };
-                    items.get(index).cloned().ok_or("index out of bounds")
-                }
-                _ => Err("get expects an integer index as second argument"),
+        (Value::List(items), Value::Literal(i)) => match i {
+            Literal::Int(idx) => {
+                let index = if *idx < 0 {
+                    (items.len() as i64 + idx) as usize
+                } else {
+                    *idx as usize
+                };
+                items.get(index).cloned().ok_or("index out of bounds")
             }
-        }
+            _ => Err("get expects an integer index as second argument"),
+        },
         _ => Err("get expects a list and an integer index"),
     }
 }
@@ -291,26 +275,26 @@ fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
 
     // Check if first argument is a string or list
     match &args[0] {
-        Value::Literal(s) => {
-            match s {
-                Literal::Str(_) => {
-                    let mut result = String::new();
-                    for arg in args {
-                        match arg {
-                            Value::Literal(s) => {
-                                match s {
-                                    Literal::Str(s) => result.push_str(s),
-                                    _ => return Err("concat on strings requires all arguments to be strings"),
-                                }
+        Value::Literal(s) => match s {
+            Literal::Str(_) => {
+                let mut result = String::new();
+                for arg in args {
+                    match arg {
+                        Value::Literal(s) => match s {
+                            Literal::Str(s) => result.push_str(s),
+                            _ => {
+                                return Err(
+                                    "concat on strings requires all arguments to be strings",
+                                )
                             }
-                            _ => return Err("concat on strings requires all arguments to be strings"),
-                        }
+                        },
+                        _ => return Err("concat on strings requires all arguments to be strings"),
                     }
-                    Ok(Value::Literal(Literal::Str(result)))
                 }
-                _ => Err("concat expects strings or lists"),
+                Ok(Value::Literal(Literal::Str(result)))
             }
-        }
+            _ => Err("concat expects strings or lists"),
+        },
         Value::List(_) => {
             // Concatenate lists
             let mut result = Vec::new();
@@ -328,40 +312,34 @@ fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
 
 fn native_range(args: &[Value]) -> Result<Value, &'static str> {
     match args.len() {
-        1 => {
-            match &args[0] {
-                Value::Literal(n) => {
-                    match n {
-                        Literal::Int(n_val) => {
-                            if *n_val < 0 {
-                                return Err("range expects non-negative integer");
-                            }
-                            let values: Vec<Value> = (0..*n_val)
-                                .map(|i| Value::Literal(Literal::Int(i))) 
-                                .collect();
-
-                            Ok(Value::List(values))
-                        }
-                        _ => Err("range expects integer argument"),
+        1 => match &args[0] {
+            Value::Literal(n) => match n {
+                Literal::Int(n_val) => {
+                    if *n_val < 0 {
+                        return Err("range expects non-negative integer");
                     }
+                    let values: Vec<Value> = (0..*n_val)
+                        .map(|i| Value::Literal(Literal::Int(i)))
+                        .collect();
+
+                    Ok(Value::List(values))
                 }
                 _ => Err("range expects integer argument"),
-            }
-        }
+            },
+            _ => Err("range expects integer argument"),
+        },
         2 => {
             // range(start, end) -> [start, start+1, ..., end-1]
             match (&args[0], &args[1]) {
-                (Value::Literal(s), Value::Literal(e)) => {
-                    match(s, e) {
-                        (Literal::Int(start), Literal::Int(end)) => {
-                            let values: Vec<Value> = (*start..*end)
-                                .map(|i| Value::Literal(Literal::Int(i)))
-                                .collect();
-                            Ok(Value::List(values))
-                        }
-                        _ => Err("range expects integer arguments"),
+                (Value::Literal(s), Value::Literal(e)) => match (s, e) {
+                    (Literal::Int(start), Literal::Int(end)) => {
+                        let values: Vec<Value> = (*start..*end)
+                            .map(|i| Value::Literal(Literal::Int(i)))
+                            .collect();
+                        Ok(Value::List(values))
                     }
-                }
+                    _ => Err("range expects integer arguments"),
+                },
                 _ => Err("range expects integer arguments"),
             }
         }
@@ -453,11 +431,7 @@ impl Axe {
         self.eval_program(program, None)
     }
 
-    pub fn eval_in_env(&self, program: Program, env: EnvRef) -> Result<Value, &'static str> {
-        self.eval_with_env(program, Some(env))
-    }
-
-    fn program(&self, program: Program, env: Option<EnvRef>) -> Result<Value, &'static str> {
+    fn eval_program(&self, program: Program, env: Option<EnvRef>) -> Result<Value, &'static str> {
         let env = env.unwrap_or_else(|| self.globals.clone());
         for stmt in program.stmts {
             self.eval_stmt(stmt, Some(env.clone()))?;
@@ -466,32 +440,38 @@ impl Axe {
     }
 
     fn eval_stmt(&self, stmt: Stmt, env: Option<EnvRef>) -> Result<Value, &'static str> {
-        let env = env.unwrap_or_else(|| self.globals.clone()); 
+        let env = env.unwrap_or_else(|| self.globals.clone());
 
         match stmt {
             Stmt::Expr(expr) => self.eval_expr(expr, Some(env)),
             Stmt::Block(exprs) => self.eval_block(exprs, env),
             Stmt::Let(expr) => self.eval_let(expr, env),
             Stmt::Assign(name, expr) => self.eval_assign(name, expr, env),
-            Stmt::If(condition, then_branch, else_branch) => self.eval_if(condition, then_branch, else_branch, env),
+            Stmt::If(condition, then_branch, else_branch) => {
+                self.eval_if(condition, then_branch, else_branch, env)
+            }
             Stmt::While(condition, body) => self.eval_while(condition, body, env),
-            Stmt::Function(name, params, body) => self.eval_fnction(name, params, body, env),
+            Stmt::Function(name, params, body) => self.eval_function(name, params, body, env),
             Stmt::Class(name, parent, body) => self.eval_class(name, parent, body, env),
         }
     }
 
-    fn eval_let(&self, declarations: Vec<String, Option<Expr>>, env: EnvRef) -> Result<Value, &'static str> {
+    fn eval_let(
+        &self,
+        declarations: Vec<(String, Option<Expr>)>,
+        env: EnvRef,
+    ) -> Result<Value, &'static str> {
         for decl in declarations {
             let (name, expr_opt) = decl;
-            if !Self::is_valid_var_name(&name) {
+            if !is_valid_var_name(&name) {
                 return Err("invalid variable name");
             }
             let value = if let Some(expr) = expr_opt {
-                self.eval_with_env(expr, Some(env.clone()))?
+                self.eval_expr(expr, Some(env.clone()))?
             } else {
                 Value::Literal(Literal::Null)
             };
-            env.borrow_mut().set(name, value);
+            env.borrow_mut().set(name.to_string(), value);
         }
         Ok(Value::Literal(Literal::Null))
     }
@@ -505,46 +485,41 @@ impl Axe {
     fn eval_if(
         &self,
         condition: Expr,
-        then_branch: Vec<Stmt>,
-        else_branch: Vec<Stmt>,
+        then_branch: Box<Stmt>,
+        else_branch: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-        let cond_value = self.eval_condition(condition, Some(env.clone()))?;
+        let cond_value = self.eval_expr(condition, Some(env.clone()))?;
 
-        // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
         let is_truthy = match cond_value {
-            Value::Null => false,
+            Value::Literal(Literal::Null) => false,
             Value::Literal(Literal::Bool(b)) => b,
             Value::Literal(Literal::Int(0)) => false,
             Value::Literal(Literal::Float(f)) if f == 0.0 => false,
             _ => true,
         };
 
-        // Evaluate the appropriate branch in current environment
         let branch_exprs = if is_truthy { then_branch } else { else_branch };
-        let mut result = Value::Null;
-        for expr in branch_exprs {
-            result = self.eval_with_env(expr, Some(env.clone()))?;
-        }
+        let result = match branch_exprs.as_ref() {
+            Stmt::Block(stmts) => self.eval_block(stmts.clone(), env.clone())?,
+            _ => {
+                return Err("Ivalid if branch");
+            }
+        };
         Ok(result)
     }
 
     fn eval_while(
         &self,
         condition: Expr,
-        body: Vec<Stmt>,
+        body: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-        // Don't create a new scope - execute in the current environment
-        // This allows loop variables to be updated
-        let mut result = Value::Null;
-
         loop {
-            let cond_value = self.eval_with_env(condition.clone(), Some(env.clone()))?;
+            let cond_value = self.eval_expr(condition.clone(), Some(env.clone()))?;
 
-            // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
             let is_truthy = match cond_value {
-                Value::Null => false,
+                Value::Literal(Literal::Null) => false,
                 Value::Literal(Literal::Bool(b)) => b,
                 Value::Literal(Literal::Int(0)) => false,
                 Value::Literal(Literal::Float(f)) if f == 0.0 => false,
@@ -555,41 +530,41 @@ impl Axe {
                 break;
             }
 
-            // Execute loop body in current environment
-            for expr in &body {
-                result = self.eval_with_env(expr.clone(), Some(env.clone()))?;
-            }
+            match body.as_ref() {
+                Stmt::Block(stmts) => {
+                    self.eval_block(stmts.clone(), env.clone())?;
+                }
+                _ => {
+                    return Err("Ivalid if branch");
+                }
+            };
         }
 
+        Ok(Value::Literal(Literal::Null))
+    }
+
+    fn eval_block(&self, stmts: Vec<Stmt>, env: EnvRef) -> Result<Value, &'static str> {
+        let mut result = Value::Literal(Literal::Null);
+        for stmt in stmts {
+            result = self.eval_stmt(stmt, Some(env.clone()))?;
+        }
         Ok(result)
     }
 
-    fn eval_block(&self, exprs: Vec<Stmt>, env: EnvRef) -> Result<Value, &'static str> {
-        let mut result = Value::Null; // default value for empty block
-        for expr in exprs {
-            result = self.eval_with_env(expr, Some(env.clone()))?;
-        }
-        Ok(result)
-    }
-
-    fn eval_fnction(
+    fn eval_function(
         &self,
         name: String,
         params: Vec<String>,
-        body: Vec<Stmt>,
+        body: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-        // Validate parameter names
         for param in &params {
-            if !Self::is_valid_var_name(param) {
+            if !is_valid_var_name(param) {
                 return Err("invalid parameter name");
             }
         }
 
-        // Create a closure capturing the current environment
         let func_value = Value::Function(params.clone(), body.clone(), env.clone());
-
-        // Declare the function in the current environment
         env.borrow_mut().set(name, func_value.clone());
 
         Ok(func_value)
@@ -601,55 +576,55 @@ impl Axe {
         args: Vec<Expr>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-        // Get the function from the environment
         let func = env.borrow().get(&name).ok_or("undefined function")?;
 
         match func {
             Value::Function(params, body, closure_env) => {
-                // Check argument count
                 if params.len() != args.len() {
                     return Err("argument count mismatch");
                 }
 
-                // Evaluate arguments in the caller's environment
                 let mut arg_values = Vec::new();
                 for arg in args {
-                    arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                    arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                 }
 
-                // Create a new environment extending the closure environment
                 let func_env = Environment::extend(closure_env);
 
-                // Bind parameters to argument values
                 for (param, value) in params.iter().zip(arg_values.iter()) {
                     func_env.borrow_mut().set(param.clone(), value.clone());
                 }
 
-                // Execute function body
-                let mut result = Value::Null;
-                for expr in &body {
-                    result = self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
-                }
-
+                let result = self.eval_block(
+                    match *body {
+                        Stmt::Block(stmts) => stmts,
+                        _ => return Err("function body must be a block"),
+                    },
+                    func_env,
+                )?;
                 Ok(result)
             }
             Value::NativeFunction(_, native_fn) => {
-                // Evaluate arguments in the caller's environment
                 let mut arg_values = Vec::new();
                 for arg in args {
-                    arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                    arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                 }
 
-                // Call the native function
                 native_fn(&arg_values)
             }
             _ => Err("not a function"),
         }
     }
 
-    fn eval_class(&self, name: String, parent: Option<String>, body: Vec<Stmt>, env: EnvRef) -> Result<Value, &'static str> {
+    fn eval_class(
+        &self,
+        name: String,
+        parent: Option<String>,
+        body: Vec<Stmt>,
+        _env: EnvRef,
+    ) -> Result<Value, &'static str> {
         let class_env = if let Some(p) = parent {
-            if let Some(Value::Environment(p_env)) = self.globals.borrow().get(&p) {
+            if let Some(Value::Object(p_env)) = self.globals.borrow().get(&p) {
                 Environment::extend(p_env.clone())
             } else {
                 return Err("Parent class not found");
@@ -659,25 +634,21 @@ impl Axe {
         };
         self.globals
             .borrow_mut()
-            .set(name, Value::Environment(class_env.clone()));
+            .set(name, Value::Object(class_env.clone()));
 
         for expr in body {
             match expr {
-                Stmt::Expr(Expr::Set(name, expr)) => {
-                    if !Self::is_valid_var_name(&name) {
-                        return Err("invalid variable name");
-                    }
-                    let value = self.eval_with_env(*expr, Some(class_env.clone()))?;
-                    // Declare class field (overrides parent field if exists)
-                    class_env.borrow_mut().set(name, value.clone());
+                Stmt::Let(decls) => {
+                    self.eval_let(decls, class_env.clone())?;
                 }
                 Stmt::Function(name, params, body) => {
-                    let transformed = self
-                        .transformer
-                        .transform(Expr::Function(name, params, body));
-                    self.eval_with_env(transformed, Some(class_env.clone()))?;
+                    self.eval_function(name, params, body, class_env.clone())?;
                 }
                 _ => return Err("Invalid class definition"),
+            }
+        }
+
+        Ok(Value::Literal(Literal::Null))
     }
 
     fn eval_expr(&self, expr: Expr, env: Option<EnvRef>) -> Result<Value, &'static str> {
@@ -689,124 +660,23 @@ impl Axe {
                 // Evaluate each element and create a list
                 let mut values = Vec::new();
                 for elem in elements {
-                    values.push(self.eval_with_env(elem, Some(env.clone()))?);
+                    values.push(self.eval_expr(elem, Some(env.clone()))?);
                 }
                 Ok(Value::List(values))
             }
 
-            Expr::Var(name) => {
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid variable name");
-                }
-                env.borrow().get(&name).ok_or("undefined variable")
-            }
-
-            Expr::Set(name, expr) => {
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid variable name");
-                }
-                let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                // Declare/create a new variable in current scope
-                env.borrow_mut().set(name, value.clone());
-                Ok(value)
-            }
-            Expr::Let(declarations) => {
-
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid variable name");
-                }
-                let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                // Declare/create a new variable in current scope
-                env.borrow_mut().set(name, value.clone());
-                Ok(value)
-
-                let mut last_value = Value::Literal(Literal::Null);
-                for decl in declarations {
-                    last_value = self.eval_with_env(decl, Some(env.clone()))?;
-                }
-                Ok(last_value)
-            }
-            Expr::Assign(name, expr) => {
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid variable name");
-                }
-                let value = self.eval_with_env(*expr, Some(env.clone()))?;
-                // Update existing variable (searches parent scopes)
-                env.borrow_mut().update(name.clone(), value.clone())?;
-                Ok(value)
-            }
+            Expr::Var(name) => env.borrow().get(&name).ok_or("undefined variable"),
 
             Expr::Binary(op, lhs, rhs) => {
-                let left = self.eval_with_env(*lhs, Some(env.clone()))?;
-                let right = self.eval_with_env(*rhs, Some(env))?;
+                let left = self.eval_expr(*lhs, Some(env.clone()))?;
+                let right = self.eval_expr(*rhs, Some(env))?;
                 Self::eval_binary(op, left, right)
-            }
-
-            Expr::Block(exprs) => {
-                // Don't create a new scope - execute in the current environment
-                // This allows variables to be updated within blocks
-                let mut result = Value::Null; // default value for empty block
-                for expr in exprs {
-                    result = self.eval_with_env(expr, Some(env.clone()))?;
-                }
-                Ok(result)
-            }
-
-            Expr::If(condition, then_branch, else_branch) => {
-                let cond_value = self.eval_condition(condition, Some(env.clone()))?;
-
-                // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
-                let is_truthy = match cond_value {
-                    Value::Null => false,
-                    Value::Bool(b) => b,
-                    Value::Int(0) => false,
-                    Value::Float(f) if f == 0.0 => false,
-                    _ => true,
-                };
-
-                // Evaluate the appropriate branch in current environment
-                let branch_exprs = if is_truthy { then_branch } else { else_branch };
-                let mut result = Value::Null;
-                for expr in branch_exprs {
-                    result = self.eval_with_env(expr, Some(env.clone()))?;
-                }
-                Ok(result)
-            }
-
-            Expr::While(condition, body) => {
-                // Don't create a new scope - execute in the current environment
-                // This allows loop variables to be updated
-                let mut result = Value::Null;
-
-                loop {
-                    let cond_value = self.eval_condition(condition.clone(), Some(env.clone()))?;
-
-                    // Determine truthiness: Null, Bool(false), Int(0), and Float(0.0) are falsy
-                    let is_truthy = match cond_value {
-                        Value::Null => false,
-                        Value::Bool(b) => b,
-                        Value::Int(0) => false,
-                        Value::Float(f) if f == 0.0 => false,
-                        _ => true,
-                    };
-
-                    if !is_truthy {
-                        break;
-                    }
-
-                    // Execute loop body in current environment
-                    for expr in &body {
-                        result = self.eval_with_env(expr.clone(), Some(env.clone()))?;
-                    }
-                }
-
-                Ok(result)
             }
 
             Expr::Lambda(params, body) => {
                 // Validate parameter names
                 for param in &params {
-                    if !Self::is_valid_var_name(param) {
+                    if is_valid_var_name(param) {
                         return Err("invalid parameter name");
                     }
                 }
@@ -817,39 +687,7 @@ impl Axe {
                 Ok(func_value)
             }
 
-            Expr::Function(name, params, body) => {
-                // Transform syntactic sugar: (fn name params body) -> (let name (lambda params body))
-                // Then evaluate the transformed expression
-                let transformed = self
-                    .transformer
-                    .transform(Expr::Function(name, params, body));
-                self.eval_with_env(transformed, Some(env))
-            }
-
-            Expr::Inc(var) => {
-                // Transform syntactic sugar: i++ -> (let i (+ i 1))
-                // Then evaluate the transformed expression
-                let transformed = self.transformer.transform(Expr::Inc(var));
-                self.eval_with_env(transformed, Some(env))
-            }
-
-            Expr::Dec(var) => {
-                // Transform syntactic sugar: i-- -> (let i (- i 1))
-                // Then evaluate the transformed expression
-                let transformed = self.transformer.transform(Expr::Dec(var));
-                self.eval_with_env(transformed, Some(env))
-            }
-
-            Expr::For(init, condition, update, body) => {
-                // Transform syntactic sugar: for loop -> while loop
-                // Then evaluate the transformed expression
-                let transformed = self
-                    .transformer
-                    .transform(Expr::For(init, condition, update, body));
-                self.eval_with_env(transformed, Some(env))
-            }
-
-            Expr::FunctionCall(name, args) => {
+            Expr::Call(name, args) => {
                 // Get the function from the environment
                 let func = env.borrow().get(&name).ok_or("undefined function")?;
 
@@ -863,7 +701,7 @@ impl Axe {
                         // Evaluate arguments in the caller's environment
                         let mut arg_values = Vec::new();
                         for arg in args {
-                            arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                            arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                         }
 
                         // Create a new environment extending the closure environment
@@ -874,11 +712,13 @@ impl Axe {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
 
-                        // Execute function body
-                        let mut result = Value::Null;
-                        for expr in &body {
-                            result = self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
-                        }
+                        let result = self.eval_block(
+                            match *body {
+                                Stmt::Block(stmts) => stmts,
+                                _ => return Err("function body must be a block"),
+                            },
+                            func_env,
+                        )?;
 
                         Ok(result)
                     }
@@ -886,7 +726,7 @@ impl Axe {
                         // Evaluate arguments in the caller's environment
                         let mut arg_values = Vec::new();
                         for arg in args {
-                            arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                            arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                         }
 
                         // Call the native function
@@ -895,49 +735,12 @@ impl Axe {
                     _ => Err("not a function"),
                 }
             }
-            Expr::Class(name, parent, body) => {
-                let class_env = if let Some(p) = parent {
-                    if let Some(Value::Environment(p_env)) = self.globals.borrow().get(&p) {
-                        Environment::extend(p_env.clone())
-                    } else {
-                        return Err("Parent class not found");
-                    }
-                } else {
-                    Environment::new()
-                };
-                self.globals
-                    .borrow_mut()
-                    .set(name, Value::Environment(class_env.clone()));
-
-                for expr in body {
-                    match expr {
-                        Expr::Set(name, expr) => {
-                            if !Self::is_valid_var_name(&name) {
-                                return Err("invalid variable name");
-                            }
-                            let value = self.eval_with_env(*expr, Some(class_env.clone()))?;
-                            // Declare class field (overrides parent field if exists)
-                            class_env.borrow_mut().set(name, value.clone());
-                        }
-                        Expr::Function(name, params, body) => {
-                            let transformed = self
-                                .transformer
-                                .transform(Expr::Function(name, params, body));
-                            self.eval_with_env(transformed, Some(class_env.clone()))?;
-                        }
-                        _ => return Err("Invalid class definition"),
-                    }
-                }
-
-                Ok(Value::Null)
-            }
             Expr::New(class, args) => {
-                let Some(Value::Environment(class_env)) = self.globals.borrow().get(&class) else {
+                let Some(Value::Object(class_env)) = self.globals.borrow().get(&class) else {
                     return Err("Class not found");
                 };
 
-                //let instance =  Environment::extend(class_env.clone());
-                let instance = Value::Environment(Environment::extend(class_env.clone()));
+                let instance = Value::Object(Environment::extend(class_env.clone()));
 
                 let func = class_env
                     .borrow()
@@ -951,7 +754,7 @@ impl Axe {
 
                     let mut arg_values = Vec::new();
                     for arg in args {
-                        arg_values.push(self.eval_with_env(arg, Some(env.clone()))?);
+                        arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                     }
                     arg_values.insert(0, instance.clone());
 
@@ -959,97 +762,27 @@ impl Axe {
                     for (param, value) in params.iter().zip(arg_values.iter()) {
                         func_env.borrow_mut().set(param.clone(), value.clone());
                     }
-                    for expr in &body {
-                        self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
-                    }
+                    self.eval_block(
+                        match *body {
+                            Stmt::Block(stmts) => stmts,
+                            _ => return Err("function body must be a block"),
+                        },
+                        func_env,
+                    )?;
                 }
 
                 Ok(instance)
             }
-            Expr::Property(instance, name) => {
-                let Some(Value::Environment(instance)) = self.globals.borrow().get(&instance)
-                else {
-                    return Err("Class not found");
+            Expr::Property(obj_expr, name) => {
+                let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
+
+                let Value::Object(obj_env) = obj else {
+                    return Err("Cannot access property on non-object");
                 };
-                match instance.borrow().get(&name) {
+
+                match obj_env.borrow().get(&name) {
                     Some(value) => Ok(value.clone()),
                     None => Err("Property not found"),
-                }
-            }
-        }
-    }
-
-    fn eval_condition(
-        &self,
-        condition: Condition,
-        env: Option<EnvRef>,
-    ) -> Result<Value, &'static str> {
-        let env = env.unwrap_or_else(|| self.globals.clone());
-
-        match condition {
-            Condition::Null => Ok(Value::Null),
-            Condition::Bool(b) => Ok(Value::Bool(b)),
-            Condition::Int(n) => Ok(Value::Int(n)),
-            Condition::Float(f) => Ok(Value::Float(f)),
-            Condition::Str(s) => Ok(Value::Str(s)),
-
-            Condition::Var(name) => {
-                if !Self::is_valid_var_name(&name) {
-                    return Err("invalid variable name");
-                }
-                env.borrow().get(&name).ok_or("undefined variable")
-            }
-
-            Condition::Binary(op, lhs, rhs) => {
-                let left = self.eval_condition(*lhs, Some(env.clone()))?;
-                let right = self.eval_condition(*rhs, Some(env))?;
-                Self::eval_binary(op, left, right)
-            }
-
-            Condition::FunctionCall(name, args) => {
-                // Get the function from the environment
-                let func = env.borrow().get(&name).ok_or("undefined function")?;
-
-                match func {
-                    Value::Function(params, body, closure_env) => {
-                        // Check argument count
-                        if params.len() != args.len() {
-                            return Err("argument count mismatch");
-                        }
-
-                        // Evaluate arguments in the caller's environment
-                        let mut arg_values = Vec::new();
-                        for arg in args {
-                            arg_values.push(self.eval_condition(arg, Some(env.clone()))?);
-                        }
-
-                        // Create a new environment extending the closure environment
-                        let func_env = Environment::extend(closure_env);
-
-                        // Bind parameters to argument values
-                        for (param, value) in params.iter().zip(arg_values.iter()) {
-                            func_env.borrow_mut().set(param.clone(), value.clone());
-                        }
-
-                        // Execute function body
-                        let mut result = Value::Null;
-                        for expr in &body {
-                            result = self.eval_with_env(expr.clone(), Some(func_env.clone()))?;
-                        }
-
-                        Ok(result)
-                    }
-                    Value::NativeFunction(_, native_fn) => {
-                        // Evaluate arguments in the caller's environment
-                        let mut arg_values = Vec::new();
-                        for arg in args {
-                            arg_values.push(self.eval_condition(arg, Some(env.clone()))?);
-                        }
-
-                        // Call the native function
-                        native_fn(&arg_values)
-                    }
-                    _ => Err("not a function"),
                 }
             }
         }
@@ -1060,75 +793,129 @@ impl Axe {
     }
 
     fn eval_binary(op: Operation, left: Value, right: Value) -> Result<Value, &'static str> {
+        use Literal::*;
         use Operation::*;
-        use Value::*;
 
         match (op, left, right) {
             // Int
-            (Add, Int(a), Int(b)) => Ok(Int(a + b)),
-            (Sub, Int(a), Int(b)) => Ok(Int(a - b)),
-            (Mul, Int(a), Int(b)) => Ok(Int(a * b)),
-            (Mod, Int(a), Int(b)) => Ok(Int(a % b)),
-            (Div, Int(a), Int(b)) => {
+            (Add, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a + b))),
+            (Sub, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a - b))),
+            (Mul, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a * b))),
+            (Mod, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a % b))),
+            (Div, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
                 if b == 0 {
                     Err("division by zero")
                 } else {
-                    Ok(Int(a / b))
+                    Ok(Value::Literal(Int(a / b)))
                 }
             }
-            (And, Int(a), Int(b)) => Ok(Bool(a != 0 && b != 0)),
-            (Or, Int(a), Int(b)) => Ok(Bool(a != 0 || b != 0)),
-            (BitwiseAnd, Int(a), Int(b)) => Ok(Int(a & b)),
-            (BitwiseOr, Int(a), Int(b)) => Ok(Int(a | b)),
+            (And, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Bool(a != 0 && b != 0)))
+            }
+            (Or, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Bool(a != 0 || b != 0)))
+            }
+            (BitwiseAnd, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Int(a & b)))
+            }
+            (BitwiseOr, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Int(a | b)))
+            }
 
             // Float
-            (Add, Float(a), Float(b)) => Ok(Float(a + b)),
-            (Sub, Float(a), Float(b)) => Ok(Float(a - b)),
-            (Mul, Float(a), Float(b)) => Ok(Float(a * b)),
-            (Div, Float(a), Float(b)) => {
+            (Add, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Float(a + b)))
+            }
+            (Sub, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Float(a - b)))
+            }
+            (Mul, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Float(a * b)))
+            }
+            (Div, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
                 if b == 0.0 {
                     Err("division by zero")
                 } else {
-                    Ok(Float(a / b))
+                    Ok(Value::Literal(Float(a / b)))
                 }
             }
-            (And, Float(a), Float(b)) => Ok(Bool(a != 0.0 && b != 0.0)),
-            (Or, Float(a), Float(b)) => Ok(Bool(a != 0.0 || b != 0.0)),
+            (And, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a != 0.0 && b != 0.0)))
+            }
+            (Or, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a != 0.0 || b != 0.0)))
+            }
 
             // Comparison operations for Int
-            (Gt, Int(a), Int(b)) => Ok(Bool(a > b)),
-            (Lt, Int(a), Int(b)) => Ok(Bool(a < b)),
-            (Gte, Int(a), Int(b)) => Ok(Bool(a >= b)),
-            (Lte, Int(a), Int(b)) => Ok(Bool(a <= b)),
-            (Eq, Int(a), Int(b)) => Ok(Bool(a == b)),
-            (Neq, Int(a), Int(b)) => Ok(Bool(a != b)),
+            (Gt, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Bool(a > b))),
+            (Lt, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Bool(a < b))),
+            (Gte, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Bool(a >= b)))
+            }
+            (Lte, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Bool(a <= b)))
+            }
+            (Eq, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Bool(a == b)))
+            }
+            (Neq, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Bool(a != b)))
+            }
 
             // Comparison operations for Float
-            (Gt, Float(a), Float(b)) => Ok(Bool(a > b)),
-            (Lt, Float(a), Float(b)) => Ok(Bool(a < b)),
-            (Gte, Float(a), Float(b)) => Ok(Bool(a >= b)),
-            (Lte, Float(a), Float(b)) => Ok(Bool(a <= b)),
-            (Eq, Float(a), Float(b)) => Ok(Bool(a == b)),
-            (Neq, Float(a), Float(b)) => Ok(Bool(a != b)),
+            (Gt, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a > b)))
+            }
+            (Lt, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a < b)))
+            }
+            (Gte, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a >= b)))
+            }
+            (Lte, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a <= b)))
+            }
+            (Eq, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a == b)))
+            }
+            (Neq, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
+                Ok(Value::Literal(Bool(a != b)))
+            }
 
             // Equality operations for String
-            (Eq, Str(ref a), Str(ref b)) => Ok(Bool(a == b)),
-            (Neq, Str(ref a), Str(ref b)) => Ok(Bool(a != b)),
+            (Eq, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
+                Ok(Value::Literal(Bool(a == b)))
+            }
+            (Neq, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
+                Ok(Value::Literal(Bool(a != b)))
+            }
 
-            (And, Str(a), Str(b)) => Ok(Bool(a.len() > 0 && b.len() > 0)),
-            (Or, Str(a), Str(b)) => Ok(Bool(a.len() > 0 || b.len() > 0)),
+            (And, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
+                Ok(Value::Literal(Bool(!a.is_empty() && !b.is_empty())))
+            }
+            (Or, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
+                Ok(Value::Literal(Bool(!a.is_empty() || !b.is_empty())))
+            }
 
             // Logical operations for Bool
-            (And, Bool(a), Bool(b)) => Ok(Bool(a && b)),
-            (Or, Bool(a), Bool(b)) => Ok(Bool(a || b)),
+            (And, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
+                Ok(Value::Literal(Bool(a && b)))
+            }
+            (Or, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
+                Ok(Value::Literal(Bool(a || b)))
+            }
 
             // Equality operations for Bool
-            (Eq, Bool(a), Bool(b)) => Ok(Bool(a == b)),
-            (Neq, Bool(a), Bool(b)) => Ok(Bool(a != b)),
+            (Eq, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
+                Ok(Value::Literal(Bool(a == b)))
+            }
+            (Neq, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
+                Ok(Value::Literal(Bool(a != b)))
+            }
 
             // Cross-type equality checks (always false for Eq, true for Neq)
-            (Eq, _, _) => Ok(Bool(false)),
-            (Neq, _, _) => Ok(Bool(true)),
+            (Eq, _, _) => Ok(Value::Literal(Bool(false))),
+            (Neq, _, _) => Ok(Value::Literal(Bool(true))),
 
             _ => Err("Invalid operation"),
         }
