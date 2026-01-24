@@ -3,7 +3,7 @@
 ## Hello World
 
 ```javascript
-// hello.axe
+// hello.ax
 let message = "Hello, World!";
 ```
 
@@ -151,8 +151,8 @@ let x = 10;
 All examples are in the `examples/` folder:
 
 ```bash
-cargo run --release examples/hello.axe
-cargo run --release examples/fibonacci.axe
-cargo run --release examples/builtins.axe
-cargo run --release examples/scoping_explained.axe
+cargo run --release examples/hello.ax
+cargo run --release examples/fibonacci.ax
+cargo run --release examples/builtins.ax
+cargo run --release examples/scoping_explained.ax
 ```

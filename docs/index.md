@@ -5,7 +5,7 @@ A lightweight programming language interpreter written in Rust, featuring C-like
 ## Features
 
 - C-like syntax with semicolons and braces
-- File execution for `.axe` files
+- File execution for `.ax` files
 - Data types: integers, floats, strings, booleans, null
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
 - Comparisons: `>`, `<`, `>=`, `<=`, `==`, `!=`
