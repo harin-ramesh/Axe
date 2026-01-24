@@ -1,13 +1,28 @@
-; Fibonacci sequence calculator
+// Fibonacci-style calculation (without loops/functions)
+// Demonstrates arithmetic and variable assignment
 
-(fn fibonacci (n)
-  (if (<= n 1)
-    n
-    (+ (fibonacci (- n 1))
-       (fibonacci (- n 2)))))
+let a = 0;
+let b = 1;
 
-(print "Fibonacci sequence:")
-(let i 0)
-(while (< i 10)
-  (print "fib(" i ") =" (fibonacci i))
-  (let i (+ i 1)))
+// Manual fibonacci steps
+let temp = a + b;  // 1
+a = b;
+b = temp;
+
+temp = a + b;      // 2
+a = b;
+b = temp;
+
+temp = a + b;      // 3
+a = b;
+b = temp;
+
+temp = a + b;      // 5
+a = b;
+b = temp;
+
+temp = a + b;      // 8
+a = b;
+b = temp;
+
+// b now contains fib(5) = 8

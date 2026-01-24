@@ -1,13 +1,26 @@
-(let x 10)
+// Scoping Demo
+// Demonstrates block scoping with if statements
 
-(fn foo () x)
+let x = 10;
 
-(fn bar () 
-    (begin 
-        (let x 20)
-        (+ (foo) x)
-    )
-)
+// Blocks create new scopes
+{
+    let y = 20;
+    let z = x + y;  // Can access outer x
+}
 
-(print (bar)) 
-(print (foo))
+// If statements with blocks
+if (x > 5) {
+    let result = x * 2;
+} else {
+    let result = x / 2;
+}
+
+// Nested blocks
+{
+    let outer = 1;
+    {
+        let inner = 2;
+        let sum = outer + inner;
+    }
+}

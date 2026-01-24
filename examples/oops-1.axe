@@ -1,14 +1,15 @@
-(class Point null
-  (begin
-    (fn constructor (self x y)
-      (begin
-        (let (prop self x) x)
-        (let (prop self y) y)))
+// Data structures example (without classes)
+// Simulating a Point with separate variables
 
-    (fn calc (self)
-      (+ (prop self x)
-         (prop self y)))))
-         
-(let p (new Point 10 20))
+let point_x = 10;
+let point_y = 20;
 
-((prop p calc) p)
+// Calculate sum of coordinates
+let sum = point_x + point_y;
+
+// Conditional based on position
+if (point_x > 0) {
+    let quadrant = 1;
+} else {
+    let quadrant = 2;
+}

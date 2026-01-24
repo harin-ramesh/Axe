@@ -1,203 +1,33 @@
-; ============================================================================
-; BUILT-IN FUNCTIONS - Simple Examples
-; ============================================================================
+// Operators and Expressions Demo
 
-(print "╔════════════════════════════════════════════════╗")
-(print "║     AXE BUILT-IN FUNCTIONS - QUICK GUIDE      ║")
-(print "╚════════════════════════════════════════════════╝")
+// Arithmetic operators
+let a = 10 + 5;
+let b = 10 - 5;
+let c = 10 * 5;
+let d = 10 / 5;
+let e = 10 % 3;
 
-; ============================================================================
-; 1. print - Display values
-; ============================================================================
+// Logical operators
+let and_result = true && true;
+let or_result = false || true;
 
-(print "\n━━━ 1. print ━━━")
-(print "Hello World")
-(print "You can print" "multiple" "values")
-(print "Numbers:" 42 3.14)
-(print "Mix types:" "age" 25 "active" true)
+// Bitwise operators
+let band = 5 & 3;
+let bor = 5 | 3;
 
-; ============================================================================
-; 2. len - Get length of list or string
-; ============================================================================
+// Complex expressions
+let result = (10 + 5) * 2;
+let nested = ((1 + 2) * 3) + 4;
 
-(print "\n━━━ 2. len ━━━")
-(print "Length of 'hello':" (len "hello"))
-(print "Length of [1,2,3,4,5]:" (len (list 1 2 3 4 5)))
+// Unary minus
+let negative = -42;
+let diff = 10 - -5;
 
-(let my_list (list 10 20 30))
-(print "my_list has" (len my_list) "elements")
+// Comparison operators work in if conditions
+if (10 > 5) {
+    let x = 1;
+}
 
-; ============================================================================
-; 3. get - Get element from list by index
-; ============================================================================
-
-(print "\n━━━ 3. get ━━━")
-(let numbers (list 100 200 300 400 500))
-
-(print "First element:" (get numbers 0))
-(print "Third element:" (get numbers 2))
-(print "Last element:" (get numbers -1))
-(print "Second to last:" (get numbers -2))
-
-; ============================================================================
-; 4. push - Add element to list (returns new list)
-; ============================================================================
-
-(print "\n━━━ 4. push ━━━")
-(let fruits (list "apple" "banana"))
-(print "Original:" fruits)
-
-(let more_fruits (push fruits "orange"))
-(print "After push:" more_fruits)
-(print "Original unchanged:" fruits)
-
-; ============================================================================
-; 5. type - Get type of value
-; ============================================================================
-
-(print "\n━━━ 5. type ━━━")
-(print "type(42) =" (type 42))
-(print "type(3.14) =" (type 3.14))
-(print "type('hello') =" (type "hello"))
-(print "type(true) =" (type true))
-(print "type(null) =" (type null))
-(print "type([1,2,3]) =" (type (list 1 2 3)))
-
-; ============================================================================
-; 6. concat - Join strings or lists
-; ============================================================================
-
-(print "\n━━━ 6. concat ━━━")
-
-; Strings
-(print "concat('Hello', ' ', 'World'):" (concat "Hello" " " "World"))
-
-(let first_name "John")
-(let last_name "Doe")
-(print "Full name:" (concat first_name " " last_name))
-
-; Lists
-(let list1 (list 1 2 3))
-(let list2 (list 4 5 6))
-(print "concat([1,2,3], [4,5,6]):" (concat list1 list2))
-
-; ============================================================================
-; 7. range - Generate number sequences
-; ============================================================================
-
-(print "\n━━━ 7. range ━━━")
-
-; One argument: range(n) = [0, 1, ..., n-1]
-(print "range(5):" (range 5))
-
-; Two arguments: range(start, end) = [start, ..., end-1]
-(print "range(3, 8):" (range 3 8))
-
-; Three arguments: range(start, end, step)
-(print "range(0, 10, 2):" (range 0 10 2))
-(print "range(10, 0, -1):" (range 10 0 -1))
-
-; ============================================================================
-; PRACTICAL EXAMPLES
-; ============================================================================
-
-(print "╔════════════════════════════════════════════════╗")
-(print "║           PRACTICAL EXAMPLES                   ║")
-(print "╚════════════════════════════════════════════════╝")
-
-; Example 1: Check if list is empty
-(print "\n--- Check if list is empty ---")
-(let empty_list (list))
-(let full_list (list 1 2 3))
-
-(if (== (len empty_list) 0)
-    (print "empty_list is empty")
-    (print "empty_list has items"))
-
-(if (== (len full_list) 0)
-    (print "full_list is empty")
-    (print "full_list has" (len full_list) "items"))
-
-; Example 2: Build a list with a loop
-(print "\n--- Build a list with a loop ---")
-(let squares (list))
-(let i 1)
-(while (<= i 5)
-    (begin
-        (let squares (push squares (* i i)))
-        (let i (+ i 1))))
-(print "Squares of 1-5:" squares)
-
-; Example 3: Sum all elements in a list
-(print "\n--- Sum all elements ---")
-(let nums (range 1 11))
-(print "Numbers:" nums)
-
-(let sum 0)
-(let idx 0)
-(while (< idx (len nums))
-    (begin
-        (let sum (+ sum (get nums idx)))
-        (let idx (+ idx 1))))
-(print "Sum:" sum)
-
-; Example 4: Find maximum in a list
-(print "\n--- Find maximum ---")
-(let values (list 23 67 12 89 45 34))
-(print "Values:" values)
-
-(let max (get values 0))
-(let i 1)
-(while (< i (len values))
-    (begin
-        (let current (get values i))
-        (if (> current max)
-            (let max current)
-            (let max max))
-        (let i (+ i 1))))
-(print "Maximum:" max)
-
-; Example 5: Reverse a list
-(print "\n--- Reverse a list ---")
-(let original (list 1 2 3 4 5))
-(print "Original:" original)
-
-(let reversed (list))
-(let i (- (len original) 1))
-(while (>= i 0)
-    (begin
-        (let reversed (push reversed (get original i)))
-        (let i (- i 1))))
-(print "Reversed:" reversed)
-
-; Example 6: Type checking
-(print "\n--- Type checking ---")
-(fn process (value)
-    (let t (type value))
-    (if (== t "int")
-        (print value "is an integer")
-        (if (== t "string")
-            (print value "is a string")
-            (if (== t "list")
-                (print value "is a list with" (len value) "elements")
-                (print value "is a" t)))))
-
-(process 42)
-(process "hello")
-(process (list 1 2 3))
-(process true)
-
-; Example 7: String builder
-(print "\n--- String builder ---")
-(let words (list "Axe" "is" "awesome"))
-(let sentence "")
-(let i 0)
-(while (< i (len words))
-    (begin
-        (if (> i 0)
-            (let sentence (concat sentence " " (get words i)))
-            (let sentence (get words i)))
-        (let i (+ i 1))))
-(print "Sentence:" sentence)
-
-(print "\n✨ That's all the built-in functions! ✨")
+if (5 == 5) {
+    let y = 2;
+}
