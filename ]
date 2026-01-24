@@ -1,5 +1,6 @@
 use crate::eval::{Expr, Literal, Operation, Program, Stmt};
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
+use crate::Value;
 
 pub struct Parser<'src> {
     tokeniser: Tokeniser<'src>,
@@ -83,7 +84,7 @@ impl<'src> Parser<'src> {
     // DeclarationList
     //  : Declaration
     //  | DeclarationList ',' Declaration
-    fn parse_declarations(&mut self) -> Result<Vec<(String, Option<Expr>)>, &'static str> {
+    fn parse_declarations(&mut self) -> Result<Stmt, &'static str> {
         let mut decls = vec![self.parse_declaration()?];
 
         while let Some(token) = &self.lookahead {
@@ -100,28 +101,28 @@ impl<'src> Parser<'src> {
     // Declaration
     //  : Identifier
     //  | Identifier '=' Expression
-    fn parse_declaration(&mut self) -> Result<(String, Option<Expr>), &'static str> {
+    fn parse_declaration(&mut self) -> Result<Expr, &'static str> {
         let name_token = self.eat(TokenKind::Identifier)?;
         let name = name_token.lexeme.to_string();
         let value = match self.lookahead.map(|t| t.kind) {
-            Some(TokenKind::Comma) => Expr::Literal(Literal::Null),
-            Some(TokenKind::Delimeter) => Expr::Literal(Literal::Null),
+            Some(TokenKind::Comma) => Value::Null,
+            Some(TokenKind::Delimeter) => Value::Null,
             _ => self.parse_declaration_value()?,
         };
-        Ok((name, Some(value)))
+        Ok(Expr::Set(name, Box::new(value)))
     }
 
     // DeclarationValue
     //  : '=' Expression
     fn parse_declaration_value(&mut self) -> Result<Expr, &'static str> {
         self.eat(TokenKind::SimpleAssign)?;
-        self.parse_logical_or_expression()
+        self.parse_expression()
     }
 
     // IfStatement
     //  : 'if' '(' Expression ')' Statements
     //  : 'if' '(' Expression ')' Statements 'else' Statements
-    fn parse_if_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_if_statement(&mut self) -> Result<Expr, &'static str> {
         self.eat(TokenKind::If)?;
         self.eat(TokenKind::LParen)?;
 
@@ -143,18 +144,14 @@ impl<'src> Parser<'src> {
             vec![]
         };
 
-        Ok(Stmt::If(
-            condition,
-            Box::new(Stmt::Block(consequent)),
-            Box::new(Stmt::Block(alternate)),
-        ))
+        Ok(Expr::If(condition, consequent, alternate))
     }
 
     // Condition
-    //  : Expression
-    //  | Expression ('>' | '<' | '>=' | '<=' | '==' | '!=') Expression
-    fn parse_condition(&mut self) -> Result<Expr, &'static str> {
-        let left = self.parse_additive_expression()?;
+    //  : ConditionPrimary
+    //  | ConditionPrimary ('>' | '<' | '>=' | '<=' | '==' | '!=') ConditionPrimary
+    fn parse_condition(&mut self) -> Result<Condition, &'static str> {
+        let left = self.parse_condition_primary()?;
 
         // Check for comparison operator
         if let Some(token) = &self.lookahead {
@@ -170,18 +167,37 @@ impl<'src> Parser<'src> {
 
             if let Some(op) = op {
                 self.eat(token.kind)?;
-                let right = self.parse_additive_expression()?;
-                return Ok(Expr::Binary(op, Box::new(left), Box::new(right)));
+                let right = self.parse_condition_primary()?;
+                return Ok(Condition::Binary(op, Box::new(left), Box::new(right)));
             }
         }
 
         Ok(left)
     }
 
+    // ConditionPrimary - reuses parse_primary and converts to Condition
+    fn parse_condition_primary(&mut self) -> Result<Condition, &'static str> {
+        let expr = self.parse_primary()?;
+        Self::expr_to_condition(expr)
+    }
+
+    // Convert an Expr to a Condition (only certain Expr variants are valid)
+    fn expr_to_condition(expr: Expr) -> Result<Condition, &'static str> {
+        match expr {
+            Expr::Null => Ok(Condition::Null),
+            Expr::Bool(b) => Ok(Condition::Bool(b)),
+            Expr::Int(n) => Ok(Condition::Int(n)),
+            Expr::Float(f) => Ok(Condition::Float(f)),
+            Expr::Str(s) => Ok(Condition::Str(s)),
+            Expr::Var(name) => Ok(Condition::Var(name)),
+            _ => Err("Expression cannot be used as condition"),
+        }
+    }
+
     // BlockStatement
     //  : '{' StatementList '}'
     //  | '{' '}'
-    fn parse_block_statemnt(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_block_statemnt(&mut self) -> Result<Expr, &'static str> {
         self.eat(TokenKind::OpeningBrace)?;
         let block = if self.lookahead.map(|t| t.kind) == Some(TokenKind::ClosingBrace) {
             Stmt::Block(vec![])
@@ -190,12 +206,12 @@ impl<'src> Parser<'src> {
         };
         self.eat(TokenKind::ClosingBrace)?;
 
-        Ok(block)
+        Ok(expr)
     }
 
     // ExpressionStatement
     //  : Expression ';'
-    fn parse_expression_statemnt(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_expression_statemnt(&mut self) -> Result<Expr, &'static str> {
         let expr = self.parse_expression()?;
         self.eat(TokenKind::Delimeter)?;
         Ok(expr)
@@ -203,7 +219,7 @@ impl<'src> Parser<'src> {
 
     // Expression
     //  : AssignmentExpression
-    fn parse_expression(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_expression(&mut self) -> Result<Expr, &'static str> {
         self.parse_assignment_expression()
     }
 
@@ -223,12 +239,12 @@ impl<'src> Parser<'src> {
                     _ => return Err("Invalid left-hand side in assignment"),
                 };
 
-                let right = self.parse_logical_or_expression()?;
-                return Ok(Stmt::Assign(name, right));
+                let right = self.parse_assignment_expression()?;
+                return Ok(Stmt::Assign(name, Box::new(right)));
             }
         }
 
-        Ok(Stmt::Expr(left))
+        Ok(left)
     }
 
     // LogicalOrExpression (lowest precedence of these operators)
@@ -385,7 +401,7 @@ impl<'src> Parser<'src> {
             Some(TokenKind::Identifier) => self.parse_identifier(),
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
-                let expr = self.parse_logical_or_expression()?;
+                let expr = self.parse_expression()?;
                 self.eat(TokenKind::RParen)?;
                 Ok(expr)
             }

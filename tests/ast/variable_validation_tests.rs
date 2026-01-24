@@ -1,0 +1,104 @@
+use axe::{Axe, Expr, Literal, Program, Stmt};
+
+#[test]
+fn valid_variable_names() {
+    let axe = Axe::new();
+
+    // Valid names starting with letter
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(1))))]),
+            Stmt::Let(vec![("myVar".into(), Some(Expr::Literal(Literal::Int(2))))]),
+            Stmt::Let(vec![(
+                "var123".into(),
+                Some(Expr::Literal(Literal::Int(3))),
+            )]),
+            // Valid names starting with underscore
+            Stmt::Let(vec![(
+                "_private".into(),
+                Some(Expr::Literal(Literal::Int(4))),
+            )]),
+            Stmt::Let(vec![("_".into(), Some(Expr::Literal(Literal::Int(5))))]),
+            Stmt::Let(vec![("_123".into(), Some(Expr::Literal(Literal::Int(6))))]),
+            // Valid names with underscores
+            Stmt::Let(vec![(
+                "my_var".into(),
+                Some(Expr::Literal(Literal::Int(7))),
+            )]),
+            Stmt::Let(vec![(
+                "CONSTANT_VALUE".into(),
+                Some(Expr::Literal(Literal::Int(8))),
+            )]),
+        ],
+    };
+
+    let result = axe.run(program);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn invalid_variable_name_starting_with_number() {
+    let axe = Axe::new();
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "123var".into(),
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
+    };
+    let err = axe.run(program).unwrap_err();
+    assert_eq!(err, "invalid variable name");
+}
+
+#[test]
+fn invalid_variable_name_with_special_chars() {
+    let axe = Axe::new();
+
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "my-var".into(),
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
+    };
+    let err = axe.run(program).unwrap_err();
+    assert_eq!(err, "invalid variable name");
+
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "my.var".into(),
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
+    };
+    let err = axe.run(program).unwrap_err();
+    assert_eq!(err, "invalid variable name");
+
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "my var".into(),
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
+    };
+    let err = axe.run(program).unwrap_err();
+    assert_eq!(err, "invalid variable name");
+
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "my@var".into(),
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
+    };
+    let err = axe.run(program).unwrap_err();
+    assert_eq!(err, "invalid variable name");
+}
+
+#[test]
+fn invalid_variable_name_empty() {
+    let axe = Axe::new();
+    let program = Program {
+        stmts: vec![Stmt::Let(vec![(
+            "".into(),
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
+    };
+    let err = axe.run(program).unwrap_err();
+    assert_eq!(err, "invalid variable name");
+}
