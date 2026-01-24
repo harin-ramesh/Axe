@@ -1,3 +1,2 @@
-; Hello World example
-(print "Hello, World!")
-
+// Hello World example
+let message = "Hello, World!";
