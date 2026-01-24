@@ -1,0 +1,14 @@
+(class Point null
+  (begin
+    (fn constructor (self x y)
+      (begin
+        (let (prop self x) x)
+        (let (prop self y) y)))
+
+    (fn calc (self)
+      (+ (prop self x)
+         (prop self y)))))
+         
+(let p (new Point 10 20))
+
+((prop p calc) p)

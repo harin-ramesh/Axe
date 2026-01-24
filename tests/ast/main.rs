@@ -1,0 +1,9 @@
+mod assign_tests;
+mod assignment_tests;
+mod block_tests;
+mod comparison_tests;
+mod eval_tests;
+mod if_tests;
+mod variable_tests;
+mod variable_validation_tests;
+mod while_tests;
