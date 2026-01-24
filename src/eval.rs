@@ -435,10 +435,11 @@ impl Axe {
 
     fn eval_program(&self, program: Program, env: Option<EnvRef>) -> Result<Value, &'static str> {
         let env = env.unwrap_or_else(|| self.globals.clone());
+        let mut result = Value::Literal(Literal::Null);
         for stmt in program.stmts {
-            self.eval_stmt(stmt, Some(env.clone()))?;
+            result = self.eval_stmt(stmt, Some(env.clone()))?;
         }
-        Ok(Value::Literal(Literal::Null))
+        Ok(result)
     }
 
     fn eval_stmt(&self, stmt: Stmt, env: Option<EnvRef>) -> Result<Value, &'static str> {
