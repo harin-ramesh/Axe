@@ -1,32 +1,17 @@
-; Demonstrates the simplified syntax
-; Just use 'let' for both creating and updating variables!
+// Simple Counter Example
+// Demonstrates variable declaration and assignment
 
-(print "Simple Counter Example")
-(print "")
+// Create a counter
+let counter = 0;
 
-; Create a counter using 'let'
-(let counter 0)
-(print "Initial counter:" counter)
+// Update using assignment
+counter = 1;
+counter = 2;
 
-; Update using 'let' - same keyword for create and update!
-(let counter 1)
-(print "After (let counter 1):" counter)
+// Can also use expressions
+counter = counter + 10;
 
-(let counter 2)
-(print "After (let counter 2):" counter)
-
-; Can also use expressions
-(let counter (+ counter 10))
-(print "After (let counter (+ counter 10)):" counter)
-
-; Works in loops too
-(print "")
-(print "Counting from 0 to 5:")
-(let i 0)
-(while (< i 5)
-  (begin
-    (print "  i =" i)
-    (let i (+ i 1))))
-
-(print "")
-(print "Done!")
+// Multiple variables
+let x = 5;
+let y = 10;
+let sum = x + y;

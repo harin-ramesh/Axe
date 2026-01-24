@@ -1,14 +1,8 @@
-; Fibonacci sequence calculator
+// Test file - basic expressions
 
-(let x (fn fibonacci (n)
-  (if (<= n 1)
-    n
-    (+ (fibonacci (- n 1))
-       (fibonacci (- n 2)))))
-)
-(print "Fibonacci sequence:")
-(let i 0)
-(while (< i 10)
-  (print "fib(" i ") =" (x i))
-  (let i (+ i 1)))
+let x = 10;
+let y = 20;
+let z = x + y;
 
+// Reassignment
+x = z * 2;
