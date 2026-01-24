@@ -18,15 +18,15 @@ The binary will be at `./target/release/axe`.
 
 ```bash
 # Using cargo
-cargo run --release <filename>.axe
+cargo run --release <filename>.ax
 
 # Using compiled binary
-./target/release/axe <filename>.axe
+./target/release/axe <filename>.ax
 ```
 
 ## Your First Program
 
-Create `hello.axe`:
+Create `hello.ax`:
 
 ```javascript
 // My first Axe program
@@ -39,7 +39,7 @@ let sum = x + y;
 Run it:
 
 ```bash
-cargo run --release hello.axe
+cargo run --release hello.ax
 ```
 
 ## Example Files
@@ -48,14 +48,14 @@ The `examples/` directory contains sample programs:
 
 | File | Description |
 |------|-------------|
-| `hello.axe` | Hello world |
-| `fibonacci.axe` | Arithmetic sequences |
-| `simple_counter.axe` | Variable assignment |
-| `builtins.axe` | Operators demo |
-| `scoping_explained.axe` | Block scoping guide |
+| `hello.ax` | Hello world |
+| `fibonacci.ax` | Arithmetic sequences |
+| `simple_counter.ax` | Variable assignment |
+| `builtins.ax` | Operators demo |
+| `scoping_explained.ax` | Block scoping guide |
 
 ```bash
-cargo run --release examples/fibonacci.axe
+cargo run --release examples/fibonacci.ax
 ```
 
 ## Next Steps
