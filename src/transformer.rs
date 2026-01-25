@@ -1,100 +1,25 @@
 #[cfg(test)]
-use crate::eval::Literal;
-use crate::eval::{Expr, Stmt};
+use crate::ast::Literal;
+use crate::ast::{Expr, Stmt};
 
-/// AST Transformer - converts syntactic sugar to core forms
-
+/// AST Transformer - converts syntactic sugar to core forms.
+///
+/// Currently the only transformation is:
+/// - `fn name(params) { body }` → `let name = |params| { body }`
 pub struct Transformer;
 
 impl Transformer {
+    /// Transform a statement, desugaring any syntactic sugar.
     pub fn transform_stmt(&self, stmt: Stmt) -> Stmt {
         match stmt {
-            // SYNTACTIC SUGAR: fn -> lambda + let
+            // SYNTACTIC SUGAR: fn name(params) { body } -> let name = lambda(params) { body }
             Stmt::Function(name, params, body) => {
                 let lambda = Expr::Lambda(params, body);
                 Stmt::Let(vec![(name, Some(lambda))])
             }
 
-            // Transform nested statements in blocks
-            Stmt::Block(stmts) => {
-                Stmt::Block(stmts.into_iter().map(|s| self.transform_stmt(s)).collect())
-            }
-
-            // Transform if branches
-            Stmt::If(cond, consequent, alternate) => Stmt::If(
-                self.transform_expr(cond),
-                Box::new(self.transform_stmt(*consequent)),
-                Box::new(self.transform_stmt(*alternate)),
-            ),
-
-            // Transform while body
-            Stmt::While(cond, body) => Stmt::While(
-                self.transform_expr(cond),
-                Box::new(self.transform_stmt(*body)),
-            ),
-
-            // Transform let initializers
-            Stmt::Let(bindings) => Stmt::Let(
-                bindings
-                    .into_iter()
-                    .map(|(name, init)| (name, init.map(|e| self.transform_expr(e))))
-                    .collect(),
-            ),
-
-            // Transform assignment expression
-            Stmt::Assign(name, expr) => Stmt::Assign(name, self.transform_expr(expr)),
-
-            // Transform expression statement
-            Stmt::Expr(expr) => Stmt::Expr(self.transform_expr(expr)),
-
-            // Class passes through (could add transformations later)
-            Stmt::Class(name, parent, methods) => Stmt::Class(
-                name,
-                parent,
-                methods
-                    .into_iter()
-                    .map(|s| self.transform_stmt(s))
-                    .collect(),
-            ),
-        }
-    }
-
-    pub fn transform_expr(&self, expr: Expr) -> Expr {
-        match expr {
-            // Transform binary expressions
-            Expr::Binary(op, left, right) => Expr::Binary(
-                op,
-                Box::new(self.transform_expr(*left)),
-                Box::new(self.transform_expr(*right)),
-            ),
-
-            // Transform lambda body
-            Expr::Lambda(params, body) => {
-                Expr::Lambda(params, Box::new(self.transform_stmt(*body)))
-            }
-
-            // Transform call arguments
-            Expr::Call(name, args) => Expr::Call(
-                name,
-                args.into_iter().map(|e| self.transform_expr(e)).collect(),
-            ),
-
-            // Transform list elements
-            Expr::List(items) => {
-                Expr::List(items.into_iter().map(|e| self.transform_expr(e)).collect())
-            }
-
-            // Transform property access
-            Expr::Property(obj, prop) => Expr::Property(Box::new(self.transform_expr(*obj)), prop),
-
-            // Transform new expression arguments
-            Expr::New(class, args) => Expr::New(
-                class,
-                args.into_iter().map(|e| self.transform_expr(e)).collect(),
-            ),
-
-            // Literals and variables pass through unchanged
-            Expr::Literal(_) | Expr::Var(_) => expr,
+            // All other statements pass through unchanged
+            other => other,
         }
     }
 }

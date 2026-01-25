@@ -1,4 +1,4 @@
-use crate::eval::{Expr, Literal, Operation, Program, Stmt};
+use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
 
 pub struct Parser<'src> {
@@ -324,10 +324,10 @@ impl<'src> Parser<'src> {
     }
 
     // MultiplicativeExpression
-    //  : PrimaryExpression
-    //  | MultiplicativeExpression ('*' | '/' | '%') PrimaryExpression
+    //  : UnaryExpression
+    //  | MultiplicativeExpression ('*' | '/' | '%') UnaryExpression
     fn parse_multiplicative_expression(&mut self) -> Result<Expr, &'static str> {
-        let mut left = self.parse_primary()?;
+        let mut left = self.parse_unary_expression()?;
 
         while let Some(token) = &self.lookahead {
             // Match multiplicative operators; break on anything else
@@ -338,7 +338,7 @@ impl<'src> Parser<'src> {
                 _ => break, // Not a multiplicative operator, exit loop
             };
             self.eat(token.kind)?;
-            let right = self.parse_primary()?;
+            let right = self.parse_unary_expression()?;
             left = Expr::Binary(op, Box::new(left), Box::new(right));
         }
 
@@ -369,13 +369,46 @@ impl<'src> Parser<'src> {
         Ok(Expr::Literal(Literal::Null))
     }
 
+    // UnaryExpression
+    //  : PrimaryExpression
+    //  | '+' UnaryExpression  (unary plus - no-op)
+    //  | '-' UnaryExpression  (unary minus / negation)
+    //  | '!' UnaryExpression  (logical not)
+    //  | '~' UnaryExpression  (bitwise invert)
+    fn parse_unary_expression(&mut self) -> Result<Expr, &'static str> {
+        match self.lookahead.as_ref().map(|t| t.kind) {
+            Some(TokenKind::Plus) => {
+                // Unary plus - just return the operand (no-op)
+                self.eat(TokenKind::Plus)?;
+                self.parse_unary_expression()
+            }
+            Some(TokenKind::Minus) => {
+                // Unary minus (negation)
+                self.eat(TokenKind::Minus)?;
+                let operand = self.parse_unary_expression()?;
+                Ok(Expr::Unary(UnaryOp::Neg, Box::new(operand)))
+            }
+            Some(TokenKind::Bang) => {
+                // Logical not
+                self.eat(TokenKind::Bang)?;
+                let operand = self.parse_unary_expression()?;
+                Ok(Expr::Unary(UnaryOp::Not, Box::new(operand)))
+            }
+            Some(TokenKind::Tilde) => {
+                // Bitwise invert
+                self.eat(TokenKind::Tilde)?;
+                let operand = self.parse_unary_expression()?;
+                Ok(Expr::Unary(UnaryOp::Inv, Box::new(operand)))
+            }
+            _ => self.parse_primary(),
+        }
+    }
+
     // PrimaryExpression
     //  : NumericLiteral
     //  | StringLiteral
     //  | Identifier
     //  | '(' Expression ')'
-    //  | '+' PrimaryExpression  (unary plus)
-    //  | '-' PrimaryExpression  (unary minus)
     fn parse_primary(&mut self) -> Result<Expr, &'static str> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal(),
@@ -388,21 +421,6 @@ impl<'src> Parser<'src> {
                 let expr = self.parse_logical_or_expression()?;
                 self.eat(TokenKind::RParen)?;
                 Ok(expr)
-            }
-            Some(TokenKind::Plus) => {
-                // Unary plus - just return the operand (no-op)
-                self.eat(TokenKind::Plus)?;
-                self.parse_primary()
-            }
-            Some(TokenKind::Minus) => {
-                // Unary minus - represent as (0 - operand)
-                self.eat(TokenKind::Minus)?;
-                let operand = self.parse_primary()?;
-                Ok(Expr::Binary(
-                    Operation::Sub,
-                    Box::new(Expr::Literal(Literal::Int(0))),
-                    Box::new(operand),
-                ))
             }
             _ => Err("Unexpected token: expected literal or '('"),
         }
