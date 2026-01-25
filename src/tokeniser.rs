@@ -41,6 +41,9 @@ pub enum TokenKind {
     Or,
     BitwiseAnd,
     BitwiseOr,
+    // Unary operators
+    Bang,  // !
+    Tilde, // ~
 }
 
 static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
@@ -62,6 +65,9 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         // Comparison operators (must come before SimpleAssign)
         (TokenKind::Eq, Regex::new(r"^==").unwrap()),
         (TokenKind::Neq, Regex::new(r"^!=").unwrap()),
+        // Unary operators (! must come after !=)
+        (TokenKind::Bang, Regex::new(r"^!").unwrap()),
+        (TokenKind::Tilde, Regex::new(r"^~").unwrap()),
         (TokenKind::Gte, Regex::new(r"^>=").unwrap()),
         (TokenKind::Lte, Regex::new(r"^<=").unwrap()),
         (TokenKind::Gt, Regex::new(r"^>").unwrap()),

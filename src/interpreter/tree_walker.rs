@@ -1,395 +1,34 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+//! Tree-walking interpreter implementation.
+//!
+//! This is the reference implementation for the Axe language.
+//! It directly traverses the AST and executes statements/expressions.
 
 use regex::Regex;
 
+use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
 use crate::transformer::Transformer;
 
-pub type EnvRef = Rc<RefCell<Environment>>;
-
-#[derive(Debug)]
-pub struct Environment {
-    records: HashMap<String, Value>,
-    parent: Option<EnvRef>,
-}
-
-impl Environment {
-    pub fn new() -> EnvRef {
-        Rc::new(RefCell::new(Self {
-            records: HashMap::new(),
-            parent: None,
-        }))
-    }
-
-    pub fn extend(parent: EnvRef) -> EnvRef {
-        Rc::new(RefCell::new(Self {
-            records: HashMap::new(),
-            parent: Some(parent),
-        }))
-    }
-
-    pub fn get(&self, name: &str) -> Option<Value> {
-        self.records
-            .get(name)
-            .cloned()
-            .or_else(|| self.parent.as_ref()?.borrow().get(name))
-    }
-
-    pub fn set(&mut self, name: String, value: Value) {
-        self.records.insert(name, value);
-    }
-
-    pub fn update(&mut self, name: String, value: Value) -> Result<(), &'static str> {
-        // Search for the variable in current scope
-        if self.records.contains_key(&name) {
-            self.records.insert(name, value);
-            Ok(())
-        } else if let Some(parent) = &self.parent {
-            // Search in parent scope
-            parent.borrow_mut().update(name, value)
-        } else {
-            // Variable not found in any scope
-            Err("undefined variable")
-        }
-    }
-
-    pub fn exists_in_current_scope(&self, name: &str) -> bool {
-        self.records.contains_key(name)
-    }
-
-    pub fn exists_in_any_scope(&self, name: &str) -> bool {
-        self.records.contains_key(name)
-            || self
-                .parent
-                .as_ref()
-                .map_or(false, |p| p.borrow().exists_in_any_scope(name))
-    }
-}
-
-pub struct Program {
-    pub stmts: Vec<Stmt>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Literal {
-    Null,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Str(String),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Operation {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Gt,  // >
-    Lt,  // <
-    Gte, // >=
-    Lte, // <=
-    Eq,  // ==
-    Neq, // !=
-    And,
-    Or,
-    BitwiseAnd,
-    BitwiseOr,
-    Mod,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Clone)]
-pub enum UnaryOp {
-    Neg, // -x
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
-    Literal(Literal),
-    List(Vec<Expr>),
-    Var(String),
-    Binary(Operation, Box<Expr>, Box<Expr>),
-    // Unary(UnaryOp, Box<Expr>),
-    Call(String, Vec<Expr>),
-    Lambda(Vec<String>, Box<Stmt>),
-    Property(Box<Expr>, String),
-    New(String, Vec<Expr>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Stmt {
-    Expr(Expr),
-    Block(Vec<Stmt>),
-    Let(Vec<(String, Option<Expr>)>),
-    Assign(String, Expr),
-    If(Expr, Box<Stmt>, Box<Stmt>),
-    While(Expr, Box<Stmt>),
-    Function(String, Vec<String>, Box<Stmt>),
-    Class(String, Option<String>, Vec<Stmt>),
-}
-
-#[derive(Debug)]
-pub enum Value {
-    Literal(Literal),
-    List(Vec<Value>),
-    Function(Vec<String>, Box<Stmt>, EnvRef),
-    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>),
-    Object(EnvRef),
-}
-
-impl Clone for Value {
-    fn clone(&self) -> Self {
-        match self {
-            Value::Literal(lit) => Value::Literal(lit.clone()),
-            Value::List(items) => Value::List(items.clone()),
-            Value::Function(params, body, env) => {
-                Value::Function(params.clone(), body.clone(), env.clone())
-            }
-            Value::NativeFunction(name, func) => Value::NativeFunction(name.clone(), *func),
-            Value::Object(env) => Value::Object(env.clone()),
-        }
-    }
-}
-
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Literal(lit) => match lit {
-                Literal::Null => write!(f, "null"),
-                Literal::Bool(b) => write!(f, "{}", b),
-                Literal::Int(n) => write!(f, "{}", n),
-                Literal::Float(fl) => write!(f, "{}", fl),
-                Literal::Str(s) => write!(f, "\"{}\"", s),
-            },
-            Value::List(items) => {
-                let item_strs: Vec<String> = items.iter().map(|item| format!("{}", item)).collect();
-                write!(f, "[{}]", item_strs.join(", "))
-            }
-            Value::Function(params, _, _) => {
-                write!(f, "<function({})>", params.join(", "))
-            }
-            Value::NativeFunction(name, _) => {
-                write!(f, "<native-function {}>", name)
-            }
-            Value::Object(_) => {
-                write!(f, "<object>")
-            }
-        }
-    }
-}
-
-fn native_print(args: &[Value]) -> Result<Value, &'static str> {
-    for (i, arg) in args.iter().enumerate() {
-        if i > 0 {
-            print!(" ");
-        }
-
-        match arg {
-            Value::Literal(s) => {
-                if let Literal::Str(s) = s {
-                    print!("{}", s);
-                } else {
-                    print!("{}", arg);
-                }
-            }
-            _ => print!("{}", arg),
-        }
-    }
-    println!();
-    Ok(Value::Literal(Literal::Null))
-}
-
-fn native_len(args: &[Value]) -> Result<Value, &'static str> {
-    if args.len() != 1 {
-        return Err("len expects exactly 1 argument");
-    }
-    match &args[0] {
-        Value::List(items) => Ok(Value::Literal(Literal::Int(items.len() as i64))),
-        Value::Literal(s) => match s {
-            Literal::Str(s) => Ok(Value::Literal(Literal::Int(s.len() as i64))),
-            _ => Err("len expects a list or string"),
-        },
-        _ => Err("len expects a list or string"),
-    }
-}
-
-fn native_push(args: &[Value]) -> Result<Value, &'static str> {
-    if args.len() != 2 {
-        return Err("push expects exactly 2 arguments");
-    }
-    match &args[0] {
-        Value::List(items) => {
-            let mut new_list = items.clone();
-            new_list.push(args[1].clone());
-            Ok(Value::List(new_list))
-        }
-        _ => Err("push expects a list as first argument"),
-    }
-}
-
-fn native_get(args: &[Value]) -> Result<Value, &'static str> {
-    if args.len() != 2 {
-        return Err("get expects exactly 2 arguments");
-    }
-    match (&args[0], &args[1]) {
-        (Value::List(items), Value::Literal(i)) => match i {
-            Literal::Int(idx) => {
-                let index = if *idx < 0 {
-                    (items.len() as i64 + idx) as usize
-                } else {
-                    *idx as usize
-                };
-                items.get(index).cloned().ok_or("index out of bounds")
-            }
-            _ => Err("get expects an integer index as second argument"),
-        },
-        _ => Err("get expects a list and an integer index"),
-    }
-}
-
-fn native_type(args: &[Value]) -> Result<Value, &'static str> {
-    if args.len() != 1 {
-        return Err("type expects exactly 1 argument");
-    }
-    let type_name = match &args[0] {
-        Value::Literal(lit) => match lit {
-            Literal::Null => "null",
-            Literal::Bool(_) => "bool",
-            Literal::Int(_) => "int",
-            Literal::Float(_) => "float",
-            Literal::Str(_) => "string",
-        },
-        Value::List(_) => "list",
-        Value::Function(..) => "function",
-        Value::NativeFunction(..) => "native-function",
-        Value::Object(..) => "object", // Updated to match your 'Object' rename
-    };
-    Ok(Value::Literal(Literal::Str(type_name.to_string())))
-}
-
-fn native_concat(args: &[Value]) -> Result<Value, &'static str> {
-    if args.is_empty() {
-        return Err("concat expects at least 1 argument");
-    }
-
-    // Check if first argument is a string or list
-    match &args[0] {
-        Value::Literal(s) => match s {
-            Literal::Str(_) => {
-                let mut result = String::new();
-                for arg in args {
-                    match arg {
-                        Value::Literal(s) => match s {
-                            Literal::Str(s) => result.push_str(s),
-                            _ => {
-                                return Err(
-                                    "concat on strings requires all arguments to be strings",
-                                )
-                            }
-                        },
-                        _ => return Err("concat on strings requires all arguments to be strings"),
-                    }
-                }
-                Ok(Value::Literal(Literal::Str(result)))
-            }
-            _ => Err("concat expects strings or lists"),
-        },
-        Value::List(_) => {
-            // Concatenate lists
-            let mut result = Vec::new();
-            for arg in args {
-                match arg {
-                    Value::List(items) => result.extend(items.clone()),
-                    _ => return Err("concat on lists requires all arguments to be lists"),
-                }
-            }
-            Ok(Value::List(result))
-        }
-        _ => Err("concat expects strings or lists"),
-    }
-}
-
-fn native_range(args: &[Value]) -> Result<Value, &'static str> {
-    match args.len() {
-        1 => match &args[0] {
-            Value::Literal(n) => match n {
-                Literal::Int(n_val) => {
-                    if *n_val < 0 {
-                        return Err("range expects non-negative integer");
-                    }
-                    let values: Vec<Value> = (0..*n_val)
-                        .map(|i| Value::Literal(Literal::Int(i)))
-                        .collect();
-
-                    Ok(Value::List(values))
-                }
-                _ => Err("range expects integer argument"),
-            },
-            _ => Err("range expects integer argument"),
-        },
-        2 => {
-            // range(start, end) -> [start, start+1, ..., end-1]
-            match (&args[0], &args[1]) {
-                (Value::Literal(s), Value::Literal(e)) => match (s, e) {
-                    (Literal::Int(start), Literal::Int(end)) => {
-                        let values: Vec<Value> = (*start..*end)
-                            .map(|i| Value::Literal(Literal::Int(i)))
-                            .collect();
-                        Ok(Value::List(values))
-                    }
-                    _ => Err("range expects integer arguments"),
-                },
-                _ => Err("range expects integer arguments"),
-            }
-        }
-        3 => {
-            // range(start, end, step) -> [start, start+step, ..., end-step]
-            match (&args[0], &args[1], &args[2]) {
-                (Value::Literal(start), Value::Literal(end), Value::Literal(step)) => {
-                    match (start, end, step) {
-                        (Literal::Int(start), Literal::Int(end), Literal::Int(step)) => {
-                            if *step == 0 {
-                                return Err("range step cannot be zero");
-                            }
-                            let mut values = Vec::new();
-                            let mut current = *start;
-                            if *step > 0 {
-                                while current < *end {
-                                    values.push(Value::Literal(Literal::Int(current)));
-                                    current += step;
-                                }
-                            } else {
-                                while current > *end {
-                                    values.push(Value::Literal(Literal::Int(current)));
-                                    current += step;
-                                }
-                            }
-                            Ok(Value::List(values))
-                        }
-                        _ => Err("range expects integer arguments"),
-                    }
-                }
-                _ => Err("range expects integer arguments"),
-            }
-        }
-        _ => Err("range expects 1, 2, or 3 arguments"),
-    }
-}
+use super::builtins::*;
+use super::environment::{EnvRef, Environment};
+use super::value::Value;
 
 fn is_valid_var_name(name: &str) -> bool {
     let re = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap();
     re.is_match(name)
 }
 
+/// Tree-walking interpreter for the Axe language.
+///
+/// This interpreter directly evaluates the AST by recursively traversing
+/// the tree structure. It's simpler than a bytecode VM but less efficient
+/// for repeated execution of the same code.
 #[allow(dead_code)]
-pub struct Axe {
+pub struct TreeWalker {
     globals: EnvRef,
     transformer: Transformer,
 }
 
-impl Axe {
+impl TreeWalker {
     pub fn new() -> Self {
         let globals = Environment::new();
 
@@ -668,15 +307,16 @@ impl Axe {
                 }
                 Ok(Value::List(values))
             }
-
             Expr::Var(name) => env.borrow().get(&name).ok_or("undefined variable"),
-
             Expr::Binary(op, lhs, rhs) => {
                 let left = self.eval_expr(*lhs, Some(env.clone()))?;
                 let right = self.eval_expr(*rhs, Some(env))?;
                 Self::eval_binary(op, left, right)
             }
-
+            Expr::Unary(op, operand) => {
+                let value = self.eval_expr(*operand, Some(env.clone()))?;
+                Self::eval_unary(op, value)
+            }
             Expr::Lambda(params, body) => {
                 // Validate parameter names
                 for param in &params {
@@ -690,7 +330,6 @@ impl Axe {
 
                 Ok(func_value)
             }
-
             Expr::Call(name, args) => {
                 // Get the function from the environment
                 let func = env.borrow().get(&name).ok_or("undefined function")?;
@@ -923,5 +562,40 @@ impl Axe {
 
             _ => Err("Invalid operation"),
         }
+    }
+
+    fn eval_unary(op: UnaryOp, operand: Value) -> Result<Value, &'static str> {
+        use Literal::*;
+        use UnaryOp::*;
+
+        match (op, operand) {
+            // Negation: -x
+            (Neg, Value::Literal(Int(n))) => Ok(Value::Literal(Int(-n))),
+            (Neg, Value::Literal(Float(f))) => Ok(Value::Literal(Float(-f))),
+
+            // Logical not: !x (truthy/falsy)
+            (Not, Value::Literal(Bool(b))) => Ok(Value::Literal(Bool(!b))),
+            (Not, Value::Literal(Null)) => Ok(Value::Literal(Bool(true))),
+            (Not, Value::Literal(Int(0))) => Ok(Value::Literal(Bool(true))),
+            (Not, Value::Literal(Int(_))) => Ok(Value::Literal(Bool(false))),
+            (Not, Value::Literal(Float(f))) if f == 0.0 => Ok(Value::Literal(Bool(true))),
+            (Not, Value::Literal(Float(_))) => Ok(Value::Literal(Bool(false))),
+            (Not, Value::Literal(Str(ref s))) if s.is_empty() => Ok(Value::Literal(Bool(true))),
+            (Not, Value::Literal(Str(_))) => Ok(Value::Literal(Bool(false))),
+            (Not, Value::List(ref items)) if items.is_empty() => Ok(Value::Literal(Bool(true))),
+            (Not, Value::List(_)) => Ok(Value::Literal(Bool(false))),
+            (Not, _) => Ok(Value::Literal(Bool(false))), // functions, objects are truthy
+
+            // Bitwise invert: ~x
+            (Inv, Value::Literal(Int(n))) => Ok(Value::Literal(Int(!n))),
+
+            _ => Err("Invalid unary operation"),
+        }
+    }
+}
+
+impl Default for TreeWalker {
+    fn default() -> Self {
+        Self::new()
     }
 }
