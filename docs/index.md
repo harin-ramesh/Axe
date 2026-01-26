@@ -1,6 +1,6 @@
 # Axe Programming Language
 
-A lightweight programming language interpreter written in Rust, featuring C-like syntax with variables, control flow, and block scoping.
+A lightweight programming language interpreter written in Rust, featuring C-like syntax with variables, control flow, functions, and block scoping.
 
 ## Features
 
@@ -11,8 +11,12 @@ A lightweight programming language interpreter written in Rust, featuring C-like
 - Comparisons: `>`, `<`, `>=`, `<=`, `==`, `!=`
 - Logical: `&&`, `||`
 - Bitwise: `&`, `|`
+- Unary operators: `-`, `!`, `~`
 - Variables with `let` and assignment with `=`
 - Control flow with `if`/`else`
+- Loops: `while` and `for` with `range()`
+- Functions with `fn` keyword
+- Function calls with arguments
 - Block scoping with `{}`
 - Comments: `//` and `/* */`
 
@@ -27,19 +31,29 @@ A lightweight programming language interpreter written in Rust, featuring C-like
 ## Quick Example
 
 ```javascript
-let x = 10;
-let y = 20;
-
-if (x < y) {
-    let sum = x + y;
+// Function definition
+fn factorial(n) {
+    let result = 1;
+    let i = 1;
+    while (i <= n) {
+        result = result * i;
+        i = i + 1;
+    }
+    result;
 }
+
+// Using loops and functions
+let sum = 0;
+for i in range(1, 11) {
+    sum = sum + i;
+}
+
+let fact5 = factorial(5);  // 120
 ```
 
 ## Roadmap
 
-- While loops
-- For loops
-- Functions
 - Lists/Arrays
 - Built-in functions (print, len, etc.)
 - Classes
+- Modules/imports

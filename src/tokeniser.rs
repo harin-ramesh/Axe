@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::sync::LazyLock;
+use std::{sync::LazyLock, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
@@ -26,9 +26,10 @@ pub enum TokenKind {
     Let,
     If,
     Else,
-    Where,
+    While,
     For,
     In,
+    Fn,
     // Comparison operators
     Eq,  // ==
     Neq, // !=
@@ -47,6 +48,64 @@ pub enum TokenKind {
     // Unary operators
     Bang,  // !
     Tilde, // ~
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            TokenKind::LParen         => "(",
+            TokenKind::RParen         => ")",
+            TokenKind::OpeningBrace   => "{",
+            TokenKind::ClosingBrace   => "}",
+            TokenKind::WhiteSpace     => "whitespace",
+            TokenKind::Comment        => "comment",
+            TokenKind::Comma          => ",",
+            TokenKind::Symbol         => "symbol",
+            TokenKind::Number         => "number",
+            TokenKind::String         => "string",
+            TokenKind::Identifier     => "identifier",
+            TokenKind::SimpleAssign   => "=",
+            TokenKind::Increment      => "++",
+            TokenKind::Decrement      => "--",
+            TokenKind::Plus           => "+",
+            TokenKind::Minus          => "-",
+            TokenKind::Star           => "*",
+            TokenKind::Slash          => "/",
+            TokenKind::Percent        => "%",
+            TokenKind::Delimeter      => "delimiter",
+            TokenKind::Let            => "let",
+            TokenKind::If             => "if",
+            TokenKind::Else           => "else",
+            TokenKind::While          => "where",
+            TokenKind::For            => "for",
+            TokenKind::In             => "in",
+            TokenKind::Fn             => "fn",
+
+            // Comparisons
+            TokenKind::Eq             => "==",
+            TokenKind::Neq            => "!=",
+            TokenKind::Gt             => ">",
+            TokenKind::Lt             => "<",
+            TokenKind::Gte            => ">=",
+            TokenKind::Lte            => "<=",
+
+            TokenKind::Eof            => "EOF",
+            TokenKind::True           => "true",
+            TokenKind::False          => "false",
+            TokenKind::Null           => "null",
+
+            TokenKind::And            => "&&",
+            TokenKind::Or             => "||",
+
+            TokenKind::BitwiseAnd     => "&",
+            TokenKind::BitwiseOr      => "|",
+
+            TokenKind::Bang           => "!",
+            TokenKind::Tilde          => "~",
+        };
+
+        write!(f, "{}", s)
+    }
 }
 
 static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
@@ -92,9 +151,10 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Let, Regex::new(r"^let\b").unwrap()),
         (TokenKind::If, Regex::new(r"^if\b").unwrap()),
         (TokenKind::Else, Regex::new(r"^else\b").unwrap()),
-        (TokenKind::Where, Regex::new(r"^where\b").unwrap()),
+        (TokenKind::While, Regex::new(r"^where\b").unwrap()),
         (TokenKind::For, Regex::new(r"^for\b").unwrap()),
         (TokenKind::In, Regex::new(r"^in\b").unwrap()),
+        (TokenKind::Fn, Regex::new(r"^fn\b").unwrap()),
         (TokenKind::True, Regex::new(r"^true\b").unwrap()),
         (TokenKind::False, Regex::new(r"^false\b").unwrap()),
         (TokenKind::Null, Regex::new(r"^null\b").unwrap()),
