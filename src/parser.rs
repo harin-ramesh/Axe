@@ -28,7 +28,12 @@ impl<'src> Parser<'src> {
         };
 
         if token.kind != expected_token {
-            return Err("Unexpected token");
+            let msg = format!(
+                "[Line {}] Unexpected `{}`, expected `{}`",
+                token.line, token.lexeme, expected_token
+            );
+            let leaked: &'static str = Box::leak(msg.into_boxed_str());
+            return Err(leaked);
         }
 
         self.lookahead = Some(self.tokeniser.get_next_token()?);
@@ -67,17 +72,59 @@ impl<'src> Parser<'src> {
             Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
             Some(TokenKind::Let) => self.parse_let_statement()?,
             Some(TokenKind::If) => self.parse_if_statement()?,
-            Some(TokenKind::Where) => self.parse_while_statement()?,
+            Some(TokenKind::While) => self.parse_while_statement()?,
             Some(TokenKind::For) => self.parse_for_statement()?,
+            Some(TokenKind::Fn) => self.parse_function_declaration()?,
             _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
     }
 
+    // FunctionDeclaration
+    //  : 'fn' Identifier '(' ParameterList ')' '{' Statements '}'
+    fn parse_function_declaration(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::Fn)?;
+
+        let name_token = self.eat(TokenKind::Identifier)?;
+        let name = name_token.lexeme.to_string();
+
+        self.eat(TokenKind::LParen)?;
+        let params = self.parse_parameter_list()?;
+        self.eat(TokenKind::RParen)?;
+
+        self.eat(TokenKind::OpeningBrace)?;
+        let body = self.parse_statements(TokenKind::ClosingBrace)?;
+        self.eat(TokenKind::ClosingBrace)?;
+
+        Ok(Stmt::Function(name, params, Box::new(Stmt::Block(body))))
+    }
+
+    // ParameterList
+    //  : Identifier (',' Identifier)*
+    //  | ε
+    fn parse_parameter_list(&mut self) -> Result<Vec<String>, &'static str> {
+        let mut params = Vec::new();
+
+        // Parse first parameter if present
+        if self.lookahead.map(|t| t.kind) == Some(TokenKind::Identifier) {
+            let token = self.eat(TokenKind::Identifier)?;
+            params.push(token.lexeme.to_string());
+
+            // Parse remaining parameters
+            while self.lookahead.map(|t| t.kind) == Some(TokenKind::Comma) {
+                self.eat(TokenKind::Comma)?;
+                let token = self.eat(TokenKind::Identifier)?;
+                params.push(token.lexeme.to_string());
+            }
+        }
+
+        Ok(params)
+    }
+
     // WhileStatement
     //  : 'while' '(' Expression ')' Statements
     fn parse_while_statement(&mut self) -> Result<Stmt, &'static str> {
-        self.eat(TokenKind::Where)?;
+        self.eat(TokenKind::While)?;
 
         self.eat(TokenKind::LParen)?;
         let condition = self.parse_condition()?;

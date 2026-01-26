@@ -85,10 +85,13 @@ let negative = -42;
 |----------|-------------|
 | `&&` | AND |
 | `\|\|` | OR |
+| `!` | NOT |
 
 ```javascript
 true && false   // false
 true || false   // true
+!true           // false
+!false          // true
 ```
 
 ### Bitwise
@@ -97,10 +100,28 @@ true || false   // true
 |----------|-------------|
 | `&` | Bitwise AND |
 | `\|` | Bitwise OR |
+| `~` | Bitwise NOT |
 
 ```javascript
 5 & 3   // 1
 5 | 3   // 7
+~5      // -6
+```
+
+### Unary
+
+| Operator | Description |
+|----------|-------------|
+| `-` | Negation |
+| `+` | Positive (no-op) |
+| `!` | Logical NOT |
+| `~` | Bitwise NOT |
+
+```javascript
+let neg = -42;
+let pos = +42;
+let not = !true;    // false
+let inv = ~5;       // -6
 ```
 
 ## Control Flow
@@ -135,6 +156,159 @@ if (score >= 90) {
         grade = "C";
     }
 }
+```
+
+### While Loop
+
+The `while` loop repeats a block while a condition is true:
+
+```javascript
+let i = 0;
+while (i < 5) {
+    // body executes while i < 5
+    i = i + 1;
+}
+```
+
+#### Examples
+
+```javascript
+// Sum 1 to 10
+let sum = 0;
+let n = 1;
+while (n <= 10) {
+    sum = sum + n;
+    n = n + 1;
+}
+// sum is 55
+
+// Countdown
+let count = 10;
+while (count > 0) {
+    count = count - 1;
+}
+```
+
+### For Loop
+
+The `for` loop iterates over a range:
+
+```javascript
+for variable in range(end) { ... }
+for variable in range(start, end) { ... }
+```
+
+#### Examples
+
+```javascript
+// Iterate 0 to 4
+for i in range(5) {
+    // i = 0, 1, 2, 3, 4
+}
+
+// Iterate 1 to 9
+for i in range(1, 10) {
+    // i = 1, 2, ..., 9
+}
+
+// Sum with for loop
+let sum = 0;
+for n in range(1, 11) {
+    sum = sum + n;
+}
+// sum is 55
+
+// Nested for loops
+for i in range(3) {
+    for j in range(3) {
+        // executes 9 times
+    }
+}
+```
+
+## Functions
+
+### Function Definition
+
+Define functions using the `fn` keyword:
+
+```javascript
+fn functionName(param1, param2) {
+    // function body
+    // last expression is the return value
+}
+```
+
+#### Examples
+
+```javascript
+// No parameters
+fn greet() {
+    print("Hello!");
+}
+
+// Single parameter
+fn square(x) {
+    x * x;
+}
+
+// Multiple parameters
+fn add(a, b) {
+    a + b;
+}
+
+// With local variables
+fn calculateArea(width, height) {
+    let area = width * height;
+    area;
+}
+```
+
+### Function Calls
+
+Call functions by name with arguments in parentheses:
+
+```javascript
+// No arguments
+greet();
+
+// With arguments
+let result = square(5);      // 25
+let sum = add(10, 20);       // 30
+
+// Expression as argument
+print(1 + 2 * 3);
+
+// Nested calls
+print(add(1, 2));
+
+// In expressions
+let doubled = square(3) * 2;  // 18
+```
+
+### Recursion
+
+Functions can call themselves:
+
+```javascript
+fn factorial(n) {
+    if (n <= 1) {
+        1;
+    } else {
+        n * factorial(n - 1);
+    }
+}
+
+fn fibonacci(n) {
+    if (n <= 1) {
+        n;
+    } else {
+        fibonacci(n - 1) + fibonacci(n - 2);
+    }
+}
+
+let fact5 = factorial(5);  // 120
+let fib10 = fibonacci(10); // 55
 ```
 
 ## Blocks and Scoping

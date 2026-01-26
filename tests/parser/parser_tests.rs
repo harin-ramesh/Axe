@@ -903,3 +903,119 @@ fn eval_while_count_1_to_10_sum_is_correct() {
         axe::Value::Literal(axe::Literal::Bool(true))
     ));
 }
+
+// =============================================================================
+// Function Call Tests
+// =============================================================================
+
+#[test]
+fn parse_function_call_no_args() {
+    let mut parser = Parser::new("foo();");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_single_arg() {
+    let mut parser = Parser::new("print(42);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_multiple_args() {
+    let mut parser = Parser::new("add(1, 2, 3);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_with_string_arg() {
+    let mut parser = Parser::new("print(\"hello\");");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_with_expression_arg() {
+    let mut parser = Parser::new("print(1 + 2);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_with_variable_arg() {
+    let mut parser = Parser::new("print(x);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_mixed_args() {
+    let mut parser = Parser::new("foo(1, \"hello\", x, 2 + 3);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_nested_function_call() {
+    let mut parser = Parser::new("print(add(1, 2));");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_in_expression() {
+    let mut parser = Parser::new("1 + foo(2);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_in_let() {
+    let mut parser = Parser::new("let x = foo(42);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_in_assignment() {
+    let mut parser = Parser::new("x = bar(1, 2);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_with_boolean_arg() {
+    let mut parser = Parser::new("check(true);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_with_null_arg() {
+    let mut parser = Parser::new("reset(null);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_multiple_function_calls() {
+    let mut parser = Parser::new("foo(); bar(); baz();");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_with_whitespace() {
+    let mut parser = Parser::new("foo( 1 , 2 );");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_function_call_multiline_args() {
+    let mut parser = Parser::new("foo(\n    1,\n    2,\n    3\n);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
