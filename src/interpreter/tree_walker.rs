@@ -93,6 +93,7 @@ impl TreeWalker {
                 self.eval_if(condition, then_branch, else_branch, env)
             }
             Stmt::While(condition, body) => self.eval_while(condition, body, env),
+            Stmt::For(var, iterable, body) => self.eval_for(var, iterable, body, env),
             Stmt::Function(name, params, body) => self.eval_function(name, params, body, env),
             Stmt::Class(name, parent, body) => self.eval_class(name, parent, body, env),
         }
@@ -200,16 +201,25 @@ impl TreeWalker {
         body: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-        for param in &params {
-            if !is_valid_var_name(param) {
-                return Err("invalid parameter name");
-            }
-        }
+        // Transform fn to let + lambda, then evaluate as let statement
+        let transformed = self
+            .transformer
+            .transform_stmt(Stmt::Function(name, params, body));
+        self.eval_stmt(transformed, Some(env))
+    }
 
-        let func_value = Value::Function(params.clone(), body.clone(), env.clone());
-        env.borrow_mut().set(name, func_value.clone());
-
-        Ok(func_value)
+    fn eval_for(
+        &self,
+        var: String,
+        iterable: Expr,
+        body: Box<Stmt>,
+        env: EnvRef,
+    ) -> Result<Value, &'static str> {
+        // Transform for to while loop, then evaluate
+        let transformed = self
+            .transformer
+            .transform_stmt(Stmt::For(var, iterable, body));
+        self.eval_stmt(transformed, Some(env))
     }
 
     #[allow(dead_code)]
@@ -320,7 +330,7 @@ impl TreeWalker {
             Expr::Lambda(params, body) => {
                 // Validate parameter names
                 for param in &params {
-                    if is_valid_var_name(param) {
+                    if !is_valid_var_name(param) {
                         return Err("invalid parameter name");
                     }
                 }

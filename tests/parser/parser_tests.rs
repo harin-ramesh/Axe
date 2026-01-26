@@ -861,3 +861,45 @@ fn eval_null_literal() {
     let result = axe.run(program);
     assert!(result.is_ok());
 }
+
+#[test]
+fn parse_while_count_1_to_10_sum() {
+    // Use a while loop to count from 1 to 10 and calculate sum
+    let code = r#"
+        let i = 1;
+        let sum = 0;
+        where (i <= 10) {
+            sum = sum + i;
+            i = i + 1;
+        }
+        sum == 55;
+    "#;
+    let mut parser = Parser::new(code);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn eval_while_count_1_to_10_sum_is_correct() {
+    // Use a while loop to count from 1 to 10 and calculate sum
+    // Expected: 1+2+3+4+5+6+7+8+9+10 = 55
+    let code = r#"
+        let i = 1;
+        let sum = 0;
+        where (i <= 10) {
+            sum = sum + i;
+            i = i + 1;
+        }
+        sum == 55;
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    // sum == 55 should evaluate to true
+    assert!(matches!(
+        result,
+        axe::Value::Literal(axe::Literal::Bool(true))
+    ));
+}
