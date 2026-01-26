@@ -15,13 +15,12 @@ pub enum TokenKind {
     String,
     Identifier,
     SimpleAssign,
-    Increment,
-    Decrement,
     Plus,
     Minus,
     Star,
     Slash,
     Percent,
+    MemberAccess,
     Delimeter,
     Let,
     If,
@@ -57,22 +56,21 @@ impl fmt::Display for TokenKind {
             TokenKind::RParen         => ")",
             TokenKind::OpeningBrace   => "{",
             TokenKind::ClosingBrace   => "}",
-            TokenKind::WhiteSpace     => "whitespace",
-            TokenKind::Comment        => "comment",
+            TokenKind::WhiteSpace     => "Whitespace",
+            TokenKind::Comment        => "Comment",
             TokenKind::Comma          => ",",
-            TokenKind::Symbol         => "symbol",
-            TokenKind::Number         => "number",
-            TokenKind::String         => "string",
-            TokenKind::Identifier     => "identifier",
+            TokenKind::Symbol         => "Symbol",
+            TokenKind::Number         => "Number",
+            TokenKind::String         => "String",
+            TokenKind::Identifier     => "Identifier",
             TokenKind::SimpleAssign   => "=",
-            TokenKind::Increment      => "++",
-            TokenKind::Decrement      => "--",
             TokenKind::Plus           => "+",
             TokenKind::Minus          => "-",
             TokenKind::Star           => "*",
             TokenKind::Slash          => "/",
             TokenKind::Percent        => "%",
-            TokenKind::Delimeter      => "delimiter",
+            TokenKind::MemberAccess   => ".",
+            TokenKind::Delimeter      => ";",
             TokenKind::Let            => "let",
             TokenKind::If             => "if",
             TokenKind::Else           => "else",
@@ -135,13 +133,12 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Gt, Regex::new(r"^>").unwrap()),
         (TokenKind::Lt, Regex::new(r"^<").unwrap()),
         (TokenKind::SimpleAssign, Regex::new(r"^=").unwrap()),
-        (TokenKind::Decrement, Regex::new(r"^--").unwrap()),
-        (TokenKind::Increment, Regex::new(r"^\+\+").unwrap()),
         (TokenKind::Plus, Regex::new(r"^\+").unwrap()),
         (TokenKind::Minus, Regex::new(r"^-").unwrap()),
         (TokenKind::Star, Regex::new(r"^\*").unwrap()),
         (TokenKind::Slash, Regex::new(r"^/").unwrap()),
         (TokenKind::Percent, Regex::new(r"^%").unwrap()),
+        (TokenKind::MemberAccess, Regex::new(r"^\.").unwrap()),
         (TokenKind::And, Regex::new(r"^&&").unwrap()),
         (TokenKind::Or, Regex::new(r"^\|\|").unwrap()),
         (TokenKind::BitwiseAnd, Regex::new(r"^&").unwrap()),
@@ -318,19 +315,6 @@ mod tests {
         let tok = tokeniser.get_next_token().unwrap();
         assert_eq!(tok.kind, TokenKind::Number);
         assert_eq!(tok.lexeme, "3.14");
-    }
-
-    #[test]
-    fn test_increment_decrement() {
-        let mut tokeniser = Tokeniser::new("++ --");
-
-        let tok = tokeniser.get_next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Increment);
-        assert_eq!(tok.lexeme, "++");
-
-        let tok = tokeniser.get_next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Decrement);
-        assert_eq!(tok.lexeme, "--");
     }
 
     #[test]
