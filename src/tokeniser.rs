@@ -26,6 +26,9 @@ pub enum TokenKind {
     Let,
     If,
     Else,
+    Where,
+    For,
+    In,
     // Comparison operators
     Eq,  // ==
     Neq, // !=
@@ -89,6 +92,9 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Let, Regex::new(r"^let\b").unwrap()),
         (TokenKind::If, Regex::new(r"^if\b").unwrap()),
         (TokenKind::Else, Regex::new(r"^else\b").unwrap()),
+        (TokenKind::Where, Regex::new(r"^where\b").unwrap()),
+        (TokenKind::For, Regex::new(r"^for\b").unwrap()),
+        (TokenKind::In, Regex::new(r"^in\b").unwrap()),
         (TokenKind::True, Regex::new(r"^true\b").unwrap()),
         (TokenKind::False, Regex::new(r"^false\b").unwrap()),
         (TokenKind::Null, Regex::new(r"^null\b").unwrap()),

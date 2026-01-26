@@ -183,6 +183,61 @@ fn while_with_nested_blocks() {
 }
 
 #[test]
+fn while_count_1_to_10_sum_is_correct() {
+    let axe = Axe::new();
+
+    // Count from 1 to 10 and sum the values
+    // Expected sum: 1+2+3+4+5+6+7+8+9+10 = 55
+    let program = Program {
+        stmts: vec![
+            Stmt::Let(vec![(
+                "i".to_string(),
+                Some(Expr::Literal(Literal::Int(1))),
+            )]),
+            Stmt::Let(vec![(
+                "sum".to_string(),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
+            Stmt::While(
+                Expr::Binary(
+                    Operation::Lte,
+                    Box::new(Expr::Var("i".to_string())),
+                    Box::new(Expr::Literal(Literal::Int(10))),
+                ),
+                Box::new(Stmt::Block(vec![
+                    Stmt::Assign(
+                        "sum".to_string(),
+                        Expr::Binary(
+                            Operation::Add,
+                            Box::new(Expr::Var("sum".to_string())),
+                            Box::new(Expr::Var("i".to_string())),
+                        ),
+                    ),
+                    Stmt::Assign(
+                        "i".to_string(),
+                        Expr::Binary(
+                            Operation::Add,
+                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Literal(Literal::Int(1))),
+                        ),
+                    ),
+                ])),
+            ),
+            // Verify sum equals 55
+            Stmt::Expr(Expr::Binary(
+                Operation::Eq,
+                Box::new(Expr::Var("sum".to_string())),
+                Box::new(Expr::Literal(Literal::Int(55))),
+            )),
+        ],
+    };
+
+    let result = axe.run(program).unwrap();
+    // The last expression (sum == 55) should evaluate to true
+    assert!(matches!(result, Value::Literal(Literal::Bool(true))));
+}
+
+#[test]
 fn while_empty_body_returns_null() {
     let axe = Axe::new();
 

@@ -86,6 +86,8 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Box<Stmt>),
     /// While loop: while (cond) { body }
     While(Expr, Box<Stmt>),
+    /// For loop: for var in iterable { body }
+    For(String, Expr, Box<Stmt>),
     /// Function declaration: fn name(params) { body }
     Function(String, Vec<String>, Box<Stmt>),
     /// Class declaration: class Name [: Parent] { body }

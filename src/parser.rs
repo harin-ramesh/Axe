@@ -61,14 +61,54 @@ impl<'src> Parser<'src> {
     //  | BlockStatment
     //  | LetStatement
     //  | IfStatement
+    //  | ForStatement
     fn parse_statement(&mut self) -> Result<Stmt, &'static str> {
         let expr = match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
             Some(TokenKind::Let) => self.parse_let_statement()?,
             Some(TokenKind::If) => self.parse_if_statement()?,
+            Some(TokenKind::Where) => self.parse_while_statement()?,
+            Some(TokenKind::For) => self.parse_for_statement()?,
             _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
+    }
+
+    // WhileStatement
+    //  : 'while' '(' Expression ')' Statements
+    fn parse_while_statement(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::Where)?;
+
+        self.eat(TokenKind::LParen)?;
+        let condition = self.parse_condition()?;
+        self.eat(TokenKind::RParen)?;
+
+        self.eat(TokenKind::OpeningBrace)?;
+        let body = self.parse_statements(TokenKind::ClosingBrace)?;
+        self.eat(TokenKind::ClosingBrace)?;
+
+        Ok(Stmt::While(condition, Box::new(Stmt::Block(body))))
+    }
+
+    // ForStatement
+    //  : 'for' Identifier 'in' Expression '{' Statements '}'
+    fn parse_for_statement(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::For)?;
+
+        // Parse loop variable name
+        let var_token = self.eat(TokenKind::Identifier)?;
+        let var_name = var_token.lexeme.to_string();
+
+        self.eat(TokenKind::In)?;
+
+        // Parse iterable expression (e.g., range(1, 10) or a list variable)
+        let iterable = self.parse_logical_or_expression()?;
+
+        self.eat(TokenKind::OpeningBrace)?;
+        let body = self.parse_statements(TokenKind::ClosingBrace)?;
+        self.eat(TokenKind::ClosingBrace)?;
+
+        Ok(Stmt::For(var_name, iterable, Box::new(Stmt::Block(body))))
     }
 
     // LetStatement
@@ -151,31 +191,9 @@ impl<'src> Parser<'src> {
     }
 
     // Condition
-    //  : Expression
-    //  | Expression ('>' | '<' | '>=' | '<=' | '==' | '!=') Expression
+    //  : EqualityExpression (supports all comparison and equality operators)
     fn parse_condition(&mut self) -> Result<Expr, &'static str> {
-        let left = self.parse_additive_expression()?;
-
-        // Check for comparison operator
-        if let Some(token) = &self.lookahead {
-            let op = match token.kind {
-                TokenKind::Gt => Some(Operation::Gt),
-                TokenKind::Lt => Some(Operation::Lt),
-                TokenKind::Gte => Some(Operation::Gte),
-                TokenKind::Lte => Some(Operation::Lte),
-                TokenKind::Eq => Some(Operation::Eq),
-                TokenKind::Neq => Some(Operation::Neq),
-                _ => None,
-            };
-
-            if let Some(op) = op {
-                self.eat(token.kind)?;
-                let right = self.parse_additive_expression()?;
-                return Ok(Expr::Binary(op, Box::new(left), Box::new(right)));
-            }
-        }
-
-        Ok(left)
+        self.parse_equality_expression()
     }
 
     // BlockStatement
@@ -286,18 +304,60 @@ impl<'src> Parser<'src> {
     }
 
     // BitwiseAndExpression
-    //  : AdditiveExpression
-    //  | BitwiseAndExpression '&' AdditiveExpression
+    //  : EqualityExpression
+    //  | BitwiseAndExpression '&' EqualityExpression
     fn parse_bitwise_and_expression(&mut self) -> Result<Expr, &'static str> {
-        let mut left = self.parse_additive_expression()?;
+        let mut left = self.parse_equality_expression()?;
 
         while let Some(token) = &self.lookahead {
             if token.kind != TokenKind::BitwiseAnd {
                 break;
             }
             self.eat(TokenKind::BitwiseAnd)?;
-            let right = self.parse_additive_expression()?;
+            let right = self.parse_equality_expression()?;
             left = Expr::Binary(Operation::BitwiseAnd, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // EqualityExpression
+    //  : RelationalExpression
+    //  | EqualityExpression ('==' | '!=') RelationalExpression
+    fn parse_equality_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_relational_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            let op = match token.kind {
+                TokenKind::Eq => Operation::Eq,
+                TokenKind::Neq => Operation::Neq,
+                _ => break,
+            };
+            self.eat(token.kind)?;
+            let right = self.parse_relational_expression()?;
+            left = Expr::Binary(op, Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    // RelationalExpression
+    //  : AdditiveExpression
+    //  | RelationalExpression ('<' | '>' | '<=' | '>=') AdditiveExpression
+    fn parse_relational_expression(&mut self) -> Result<Expr, &'static str> {
+        let mut left = self.parse_additive_expression()?;
+
+        while let Some(token) = &self.lookahead {
+            let op = match token.kind {
+                TokenKind::Lt => Operation::Lt,
+                TokenKind::Gt => Operation::Gt,
+                TokenKind::Lte => Operation::Lte,
+                TokenKind::Gte => Operation::Gte,
+                _ => break,
+            };
+            self.eat(token.kind)?;
+            let right = self.parse_additive_expression()?;
+            left = Expr::Binary(op, Box::new(left), Box::new(right));
         }
 
         Ok(left)
@@ -426,11 +486,45 @@ impl<'src> Parser<'src> {
         }
     }
 
-    // Identifier
+    // Identifier or FunctionCall
     //  : IDENTIFIER
+    //  | IDENTIFIER '(' ArgumentList? ')'
     fn parse_identifier(&mut self) -> Result<Expr, &'static str> {
         let token = self.eat(TokenKind::Identifier)?;
-        Ok(Expr::Var(token.lexeme.to_string()))
+        let name = token.lexeme.to_string();
+
+        // Check if this is a function call
+        if self.lookahead.map(|t| t.kind) == Some(TokenKind::LParen) {
+            self.eat(TokenKind::LParen)?;
+            let args = self.parse_argument_list()?;
+            self.eat(TokenKind::RParen)?;
+            Ok(Expr::Call(name, args))
+        } else {
+            Ok(Expr::Var(name))
+        }
+    }
+
+    // ArgumentList
+    //  : Expression (',' Expression)*
+    //  | ε
+    fn parse_argument_list(&mut self) -> Result<Vec<Expr>, &'static str> {
+        let mut args = Vec::new();
+
+        // Check for empty argument list
+        if self.lookahead.map(|t| t.kind) == Some(TokenKind::RParen) {
+            return Ok(args);
+        }
+
+        // Parse first argument
+        args.push(self.parse_logical_or_expression()?);
+
+        // Parse remaining arguments
+        while self.lookahead.map(|t| t.kind) == Some(TokenKind::Comma) {
+            self.eat(TokenKind::Comma)?;
+            args.push(self.parse_logical_or_expression()?);
+        }
+
+        Ok(args)
     }
 
     // NumericLiteral
