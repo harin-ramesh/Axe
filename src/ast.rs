@@ -67,6 +67,8 @@ pub enum Expr {
     Lambda(Vec<String>, Box<Stmt>),
     /// Property access: obj.property
     Property(Box<Expr>, String),
+    /// Method call: obj.method(args...)
+    MethodCall(Box<Expr>, String, Vec<Expr>),
     /// Object instantiation: new ClassName(args...)
     New(String, Vec<Expr>),
 }

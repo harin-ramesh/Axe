@@ -785,14 +785,16 @@ fn eval_empty_list() {
 #[test]
 fn eval_native_len_list() {
     let axe = Axe::new();
+    // Using method syntax: [1, 2, 3].len()
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
-            "len".to_string(),
-            vec![Expr::List(vec![
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::List(vec![
                 Expr::Literal(Literal::Int(1)),
                 Expr::Literal(Literal::Int(2)),
                 Expr::Literal(Literal::Int(3)),
-            ])],
+            ])),
+            "len".to_string(),
+            vec![],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -801,10 +803,12 @@ fn eval_native_len_list() {
 #[test]
 fn eval_native_len_string() {
     let axe = Axe::new();
+    // Using method syntax: "hello".len()
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
             "len".to_string(),
-            vec![Expr::Literal(Literal::Str("hello".to_string()))],
+            vec![],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -868,13 +872,12 @@ fn eval_native_range_three_args() {
 #[test]
 fn eval_native_concat_strings() {
     let axe = Axe::new();
+    // Using method syntax: "hello".concat(" world")
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
             "concat".to_string(),
-            vec![
-                Expr::Literal(Literal::Str("hello".to_string())),
-                Expr::Literal(Literal::Str(" world".to_string())),
-            ],
+            vec![Expr::Literal(Literal::Str(" world".to_string()))],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -883,13 +886,12 @@ fn eval_native_concat_strings() {
 #[test]
 fn eval_native_concat_lists() {
     let axe = Axe::new();
+    // Using method syntax: [1].concat([2])
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
             "concat".to_string(),
-            vec![
-                Expr::List(vec![Expr::Literal(Literal::Int(1))]),
-                Expr::List(vec![Expr::Literal(Literal::Int(2))]),
-            ],
+            vec![Expr::List(vec![Expr::Literal(Literal::Int(2))])],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -898,13 +900,12 @@ fn eval_native_concat_lists() {
 #[test]
 fn eval_native_push() {
     let axe = Axe::new();
+    // Using method syntax: [1].push(2)
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
             "push".to_string(),
-            vec![
-                Expr::List(vec![Expr::Literal(Literal::Int(1))]),
-                Expr::Literal(Literal::Int(2)),
-            ],
+            vec![Expr::Literal(Literal::Int(2))],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -913,17 +914,16 @@ fn eval_native_push() {
 #[test]
 fn eval_native_get() {
     let axe = Axe::new();
+    // Using method syntax: [10, 20, 30].get(1)
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::List(vec![
+                Expr::Literal(Literal::Int(10)),
+                Expr::Literal(Literal::Int(20)),
+                Expr::Literal(Literal::Int(30)),
+            ])),
             "get".to_string(),
-            vec![
-                Expr::List(vec![
-                    Expr::Literal(Literal::Int(10)),
-                    Expr::Literal(Literal::Int(20)),
-                    Expr::Literal(Literal::Int(30)),
-                ]),
-                Expr::Literal(Literal::Int(1)),
-            ],
+            vec![Expr::Literal(Literal::Int(1))],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -932,17 +932,16 @@ fn eval_native_get() {
 #[test]
 fn eval_native_get_negative_index() {
     let axe = Axe::new();
+    // Using method syntax: [10, 20, 30].get(-1)
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call(
+        stmts: vec![Stmt::Expr(Expr::MethodCall(
+            Box::new(Expr::List(vec![
+                Expr::Literal(Literal::Int(10)),
+                Expr::Literal(Literal::Int(20)),
+                Expr::Literal(Literal::Int(30)),
+            ])),
             "get".to_string(),
-            vec![
-                Expr::List(vec![
-                    Expr::Literal(Literal::Int(10)),
-                    Expr::Literal(Literal::Int(20)),
-                    Expr::Literal(Literal::Int(30)),
-                ]),
-                Expr::Literal(Literal::Int(-1)), // Should get last element
-            ],
+            vec![Expr::Literal(Literal::Int(-1))], // Should get last element
         ))],
     };
     assert!(axe.run(program).is_ok());

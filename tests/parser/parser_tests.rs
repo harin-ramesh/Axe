@@ -1019,3 +1019,110 @@ fn parse_function_call_multiline_args() {
     let result = parser.parse();
     assert!(result.is_ok());
 }
+
+// =============================================================================
+// Method Call Tests
+// =============================================================================
+
+#[test]
+fn parse_method_call_no_args() {
+    let mut parser = Parser::new("foo.bar();");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_method_call_with_args() {
+    let mut parser = Parser::new("foo.bar(1, 2);");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_chained_method_calls() {
+    let mut parser = Parser::new("foo.bar().baz();");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_method_call_on_string() {
+    let mut parser = Parser::new(r#""hello".len();"#);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_method_call_after_function() {
+    let mut parser = Parser::new("getUser().name();");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_property_access() {
+    let mut parser = Parser::new("foo.bar;");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_chained_property_access() {
+    let mut parser = Parser::new("foo.bar.baz;");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_property_then_method() {
+    let mut parser = Parser::new("foo.bar.len();");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn eval_string_len_method() {
+    let code = r#""hello".len();"#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(5))));
+}
+
+#[test]
+fn eval_string_concat_method() {
+    let code = r#""hello".concat(" world");"#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Str(_))));
+}
+
+#[test]
+fn eval_method_on_variable() {
+    let code = r#"
+        let s = "hello";
+        s.len();
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(5))));
+}
+
+#[test]
+fn eval_chained_method_calls() {
+    let code = r#""a".concat("b").concat("c");"#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+
+    let axe = Axe::new();
+    let result = axe.run(program);
+    assert!(result.is_ok());
+}

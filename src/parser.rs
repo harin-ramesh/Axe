@@ -517,20 +517,43 @@ impl<'src> Parser<'src> {
     //  | Identifier
     //  | '(' Expression ')'
     fn parse_primary(&mut self) -> Result<Expr, &'static str> {
-        match self.lookahead.as_ref().map(|t| t.kind) {
-            Some(TokenKind::Number) => self.parse_numeric_literal(),
-            Some(TokenKind::String) => self.parse_string_literal(),
-            Some(TokenKind::True) | Some(TokenKind::False) => self.parse_boolean_literal(),
-            Some(TokenKind::Null) => self.parse_null_literal(),
-            Some(TokenKind::Identifier) => self.parse_identifier(),
+        let expr = match self.lookahead.as_ref().map(|t| t.kind) {
+            Some(TokenKind::Number) => self.parse_numeric_literal()?,
+            Some(TokenKind::String) => self.parse_string_literal()?,
+            Some(TokenKind::True) | Some(TokenKind::False) => self.parse_boolean_literal()?,
+            Some(TokenKind::Null) => self.parse_null_literal()?,
+            Some(TokenKind::Identifier) => self.parse_identifier()?,
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
                 let expr = self.parse_logical_or_expression()?;
                 self.eat(TokenKind::RParen)?;
-                Ok(expr)
+                expr
             }
-            _ => Err("Unexpected token: expected literal or '('"),
+            _ => return Err("Unexpected token: expected literal or '('"),
+        };
+
+        // Handle method/property access on all primaries: "hello".len(), foo.bar, etc.
+        self.parse_member_access(expr)
+    }
+
+    // Parse chained property/method access: .foo.bar.baz or .foo().bar()
+    fn parse_member_access(&mut self, mut expr: Expr) -> Result<Expr, &'static str> {
+        while self.lookahead.map(|t| t.kind) == Some(TokenKind::MemberAccess) {
+            self.eat(TokenKind::MemberAccess)?;
+            let property_token = self.eat(TokenKind::Identifier)?;
+            let property_name = property_token.lexeme.to_string();
+
+            // Check if this is a method call: .method(args)
+            if self.lookahead.map(|t| t.kind) == Some(TokenKind::LParen) {
+                self.eat(TokenKind::LParen)?;
+                let args = self.parse_argument_list()?;
+                self.eat(TokenKind::RParen)?;
+                expr = Expr::MethodCall(Box::new(expr), property_name, args);
+            } else {
+                expr = Expr::Property(Box::new(expr), property_name);
+            }
         }
+        Ok(expr)
     }
 
     // Identifier or FunctionCall
