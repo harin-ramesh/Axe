@@ -38,24 +38,8 @@ impl TreeWalker {
             Value::NativeFunction("print".to_string(), native_print),
         );
         globals.borrow_mut().set(
-            "len".to_string(),
-            Value::NativeFunction("len".to_string(), native_len),
-        );
-        globals.borrow_mut().set(
-            "push".to_string(),
-            Value::NativeFunction("push".to_string(), native_push),
-        );
-        globals.borrow_mut().set(
-            "get".to_string(),
-            Value::NativeFunction("get".to_string(), native_get),
-        );
-        globals.borrow_mut().set(
             "type".to_string(),
             Value::NativeFunction("type".to_string(), native_type),
-        );
-        globals.borrow_mut().set(
-            "concat".to_string(),
-            Value::NativeFunction("concat".to_string(), native_concat),
         );
         globals.borrow_mut().set(
             "range".to_string(),
@@ -438,6 +422,131 @@ impl TreeWalker {
                     None => Err("Property not found"),
                 }
             }
+            Expr::MethodCall(obj_expr, method, args) => {
+                let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
+
+                // Evaluate arguments
+                let mut arg_values = Vec::new();
+                for arg in args {
+                    arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
+                }
+
+                self.call_method(obj, &method, arg_values, env)
+            }
+        }
+    }
+
+    fn call_method(
+        &self,
+        obj: Value,
+        method: &str,
+        args: Vec<Value>,
+        _env: EnvRef,
+    ) -> Result<Value, &'static str> {
+        match obj {
+            // String methods
+            Value::Literal(Literal::Str(ref s)) => match method {
+                "len" => {
+                    if !args.is_empty() {
+                        return Err("len() takes no arguments");
+                    }
+                    Ok(Value::Literal(Literal::Int(s.len() as i64)))
+                }
+                "concat" => {
+                    let mut result = s.clone();
+                    for arg in args {
+                        match arg {
+                            Value::Literal(Literal::Str(other)) => result.push_str(&other),
+                            _ => return Err("concat() requires string arguments"),
+                        }
+                    }
+                    Ok(Value::Literal(Literal::Str(result)))
+                }
+                _ => Err("Unknown string method"),
+            },
+
+            // List methods
+            Value::List(ref items) => match method {
+                "len" => {
+                    if !args.is_empty() {
+                        return Err("len() takes no arguments");
+                    }
+                    Ok(Value::Literal(Literal::Int(items.len() as i64)))
+                }
+                "push" => {
+                    if args.len() != 1 {
+                        return Err("push() takes exactly 1 argument");
+                    }
+                    let mut new_list = items.clone();
+                    new_list.push(args.into_iter().next().unwrap());
+                    Ok(Value::List(new_list))
+                }
+                "get" => {
+                    if args.len() != 1 {
+                        return Err("get() takes exactly 1 argument");
+                    }
+                    match &args[0] {
+                        Value::Literal(Literal::Int(idx)) => {
+                            let index = if *idx < 0 {
+                                (items.len() as i64 + idx) as usize
+                            } else {
+                                *idx as usize
+                            };
+                            items.get(index).cloned().ok_or("index out of bounds")
+                        }
+                        _ => Err("get() requires an integer argument"),
+                    }
+                }
+                "concat" => {
+                    let mut result = items.clone();
+                    for arg in args {
+                        match arg {
+                            Value::List(other) => result.extend(other),
+                            _ => return Err("concat() requires list arguments"),
+                        }
+                    }
+                    Ok(Value::List(result))
+                }
+                _ => Err("Unknown list method"),
+            },
+
+            // Object methods - look up method in object's environment
+            Value::Object(obj_env) => {
+                let func = obj_env.borrow().get(method).ok_or("Method not found")?;
+
+                match func {
+                    Value::Function(params, body, closure_env) => {
+                        // For object methods, first param is 'self'
+                        if params.len() != args.len() + 1 {
+                            return Err("argument count mismatch");
+                        }
+
+                        let func_env = Environment::extend(closure_env);
+
+                        // Bind 'self' (first param) to the object
+                        func_env
+                            .borrow_mut()
+                            .set(params[0].clone(), Value::Object(obj_env.clone()));
+
+                        // Bind remaining params to arguments
+                        for (param, value) in params.iter().skip(1).zip(args.iter()) {
+                            func_env.borrow_mut().set(param.clone(), value.clone());
+                        }
+
+                        self.eval_block(
+                            match *body {
+                                Stmt::Block(stmts) => stmts,
+                                _ => return Err("function body must be a block"),
+                            },
+                            func_env,
+                        )
+                    }
+                    Value::NativeFunction(_, native_fn) => native_fn(&args),
+                    _ => Err("not a method"),
+                }
+            }
+
+            _ => Err("Cannot call method on this type"),
         }
     }
 

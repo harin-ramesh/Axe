@@ -4,6 +4,7 @@ mod block_tests;
 mod comparison_tests;
 mod eval_tests;
 mod if_tests;
+mod method_tests;
 mod unary_tests;
 mod variable_tests;
 mod variable_validation_tests;
