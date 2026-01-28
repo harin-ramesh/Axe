@@ -6,6 +6,7 @@
 //! and a future bytecode VM.
 
 /// A complete Axe program consisting of a list of statements.
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program {
     pub stmts: Vec<Stmt>,
 }
@@ -81,7 +82,7 @@ pub enum Stmt {
     /// A block of statements: { stmt; stmt; ... }
     Block(Vec<Stmt>),
     /// Variable declaration: let name = expr, name2 = expr2;
-    Let(Vec<(String, Option<Expr>)>),
+    Let(Vec<(String, Option<Expr>, Option<Expr>)>),
     /// Variable assignment: name = expr;
     Assign(String, Expr),
     /// Conditional: if (cond) { then } else { else }

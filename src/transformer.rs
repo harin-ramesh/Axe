@@ -14,7 +14,7 @@ impl Transformer {
             // SYNTACTIC SUGAR: fn name(params) { body } -> let name = lambda(params) { body }
             Stmt::Function(name, params, body) => {
                 let lambda = Expr::Lambda(params, body);
-                Stmt::Let(vec![(name, Some(lambda))])
+                Stmt::Let(vec![(name, Some(lambda), None)])
             }
 
             // SYNTACTIC SUGAR: for var in iterable { body } -> while loop
@@ -36,17 +36,18 @@ impl Transformer {
                 let len_var = "__len".to_string();
 
                 // let __iter = iterable;
-                let let_iter = Stmt::Let(vec![(iter_var.clone(), Some(iterable))]);
+                let let_iter = Stmt::Let(vec![(iter_var.clone(), Some(iterable), None)]);
 
                 // let __idx = 0;
                 let let_idx = Stmt::Let(vec![(
                     idx_var.clone(),
                     Some(Expr::Literal(Literal::Int(0))),
+                    None
                 )]);
 
                 // let __len = len(__iter);
                 let len_call = Expr::Call("len".to_string(), vec![Expr::Var(iter_var.clone())]);
-                let let_len = Stmt::Let(vec![(len_var.clone(), Some(len_call))]);
+                let let_len = Stmt::Let(vec![(len_var.clone(), Some(len_call), None)]);
 
                 // __idx < __len
                 let condition = Expr::Binary(
@@ -60,7 +61,7 @@ impl Transformer {
                     "get".to_string(),
                     vec![Expr::Var(iter_var), Expr::Var(idx_var.clone())],
                 );
-                let let_var = Stmt::Let(vec![(var, Some(get_call))]);
+                let let_var = Stmt::Let(vec![(var, Some(get_call), None)]);
 
                 // __idx = __idx + 1;
                 let increment = Stmt::Assign(
