@@ -29,6 +29,10 @@ pub enum TokenKind {
     For,
     In,
     Fn,
+    Class,
+    New,
+    Colon,
+
     // Comparison operators
     Eq,  // ==
     Neq, // !=
@@ -78,6 +82,9 @@ impl fmt::Display for TokenKind {
             TokenKind::For            => "for",
             TokenKind::In             => "in",
             TokenKind::Fn             => "fn",
+            TokenKind::Class          => "class",
+            TokenKind::New            => "new",
+            TokenKind::Colon          => ":",
 
             // Comparisons
             TokenKind::Eq             => "==",
@@ -152,6 +159,9 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::For, Regex::new(r"^for\b").unwrap()),
         (TokenKind::In, Regex::new(r"^in\b").unwrap()),
         (TokenKind::Fn, Regex::new(r"^fn\b").unwrap()),
+        (TokenKind::Class, Regex::new(r"^class\b").unwrap()),
+        (TokenKind::New, Regex::new(r"^new\b").unwrap()),
+        (TokenKind::Colon, Regex::new(r"^:").unwrap()),
         (TokenKind::True, Regex::new(r"^true\b").unwrap()),
         (TokenKind::False, Regex::new(r"^false\b").unwrap()),
         (TokenKind::Null, Regex::new(r"^null\b").unwrap()),

@@ -85,11 +85,11 @@ impl TreeWalker {
 
     fn eval_let(
         &self,
-        declarations: Vec<(String, Option<Expr>)>,
+        declarations: Vec<(String, Option<Expr>, Option<Expr>)>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
         for decl in declarations {
-            let (name, expr_opt) = decl;
+            let (name, expr_opt, expr_obj) = decl;
             if !is_valid_var_name(&name) {
                 return Err("invalid variable name");
             }
@@ -98,7 +98,16 @@ impl TreeWalker {
             } else {
                 Value::Literal(Literal::Null)
             };
-            env.borrow_mut().set(name.to_string(), value);
+            if let Some(expr) = expr_obj {
+                let obj = self.eval_expr(expr, Some(env.clone()))?;
+                if let Value::Object(obj_env) = obj {
+                    obj_env.borrow_mut().set(name.clone(), value);
+                } else {
+                    return Err("expected object for let ... in ...");
+                }
+            } else {
+                env.borrow_mut().set(name.to_string(), value);
+            }
         }
         Ok(Value::Literal(Literal::Null))
     }
@@ -213,6 +222,7 @@ impl TreeWalker {
         args: Vec<Expr>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
+
         let func = env.borrow().get(&name).ok_or("undefined function")?;
 
         match func {
@@ -258,7 +268,7 @@ impl TreeWalker {
         name: String,
         parent: Option<String>,
         body: Vec<Stmt>,
-        _env: EnvRef,
+        env: EnvRef,
     ) -> Result<Value, &'static str> {
         let class_env = if let Some(p) = parent {
             if let Some(Value::Object(p_env)) = self.globals.borrow().get(&p) {
@@ -267,7 +277,7 @@ impl TreeWalker {
                 return Err("Parent class not found");
             }
         } else {
-            Environment::new()
+            Environment::extend(env.clone())
         };
         self.globals
             .borrow_mut()
@@ -326,8 +336,8 @@ impl TreeWalker {
             }
             Expr::Call(name, args) => {
                 // Get the function from the environment
-                let func = env.borrow().get(&name).ok_or("undefined function")?;
 
+                let func = env.borrow().get(&name).ok_or("undefined function")?;
                 match func {
                     Value::Function(params, body, closure_env) => {
                         // Check argument count
@@ -381,12 +391,12 @@ impl TreeWalker {
 
                 let func = class_env
                     .borrow()
-                    .get("constructor")
+                    .get("init")
                     .ok_or("undefined constructor")?;
 
                 if let Value::Function(params, body, closure_env) = func {
                     if params.len() != (args.len() + 1) {
-                        return Err("argument count mismatch");
+                        return Err("Argument count mismatch");
                     }
 
                     let mut arg_values = Vec::new();
@@ -399,6 +409,8 @@ impl TreeWalker {
                     for (param, value) in params.iter().zip(arg_values.iter()) {
                         func_env.borrow_mut().set(param.clone(), value.clone());
                     }
+                    func_env.borrow_mut().set("self".to_string(), instance.clone());
+
                     self.eval_block(
                         match *body {
                             Stmt::Block(stmts) => stmts,
@@ -532,7 +544,10 @@ impl TreeWalker {
                         for (param, value) in params.iter().skip(1).zip(args.iter()) {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
-
+                        func_env.borrow_mut().set(
+                            "self".to_string(), 
+                            Value::Object(obj_env.clone())
+                        );
                         self.eval_block(
                             match *body {
                                 Stmt::Block(stmts) => stmts,

@@ -1,0 +1,13 @@
+class Ax {
+    fn init(self, a, b) {
+        self.x = a;
+        self.y = b;
+    }
+
+    fn add(self, a) {
+        print(self.x + self.y + a);
+    }
+}
+
+let obj = new Ax(1, 1);
+obj.add(1);

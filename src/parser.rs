@@ -75,9 +75,27 @@ impl<'src> Parser<'src> {
             Some(TokenKind::While) => self.parse_while_statement()?,
             Some(TokenKind::For) => self.parse_for_statement()?,
             Some(TokenKind::Fn) => self.parse_function_declaration()?,
+            Some(TokenKind::Class) => self.parse_class_declaration()?,
             _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
+    }
+
+    fn parse_class_declaration(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::Class)?;
+        let name_token = self.eat(TokenKind::Identifier)?;
+        let name = name_token.lexeme.to_string();
+        let parent = if self.lookahead.map(|t| t.kind) == Some(TokenKind::Colon) {
+            self.eat(TokenKind::Colon)?;
+            let parent_token = self.eat(TokenKind::Identifier)?;
+            Some(parent_token.lexeme.to_string())
+        } else {
+            None
+        };
+        self.eat(TokenKind::OpeningBrace)?;
+        let body = self.parse_statements(TokenKind::ClosingBrace)?;
+        self.eat(TokenKind::ClosingBrace)?;
+        Ok(Stmt::Class(name, parent, body))
     }
 
     // FunctionDeclaration
@@ -170,7 +188,7 @@ impl<'src> Parser<'src> {
     // DeclarationList
     //  : Declaration
     //  | DeclarationList ',' Declaration
-    fn parse_declarations(&mut self) -> Result<Vec<(String, Option<Expr>)>, &'static str> {
+    fn parse_declarations(&mut self) -> Result<Vec<(String, Option<Expr>, Option<Expr>)>, &'static str> {
         let mut decls = vec![self.parse_declaration()?];
 
         while let Some(token) = &self.lookahead {
@@ -187,7 +205,7 @@ impl<'src> Parser<'src> {
     // Declaration
     //  : Identifier
     //  | Identifier '=' Expression
-    fn parse_declaration(&mut self) -> Result<(String, Option<Expr>), &'static str> {
+    fn parse_declaration(&mut self) -> Result<(String, Option<Expr>, Option<Expr>), &'static str> {
         let name_token = self.eat(TokenKind::Identifier)?;
         let name = name_token.lexeme.to_string();
         let value = match self.lookahead.map(|t| t.kind) {
@@ -195,7 +213,7 @@ impl<'src> Parser<'src> {
             Some(TokenKind::Delimeter) => Expr::Literal(Literal::Null),
             _ => self.parse_declaration_value()?,
         };
-        Ok((name, Some(value)))
+        Ok((name, Some(value), None))
     }
 
     // DeclarationValue
@@ -283,13 +301,18 @@ impl<'src> Parser<'src> {
                 self.eat(TokenKind::SimpleAssign)?;
 
                 // Validate left-hand side is an identifier
-                let name = match left {
-                    Expr::Var(name) => name,
+                match left {
+                    Expr::Var(name) => {
+                        let right = self.parse_logical_or_expression()?;
+                        return Ok(Stmt::Assign(name, right));
+                    },
+                    Expr::Property(obj_expr, prop_name) => {
+                        let right = self.parse_logical_or_expression()?;
+                        return Ok(Stmt::Let(vec![(prop_name, Some(right), Some(*obj_expr))]))
+                    },
                     _ => return Err("Invalid left-hand side in assignment"),
                 };
 
-                let right = self.parse_logical_or_expression()?;
-                return Ok(Stmt::Assign(name, right));
             }
         }
 
@@ -522,6 +545,7 @@ impl<'src> Parser<'src> {
             Some(TokenKind::String) => self.parse_string_literal()?,
             Some(TokenKind::True) | Some(TokenKind::False) => self.parse_boolean_literal()?,
             Some(TokenKind::Null) => self.parse_null_literal()?,
+            Some(TokenKind::New) => self.parse_object_instantiation()?,
             Some(TokenKind::Identifier) => self.parse_identifier()?,
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
@@ -534,6 +558,19 @@ impl<'src> Parser<'src> {
 
         // Handle method/property access on all primaries: "hello".len(), foo.bar, etc.
         self.parse_member_access(expr)
+    }
+
+    fn parse_object_instantiation(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::New)?;
+
+        let class_token = self.eat(TokenKind::Identifier)?;
+        let class_name = class_token.lexeme.to_string();
+
+        self.eat(TokenKind::LParen)?;
+        let args = self.parse_argument_list()?;
+        self.eat(TokenKind::RParen)?;
+
+        Ok(Expr::New(class_name, args))
     }
 
     // Parse chained property/method access: .foo.bar.baz or .foo().bar()
