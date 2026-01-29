@@ -1,0 +1,95 @@
+// Classes and Object-Oriented Programming in Axe
+// This example demonstrates how to define and use classes
+
+// Define a simple Point class
+class Point {
+    let x = 0;
+    let y = 0;
+    
+    // Constructor to initialize a point
+    fn init(self, px, py) {
+        let x = px in self;
+        let y = py in self;
+    }
+    
+    // Method to calculate distance from origin
+    fn distanceFromOrigin(self) {
+        // Using Pythagorean theorem (simplified without sqrt)
+        self.x * self.x + self.y * self.y;
+    }
+    
+    // Method to add two points
+    fn add(self, other) {
+        let newX = self.x + other.x;
+        let newY = self.y + other.y;
+        new Point(newX, newY);
+    }
+}
+
+// Create some points
+let p1 = new Point(3, 4);
+let p2 = new Point(1, 2);
+
+// Access properties
+print("Point 1: x =");
+print(p1.x);
+print("Point 1: y =");
+print(p1.y);
+
+// Call methods
+print("Distance squared from origin:");
+print(p1.distanceFromOrigin());  // 25 (3^2 + 4^2)
+
+// Add points
+let p3 = p1.add(p2);
+print("Sum of points: x =");
+print(p3.x);  // 4
+print("Sum of points: y =");
+print(p3.y);  // 6
+
+// Define a Counter class
+class Counter {
+    let count = 0;
+    
+    fn init(self, start) {
+        let count = start in self;
+    }
+    
+    fn increment(self) {
+        let count = self.count + 1 in self;
+        self.count;
+    }
+    
+    fn decrement(self) {
+        let count = self.count - 1 in self;
+        self.count;
+    }
+    
+    fn reset(self) {
+        let count = 0 in self;
+        self.count;
+    }
+    
+    fn get(self) {
+        self.count;
+    }
+}
+
+// Use the counter
+let counter = new Counter(10);
+print("Initial count:");
+print(counter.get());  // 10
+
+counter.increment();
+counter.increment();
+counter.increment();
+print("After 3 increments:");
+print(counter.get());  // 13
+
+counter.decrement();
+print("After 1 decrement:");
+print(counter.get());  // 12
+
+counter.reset();
+print("After reset:");
+print(counter.get());  // 0

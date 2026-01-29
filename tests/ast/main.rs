@@ -1,8 +1,11 @@
 mod assign_tests;
 mod assignment_tests;
 mod block_tests;
+mod class_tests;
 mod comparison_tests;
+mod error_tests;
 mod eval_tests;
+mod for_tests;
 mod if_tests;
 mod method_tests;
 mod unary_tests;

@@ -1,0 +1,148 @@
+// Lists in Axe
+// This example demonstrates list creation and manipulation
+
+print("=== List Creation ===");
+
+// Create an empty list
+let empty = [];
+print("Empty list length:");
+print(empty.len());  // 0
+
+// Create a list with elements
+let numbers = [1, 2, 3, 4, 5];
+print("Numbers list length:");
+print(numbers.len());  // 5
+
+// Mixed type list
+let mixed = [1, "hello", true, 3.14];
+print("Mixed list length:");
+print(mixed.len());  // 4
+
+print("=== Accessing Elements ===");
+
+// Get elements by index
+let fruits = ["apple", "banana", "cherry", "date"];
+print("First fruit:");
+print(fruits.get(0));  // apple
+print("Third fruit:");
+print(fruits.get(2));  // cherry
+
+// Negative indexing
+print("Last fruit:");
+print(fruits.get(-1));  // date
+print("Second to last:");
+print(fruits.get(-2));  // cherry
+
+print("=== List Methods ===");
+
+// Push - add element to end
+let list = [1, 2, 3];
+print("Original list length:");
+print(list.len());  // 3
+
+let newList = list.push(4);
+print("After push, new list length:");
+print(newList.len());  // 4
+
+// Concat - combine lists
+let a = [1, 2];
+let b = [3, 4];
+let combined = a.concat(b);
+print("Combined list length:");
+print(combined.len());  // 4
+print("First element:");
+print(combined.get(0));  // 1
+print("Last element:");
+print(combined.get(-1));  // 4
+
+print("=== Building Lists with Loops ===");
+
+// Build a list of squares
+let squares = [];
+for i in range(1, 6) {
+    squares = squares.push(i * i);
+}
+print("Squares list:");
+print("Length:");
+print(squares.len());  // 5
+print("First square:");
+print(squares.get(0));  // 1
+print("Last square:");
+print(squares.get(-1));  // 25
+
+// Sum all elements in a list
+let nums = [10, 20, 30, 40, 50];
+let sum = 0;
+for i in range(nums.len()) {
+    sum = sum + nums.get(i);
+}
+print("Sum of nums:");
+print(sum);  // 150
+
+print("=== List of Lists ===");
+
+// Nested lists (matrix-like)
+let matrix = [[1, 2], [3, 4], [5, 6]];
+print("Matrix rows:");
+print(matrix.len());  // 3
+
+// Access nested element
+let row0 = matrix.get(0);
+print("First row, first element:");
+print(row0.get(0));  // 1
+
+print("=== Finding Elements ===");
+
+// Find max in a list
+fn findMax(list) {
+    let max = list.get(0);
+    for i in range(1, list.len()) {
+        let current = list.get(i);
+        if (current > max) {
+            max = current;
+        } else {
+            max = max;
+        }
+    }
+    max;
+}
+
+let values = [3, 7, 2, 9, 1, 8, 4];
+print("Max value:");
+print(findMax(values));  // 9
+
+// Find min in a list
+fn findMin(list) {
+    let min = list.get(0);
+    for i in range(1, list.len()) {
+        let current = list.get(i);
+        if (current < min) {
+            min = current;
+        } else {
+            min = min;
+        }
+    }
+    min;
+}
+
+print("Min value:");
+print(findMin(values));  // 1
+
+print("=== Reversing a List ===");
+
+fn reverse(list) {
+    let result = [];
+    let i = list.len() - 1;
+    while (i >= 0) {
+        result = result.push(list.get(i));
+        i = i - 1;
+    }
+    result;
+}
+
+let original = [1, 2, 3, 4, 5];
+let reversed = reverse(original);
+print("Reversed list:");
+for i in range(reversed.len()) {
+    print(reversed.get(i));
+}

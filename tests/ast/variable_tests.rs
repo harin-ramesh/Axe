@@ -6,7 +6,7 @@ fn set_and_get_variable() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(42))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(42)))), None]),
             Stmt::Expr(Expr::Var("x".into())),
         ],
     };
@@ -21,7 +21,7 @@ fn nested_expression_with_variable() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(3))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(3)))), None]),
             Stmt::Expr(Expr::Binary(
                 Operation::Mul,
                 Box::new(Expr::Binary(
@@ -54,7 +54,7 @@ fn null_can_be_stored_in_variable() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Null)))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Null))), None]),
             Stmt::Expr(Expr::Var("x".into())),
         ],
     };
