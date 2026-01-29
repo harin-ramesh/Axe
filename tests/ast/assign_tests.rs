@@ -7,7 +7,7 @@ fn let_creates_new_variable() {
     // Create a variable with Let (declaration)
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Expr(Expr::Var("x".into())),
         ],
     };
@@ -24,7 +24,7 @@ fn let_overwrites_in_same_scope() {
     // Create a variable with Let, then overwrite
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Assign("x".into(), Expr::Literal(Literal::Int(20))),
             Stmt::Expr(Expr::Var("x".into())),
         ],
@@ -41,7 +41,7 @@ fn assign_updates_existing_variable() {
     // Create a variable with Let then update with Assign
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Assign("x".into(), Expr::Literal(Literal::Int(20))),
         ],
     };
@@ -108,12 +108,12 @@ fn let_creates_local_variable_in_function() {
     // Function with Let creates a local variable (shadows global)
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Function(
                 "shadow".into(),
                 vec![],
                 Box::new(Stmt::Block(vec![
-                    Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(999))))]),
+                    Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(999)))), None]),
                     Stmt::Expr(Expr::Var("x".into())),
                 ])),
             ),
@@ -131,8 +131,8 @@ fn assign_in_while_loop() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("i".into(), Some(Expr::Literal(Literal::Int(0))))]),
-            Stmt::Let(vec![("sum".into(), Some(Expr::Literal(Literal::Int(0))))]),
+            Stmt::Let(vec![("i".into(), Some(Expr::Literal(Literal::Int(0)))), None]),
+            Stmt::Let(vec![("sum".into(), Some(Expr::Literal(Literal::Int(0)))), None]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
@@ -189,7 +189,7 @@ fn assign_updates_through_multiple_scopes() {
     // Inner function using lambda
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("value".into(), Some(Expr::Literal(Literal::Int(1))))]),
+            Stmt::Let(vec![("value".into(), Some(Expr::Literal(Literal::Int(1)))), None]),
             Stmt::Function(
                 "outer".into(),
                 vec![],
@@ -241,7 +241,7 @@ fn inner_scope_can_access_outer_variables() {
     // Inner block can read variable from outer scope
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(42))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(42)))), None]),
             Stmt::Block(vec![Stmt::Expr(Expr::Var("x".into()))]),
         ],
     };
@@ -257,7 +257,7 @@ fn block_let_overwrites_outer_variable() {
     // Block let overwrites outer variable (blocks share parent scope)
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Block(vec![Stmt::Let(vec![(
                 "x".into(),
                 Some(Expr::Literal(Literal::Int(99))),
@@ -278,7 +278,7 @@ fn block_let_modifies_same_scope() {
     // Block let modifies same scope (no isolation)
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Block(vec![Stmt::Let(vec![(
                 "x".into(),
                 Some(Expr::Literal(Literal::Int(99))),
@@ -299,7 +299,7 @@ fn assign_modifies_outer_scope_variable() {
     // Assign (not let) in inner block modifies outer variable
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
             Stmt::Block(vec![Stmt::Assign(
                 "x".into(),
                 Expr::Literal(Literal::Int(50)),
@@ -320,11 +320,11 @@ fn nested_blocks_scope_correctly() {
     // Multiple levels of nesting
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("a".into(), Some(Expr::Literal(Literal::Int(1))))]),
+            Stmt::Let(vec![("a".into(), Some(Expr::Literal(Literal::Int(1)))), None]),
             Stmt::Block(vec![
-                Stmt::Let(vec![("b".into(), Some(Expr::Literal(Literal::Int(2))))]),
+                Stmt::Let(vec![("b".into(), Some(Expr::Literal(Literal::Int(2)))), None]),
                 Stmt::Block(vec![
-                    Stmt::Let(vec![("c".into(), Some(Expr::Literal(Literal::Int(3))))]),
+                    Stmt::Let(vec![("c".into(), Some(Expr::Literal(Literal::Int(3)))), None]),
                     Stmt::Expr(Expr::Binary(
                         Operation::Add,
                         Box::new(Expr::Binary(
@@ -351,7 +351,7 @@ fn function_has_own_scope() {
     // Function parameters are in function's scope
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(100))))]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(100)))), None]),
             Stmt::Function(
                 "get_param".into(),
                 vec!["x".into()],

@@ -1,0 +1,140 @@
+// Loops in Axe
+// This example demonstrates while and for loops
+
+print("=== While Loop Examples ===");
+
+// Basic while loop - countdown
+let count = 5;
+print("Countdown:");
+while (count > 0) {
+    print(count);
+    count = count - 1;
+}
+print("Blast off!");
+
+// Sum 1 to 10 using while
+let sum = 0;
+let i = 1;
+while (i <= 10) {
+    sum = sum + i;
+    i = i + 1;
+}
+print("Sum 1 to 10:");
+print(sum);  // 55
+
+// Factorial using while
+let n = 5;
+let factorial = 1;
+while (n > 0) {
+    factorial = factorial * n;
+    n = n - 1;
+}
+print("5! =");
+print(factorial);  // 120
+
+print("=== For Loop Examples ===");
+
+// Basic for loop
+print("Numbers 0 to 4:");
+for i in range(5) {
+    print(i);
+}
+
+// For loop with start and end
+print("Numbers 1 to 5:");
+for i in range(1, 6) {
+    print(i);
+}
+
+// Sum using for loop
+let total = 0;
+for n in range(1, 11) {
+    total = total + n;
+}
+print("Sum 1 to 10 (for loop):");
+print(total);  // 55
+
+// Sum of squares
+let sumSquares = 0;
+for i in range(1, 6) {
+    sumSquares = sumSquares + i * i;
+}
+print("Sum of squares 1-5:");
+print(sumSquares);  // 55 (1 + 4 + 9 + 16 + 25)
+
+// Factorial using for loop
+let fact = 1;
+for i in range(1, 6) {
+    fact = fact * i;
+}
+print("5! using for loop:");
+print(fact);  // 120
+
+print("=== Nested Loops ===");
+
+// Multiplication table (partial)
+print("2x table:");
+for i in range(1, 6) {
+    print(2 * i);
+}
+
+// Nested for loops - counting
+let nested_count = 0;
+for i in range(3) {
+    for j in range(4) {
+        nested_count = nested_count + 1;
+    }
+}
+print("3x4 nested iterations:");
+print(nested_count);  // 12
+
+print("=== Loop with Conditionals ===");
+
+// Sum of even numbers 1-10
+let evenSum = 0;
+for i in range(1, 11) {
+    if (i % 2 == 0) {
+        evenSum = evenSum + i;
+    } else {
+        evenSum = evenSum;  // no-op
+    }
+}
+print("Sum of even numbers 1-10:");
+print(evenSum);  // 30 (2+4+6+8+10)
+
+// Sum of odd numbers 1-10
+let oddSum = 0;
+for i in range(1, 11) {
+    if (i % 2 == 1) {
+        oddSum = oddSum + i;
+    } else {
+        oddSum = oddSum;  // no-op
+    }
+}
+print("Sum of odd numbers 1-10:");
+print(oddSum);  // 25 (1+3+5+7+9)
+
+print("=== Fibonacci with Loop ===");
+
+let a = 0;
+let b = 1;
+print("Fibonacci sequence (first 10):");
+print(a);
+print(b);
+for i in range(8) {
+    let temp = a + b;
+    a = b;
+    b = temp;
+    print(b);
+}
+
+print("=== Power calculation ===");
+
+// Calculate 2^10 using a loop
+let base = 2;
+let result = 1;
+for i in range(10) {
+    result = result * base;
+}
+print("2^10 =");
+print(result);  // 1024

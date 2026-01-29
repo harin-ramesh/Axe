@@ -42,7 +42,7 @@ impl Transformer {
                 let let_idx = Stmt::Let(vec![(
                     idx_var.clone(),
                     Some(Expr::Literal(Literal::Int(0))),
-                    None
+                    None,
                 )]);
 
                 // let __len = len(__iter);
@@ -119,7 +119,7 @@ mod tests {
         match transformed {
             Stmt::Let(bindings) => {
                 assert_eq!(bindings.len(), 1);
-                let (name, init) = &bindings[0];
+                let (name, init, _obj) = &bindings[0];
                 assert_eq!(name, "add");
                 match init {
                     Some(Expr::Lambda(params, _body)) => {
