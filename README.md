@@ -99,10 +99,9 @@ for i in range(1, 6) {
 ### Classes
 ```javascript
 class Counter {
-    let count = 0;
     
     fn init(self, start) {
-        let count = start in self;
+        self.count = start;
     }
     
     fn increment(self) {
