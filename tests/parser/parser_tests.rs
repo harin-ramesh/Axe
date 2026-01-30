@@ -868,7 +868,7 @@ fn parse_while_count_1_to_10_sum() {
     let code = r#"
         let i = 1;
         let sum = 0;
-        where (i <= 10) {
+        while (i <= 10) {
             sum = sum + i;
             i = i + 1;
         }
@@ -886,7 +886,7 @@ fn eval_while_count_1_to_10_sum_is_correct() {
     let code = r#"
         let i = 1;
         let sum = 0;
-        where (i <= 10) {
+        while (i <= 10) {
             sum = sum + i;
             i = i + 1;
         }

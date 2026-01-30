@@ -208,11 +208,14 @@ impl TreeWalker {
         body: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-        // Transform for to while loop, then evaluate
+        // For is syntactic sugar for while - transform then evaluate in a child scope
+        // so that internal loop variables (__iter_N, __idx_N, __len_N) and the
+        // loop variable don't leak into the outer scope.
         let transformed = self
             .transformer
             .transform_stmt(Stmt::For(var, iterable, body));
-        self.eval_stmt(transformed, Some(env))
+        let for_scope = Environment::extend(env);
+        self.eval_stmt(transformed, Some(for_scope))
     }
 
     #[allow(dead_code)]
@@ -222,7 +225,6 @@ impl TreeWalker {
         args: Vec<Expr>,
         env: EnvRef,
     ) -> Result<Value, &'static str> {
-
         let func = env.borrow().get(&name).ok_or("undefined function")?;
 
         match func {
@@ -409,7 +411,9 @@ impl TreeWalker {
                     for (param, value) in params.iter().zip(arg_values.iter()) {
                         func_env.borrow_mut().set(param.clone(), value.clone());
                     }
-                    func_env.borrow_mut().set("self".to_string(), instance.clone());
+                    func_env
+                        .borrow_mut()
+                        .set("self".to_string(), instance.clone());
 
                     self.eval_block(
                         match *body {
@@ -544,10 +548,9 @@ impl TreeWalker {
                         for (param, value) in params.iter().skip(1).zip(args.iter()) {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
-                        func_env.borrow_mut().set(
-                            "self".to_string(), 
-                            Value::Object(obj_env.clone())
-                        );
+                        func_env
+                            .borrow_mut()
+                            .set("self".to_string(), Value::Object(obj_env.clone()));
                         self.eval_block(
                             match *body {
                                 Stmt::Block(stmts) => stmts,

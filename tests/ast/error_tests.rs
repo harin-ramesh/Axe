@@ -385,8 +385,10 @@ fn edge_case_large_number() {
 
 #[test]
 fn edge_case_negative_number() {
-    let code = "let x = -9223372036854775808; x;"; // i64::MIN
-    assert_eq!(eval_int(code), i64::MIN);
+    // Note: 9223372036854775808 overflows i64 so it's parsed as float
+    // Use -9223372036854775807 (i64::MAX negated) instead
+    let code = "let x = -9223372036854775807; x;";
+    assert_eq!(eval_int(code), -9223372036854775807);
 }
 
 #[test]

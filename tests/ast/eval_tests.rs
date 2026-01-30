@@ -407,6 +407,7 @@ fn eval_let_with_value() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Int(42))),
+                None,
             )]),
             Stmt::Expr(Expr::Var("x".to_string())),
         ],
@@ -419,7 +420,7 @@ fn eval_let_without_value_is_null() {
     let axe = Axe::new();
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".to_string(), None)]),
+            Stmt::Let(vec![("x".to_string(), None, None)]),
             Stmt::Expr(Expr::Var("x".to_string())),
         ],
     };
@@ -432,8 +433,8 @@ fn eval_let_multiple_declarations() {
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![
-                ("x".to_string(), Some(Expr::Literal(Literal::Int(1)))),
-                ("y".to_string(), Some(Expr::Literal(Literal::Int(2)))),
+                ("x".to_string(), Some(Expr::Literal(Literal::Int(1))), None),
+                ("y".to_string(), Some(Expr::Literal(Literal::Int(2))), None),
             ]),
             Stmt::Expr(Expr::Binary(
                 Operation::Add,
@@ -452,6 +453,7 @@ fn eval_let_invalid_name_fails() {
         stmts: vec![Stmt::Let(vec![(
             "123invalid".to_string(),
             Some(Expr::Literal(Literal::Int(1))),
+            None,
         )])],
     };
     let result = axe.run(program);
@@ -471,6 +473,7 @@ fn eval_assign_existing_variable() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Int(10))),
+                None,
             )]),
             Stmt::Assign("x".to_string(), Expr::Literal(Literal::Int(20))),
             Stmt::Expr(Expr::Var("x".to_string())),
@@ -531,6 +534,7 @@ fn eval_if_true_branch() {
             Stmt::Let(vec![(
                 "result".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(true)),
@@ -556,6 +560,7 @@ fn eval_if_false_branch() {
             Stmt::Let(vec![(
                 "result".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(false)),
@@ -639,6 +644,7 @@ fn eval_while_loop() {
             Stmt::Let(vec![(
                 "i".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(
@@ -962,10 +968,12 @@ fn eval_class_definition() {
                 Stmt::Let(vec![(
                     "x".to_string(),
                     Some(Expr::Literal(Literal::Int(0))),
+                    None,
                 )]),
                 Stmt::Let(vec![(
                     "y".to_string(),
                     Some(Expr::Literal(Literal::Int(0))),
+                    None,
                 )]),
             ],
         )],
@@ -984,6 +992,7 @@ fn eval_class_with_method() {
                 Stmt::Let(vec![(
                     "count".to_string(),
                     Some(Expr::Literal(Literal::Int(0))),
+                    None,
                 )]),
                 Stmt::Function(
                     "increment".to_string(),

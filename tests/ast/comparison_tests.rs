@@ -302,10 +302,12 @@ fn comparison_with_variables() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Int(10))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "y".to_string(),
                 Some(Expr::Literal(Literal::Int(5))),
+                None,
             )]),
             Stmt::Expr(Expr::Binary(
                 Operation::Gt,

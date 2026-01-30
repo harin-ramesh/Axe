@@ -1,4 +1,11 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use crate::ast::{Expr, Literal, Operation, Stmt};
+
+/// Global counter for generating unique variable names in for-loop desugaring.
+/// Each nested for-loop gets unique `__iter_N`, `__idx_N`, `__len_N` names
+/// to avoid collisions when loops share the same scope.
+static FOR_LOOP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// AST Transformer - converts syntactic sugar to core forms.
 ///
@@ -22,18 +29,19 @@ impl Transformer {
             // {
             //     let __iter = iterable;
             //     let __idx = 0;
-            //     let __len = len(__iter);
-            //     where (__idx < __len) {
-            //         let var = get(__iter, __idx);
+            //     let __len = __iter.len();
+            //     while (__idx < __len) {
+            //         let var = __iter.get(__idx);
             //         body;
             //         __idx = __idx + 1;
             //     }
             // }
             Stmt::For(var, iterable, body) => {
-                // Create internal variable names
-                let iter_var = "__iter".to_string();
-                let idx_var = "__idx".to_string();
-                let len_var = "__len".to_string();
+                // Create unique internal variable names to support nested for-loops
+                let id = FOR_LOOP_COUNTER.fetch_add(1, Ordering::Relaxed);
+                let iter_var = format!("__iter_{}", id);
+                let idx_var = format!("__idx_{}", id);
+                let len_var = format!("__len_{}", id);
 
                 // let __iter = iterable;
                 let let_iter = Stmt::Let(vec![(iter_var.clone(), Some(iterable), None)]);
@@ -45,8 +53,12 @@ impl Transformer {
                     None,
                 )]);
 
-                // let __len = len(__iter);
-                let len_call = Expr::Call("len".to_string(), vec![Expr::Var(iter_var.clone())]);
+                // let __len = __iter.len();
+                let len_call = Expr::MethodCall(
+                    Box::new(Expr::Var(iter_var.clone())),
+                    "len".to_string(),
+                    vec![],
+                );
                 let let_len = Stmt::Let(vec![(len_var.clone(), Some(len_call), None)]);
 
                 // __idx < __len
@@ -56,10 +68,11 @@ impl Transformer {
                     Box::new(Expr::Var(len_var)),
                 );
 
-                // let var = get(__iter, __idx);
-                let get_call = Expr::Call(
+                // let var = __iter.get(__idx);
+                let get_call = Expr::MethodCall(
+                    Box::new(Expr::Var(iter_var)),
                     "get".to_string(),
-                    vec![Expr::Var(iter_var), Expr::Var(idx_var.clone())],
+                    vec![Expr::Var(idx_var.clone())],
                 );
                 let let_var = Stmt::Let(vec![(var, Some(get_call), None)]);
 
@@ -84,7 +97,7 @@ impl Transformer {
                     other => Stmt::Block(vec![let_var, other, increment]),
                 };
 
-                // where (__idx < __len) { ... }
+                // while (__idx < __len) { ... }
                 let while_stmt = Stmt::While(condition, Box::new(while_body));
 
                 // Wrap everything in a block
