@@ -188,7 +188,9 @@ impl<'src> Parser<'src> {
     // DeclarationList
     //  : Declaration
     //  | DeclarationList ',' Declaration
-    fn parse_declarations(&mut self) -> Result<Vec<(String, Option<Expr>, Option<Expr>)>, &'static str> {
+    fn parse_declarations(
+        &mut self,
+    ) -> Result<Vec<(String, Option<Expr>, Option<Expr>)>, &'static str> {
         let mut decls = vec![self.parse_declaration()?];
 
         while let Some(token) = &self.lookahead {
@@ -305,14 +307,13 @@ impl<'src> Parser<'src> {
                     Expr::Var(name) => {
                         let right = self.parse_logical_or_expression()?;
                         return Ok(Stmt::Assign(name, right));
-                    },
+                    }
                     Expr::Property(obj_expr, prop_name) => {
                         let right = self.parse_logical_or_expression()?;
-                        return Ok(Stmt::Let(vec![(prop_name, Some(right), Some(*obj_expr))]))
-                    },
+                        return Ok(Stmt::Let(vec![(prop_name, Some(right), Some(*obj_expr))]));
+                    }
                     _ => return Err("Invalid left-hand side in assignment"),
                 };
-
             }
         }
 
@@ -547,6 +548,7 @@ impl<'src> Parser<'src> {
             Some(TokenKind::Null) => self.parse_null_literal()?,
             Some(TokenKind::New) => self.parse_object_instantiation()?,
             Some(TokenKind::Identifier) => self.parse_identifier()?,
+            Some(TokenKind::LBracket) => self.parse_list_literal()?,
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
                 let expr = self.parse_logical_or_expression()?;
@@ -571,6 +573,30 @@ impl<'src> Parser<'src> {
         self.eat(TokenKind::RParen)?;
 
         Ok(Expr::New(class_name, args))
+    }
+
+    // ListLiteral
+    //  : '[' ']'
+    //  | '[' Expression (',' Expression)* ']'
+    fn parse_list_literal(&mut self) -> Result<Expr, &'static str> {
+        self.eat(TokenKind::LBracket)?;
+
+        let mut elements = Vec::new();
+
+        // Check for empty list
+        if self.lookahead.map(|t| t.kind) != Some(TokenKind::RBracket) {
+            // Parse first element
+            elements.push(self.parse_logical_or_expression()?);
+
+            // Parse remaining elements
+            while self.lookahead.map(|t| t.kind) == Some(TokenKind::Comma) {
+                self.eat(TokenKind::Comma)?;
+                elements.push(self.parse_logical_or_expression()?);
+            }
+        }
+
+        self.eat(TokenKind::RBracket)?;
+        Ok(Expr::List(elements))
     }
 
     // Parse chained property/method access: .foo.bar.baz or .foo().bar()

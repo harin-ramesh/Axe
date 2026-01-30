@@ -9,6 +9,7 @@ fn while_basic_countdown() {
             Stmt::Let(vec![(
                 "counter".to_string(),
                 Some(Expr::Literal(Literal::Int(5))),
+                None,
             )]),
             Stmt::While(
                 Expr::Var("counter".to_string()),
@@ -37,10 +38,12 @@ fn while_with_comparison_condition() {
             Stmt::Let(vec![(
                 "i".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "sum".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(
@@ -83,6 +86,7 @@ fn while_never_executes() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Literal(Literal::Int(0)),
@@ -107,6 +111,7 @@ fn while_with_false_condition() {
             Stmt::Let(vec![(
                 "count".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Literal(Literal::Bool(false)),
@@ -135,10 +140,12 @@ fn while_with_nested_blocks() {
             Stmt::Let(vec![(
                 "n".to_string(),
                 Some(Expr::Literal(Literal::Int(3))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "total".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(
@@ -155,6 +162,7 @@ fn while_with_nested_blocks() {
                                 Box::new(Expr::Var("n".to_string())),
                                 Box::new(Expr::Literal(Literal::Int(2))),
                             )),
+                            None,
                         )]),
                         Stmt::Assign(
                             "total".to_string(),
@@ -193,10 +201,12 @@ fn while_count_1_to_10_sum_is_correct() {
             Stmt::Let(vec![(
                 "i".to_string(),
                 Some(Expr::Literal(Literal::Int(1))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "sum".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(
@@ -261,6 +271,7 @@ fn while_with_variable_modification() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Int(1))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(
@@ -293,14 +304,17 @@ fn nested_while_loops() {
             Stmt::Let(vec![(
                 "i".to_string(),
                 Some(Expr::Literal(Literal::Int(2))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "j".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "total".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(
@@ -361,14 +375,17 @@ fn while_with_if_inside() {
             Stmt::Let(vec![(
                 "i".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "evens".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::Let(vec![(
                 "odds".to_string(),
                 Some(Expr::Literal(Literal::Int(0))),
+                None,
             )]),
             Stmt::While(
                 Expr::Binary(

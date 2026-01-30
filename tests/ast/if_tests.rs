@@ -60,7 +60,7 @@ fn if_with_block_branches() {
     let axe = Axe::new();
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".to_string(), None)]),
+            Stmt::Let(vec![("x".to_string(), None, None)]),
             Stmt::If(
                 Expr::Literal(Literal::Int(1)),
                 Box::new(Stmt::Block(vec![
@@ -111,6 +111,7 @@ fn if_with_variable_condition() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Int(5))),
+                None,
             )]),
             Stmt::If(
                 Expr::Var("x".to_string()),
@@ -227,6 +228,7 @@ fn if_with_bool_variable() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Bool(true))),
+                None,
             )]),
             Stmt::If(
                 Expr::Var("x".to_string()),
@@ -250,6 +252,7 @@ fn if_with_false_bool_variable() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Bool(false))),
+                None,
             )]),
             Stmt::If(
                 Expr::Var("x".to_string()),

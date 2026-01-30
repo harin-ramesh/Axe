@@ -292,6 +292,7 @@ fn method_call_on_variable() {
             Stmt::Let(vec![(
                 "x".to_string(),
                 Some(Expr::Literal(Literal::Str("hello".to_string()))),
+                None,
             )]),
             Stmt::Expr(Expr::MethodCall(
                 Box::new(Expr::Var("x".to_string())),

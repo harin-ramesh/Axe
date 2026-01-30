@@ -46,7 +46,7 @@ fn class_definition_with_method() {
             let count = 0;
             
             fn increment(self) {
-                let count = self.count + 1 in self;
+                self.count = self.count + 1;
             }
         }
     "#;
@@ -61,8 +61,8 @@ fn class_with_init_constructor() {
             let age = 0;
             
             fn init(self, n, a) {
-                let name = n in self;
-                let age = a in self;
+                self.name = n;
+                self.age = a;
             }
         }
     "#;
@@ -80,7 +80,7 @@ fn object_instantiation_basic() {
             let value = 0;
             
             fn init(self, v) {
-                let value = v in self;
+                self.value = v;
             }
         }
         
@@ -98,8 +98,8 @@ fn object_instantiation_multiple_properties() {
             let y = 0;
             
             fn init(self, px, py) {
-                let x = px in self;
-                let y = py in self;
+                self.x = px;
+                self.y = py;
             }
         }
         
@@ -116,7 +116,7 @@ fn object_instantiation_string_property() {
             let message = "";
             
             fn init(self, msg) {
-                let message = msg in self;
+                self.message = msg;
             }
         }
         
@@ -137,7 +137,7 @@ fn method_call_simple() {
             let result = 0;
             
             fn init(self, initial) {
-                let result = initial in self;
+                self.result = initial;
             }
             
             fn double(self) {
@@ -158,7 +158,7 @@ fn method_call_with_arguments() {
             let base = 0;
             
             fn init(self, b) {
-                let base = b in self;
+                self.base = b;
             }
             
             fn add(self, n) {
@@ -184,11 +184,11 @@ fn method_call_modifies_state() {
             let count = 0;
             
             fn init(self, start) {
-                let count = start in self;
+                self.count = start;
             }
             
             fn increment(self) {
-                let count = self.count + 1 in self;
+                self.count = self.count + 1;
                 self.count;
             }
             
@@ -217,7 +217,7 @@ fn property_access_basic() {
             let value = 100;
             
             fn init(self, v) {
-                let value = v in self;
+                self.value = v;
             }
         }
         
@@ -235,8 +235,8 @@ fn property_access_nested_expression() {
             let second = 0;
             
             fn init(self, a, b) {
-                let first = a in self;
-                let second = b in self;
+                self.first = a;
+                self.second = b;
             }
         }
         
@@ -296,7 +296,7 @@ fn multiple_objects_independent() {
             let value = 0;
             
             fn init(self, v) {
-                let value = v in self;
+                self.value = v;
             }
             
             fn get(self) {
@@ -324,7 +324,7 @@ fn class_with_conditional_method() {
             let value = 0;
             
             fn init(self, v) {
-                let value = v in self;
+                self.value = v;
             }
             
             fn isPositive(self) {
@@ -352,7 +352,7 @@ fn class_with_loop_in_method() {
             let limit = 0;
             
             fn init(self, n) {
-                let limit = n in self;
+                self.limit = n;
             }
             
             fn sum(self) {

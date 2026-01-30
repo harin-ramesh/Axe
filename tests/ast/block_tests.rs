@@ -34,8 +34,8 @@ fn block_with_variables() {
     // Block: let x = 10, let y = 20, return x + y
     let program = Program {
         stmts: vec![Stmt::Block(vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10)))), None]),
-            Stmt::Let(vec![("y".into(), Some(Expr::Literal(Literal::Int(20)))), None]),
+            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))), None)]),
+            Stmt::Let(vec![("y".into(), Some(Expr::Literal(Literal::Int(20))), None)]),
             Stmt::Expr(Expr::Binary(
                 Operation::Add,
                 Box::new(Expr::Var("x".into())),
