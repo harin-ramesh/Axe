@@ -8,8 +8,8 @@ class Point {
     
     // Constructor to initialize a point
     fn init(self, px, py) {
-        let x = px in self;
-        let y = py in self;
+        self.x = px;
+        self.y = py;
     }
     
     // Method to calculate distance from origin
@@ -52,21 +52,21 @@ class Counter {
     let count = 0;
     
     fn init(self, start) {
-        let count = start in self;
+        self.count = start;
     }
     
     fn increment(self) {
-        let count = self.count + 1 in self;
+        self.count = self.count + 1;
         self.count;
     }
     
     fn decrement(self) {
-        let count = self.count - 1 in self;
+        self.count = self.count - 1;
         self.count;
     }
     
     fn reset(self) {
-        let count = 0 in self;
+        self.count = 0;
         self.count;
     }
     
