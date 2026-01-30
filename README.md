@@ -105,7 +105,7 @@ class Counter {
     }
     
     fn increment(self) {
-        let count = self.count + 1 in self;
+        self.count = self.count + 1;
         self.count;
     }
     
