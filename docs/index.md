@@ -6,7 +6,7 @@ A lightweight programming language interpreter written in Rust, featuring C-like
 
 - C-like syntax with semicolons and braces
 - File execution for `.ax` files
-- Data types: integers, floats, strings, booleans, null
+- Data types: integers, floats, strings, booleans, null, lists
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
 - Comparisons: `>`, `<`, `>=`, `<=`, `==`, `!=`
 - Logical: `&&`, `||`
@@ -15,8 +15,12 @@ A lightweight programming language interpreter written in Rust, featuring C-like
 - Variables with `let` and assignment with `=`
 - Control flow with `if`/`else`
 - Loops: `while` and `for` with `range()`
-- Functions with `fn` keyword
-- Function calls with arguments
+- Functions with `fn` keyword and recursion
+- Classes with inheritance (`:`) and constructors (`init`)
+- Instance access with `.` for properties and methods
+- Static access with `::` for class-level properties and methods
+- Methods on strings (`.len()`, `.concat()`) and lists (`.len()`, `.get()`, `.push()`, `.concat()`)
+- Built-in functions: `print`, `type`, `range`
 - Block scoping with `{}`
 - Comments: `//` and `/* */`
 
@@ -53,7 +57,7 @@ let fact5 = factorial(5);  // 120
 
 ## Roadmap
 
-- Lists/Arrays
-- Built-in functions (print, len, etc.)
-- Classes
-- Modules/imports
+- Return statement
+- Break/continue for loops
+- Module system with imports
+- Pattern matching

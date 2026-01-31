@@ -547,7 +547,10 @@ impl<'src> Parser<'src> {
             Some(TokenKind::True) | Some(TokenKind::False) => self.parse_boolean_literal()?,
             Some(TokenKind::Null) => self.parse_null_literal()?,
             Some(TokenKind::New) => self.parse_object_instantiation()?,
-            Some(TokenKind::Identifier) => self.parse_identifier()?,
+            Some(TokenKind::Identifier) => {
+                let expr = self.parse_identifier()?;
+                self.parse_static_access(expr)?
+            },
             Some(TokenKind::LBracket) => self.parse_list_literal()?,
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
@@ -597,6 +600,23 @@ impl<'src> Parser<'src> {
 
         self.eat(TokenKind::RBracket)?;
         Ok(Expr::List(elements))
+    }
+
+    fn parse_static_access(&mut self, mut expr: Expr) -> Result<Expr, &'static str> {
+        if self.lookahead.map(|t| t.kind) == Some(TokenKind::StaticAccess) {            
+            self.eat(TokenKind::StaticAccess)?;
+            let property_token = self.eat(TokenKind::Identifier)?;
+            let property_name = property_token.lexeme.to_string();
+            if self.lookahead.map(|t| t.kind) == Some(TokenKind::LParen) {
+                self.eat(TokenKind::LParen)?;
+                let args = self.parse_argument_list()?;
+                self.eat(TokenKind::RParen)?;
+                expr = Expr::StaticMethodCall(Box::new(expr), property_name, args);
+            } else {
+                expr = Expr::StaticProperty(Box::new(expr), property_name);
+            }
+        }
+        Ok(expr)
     }
 
     // Parse chained property/method access: .foo.bar.baz or .foo().bar()

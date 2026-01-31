@@ -410,3 +410,140 @@ fn property_not_found_error() {
     "#;
     assert!(eval(code).is_err());
 }
+
+// ============================================================================
+// Static Access (::) Tests
+// ============================================================================
+
+#[test]
+fn static_property_access() {
+    let code = r#"
+        class Config {
+            let max = 100;
+        }
+        
+        Config::max;
+    "#;
+    assert_eq!(eval_int(code), 100);
+}
+
+#[test]
+fn static_property_access_string() {
+    let code = r#"
+        class App {
+            let name = "axe";
+        }
+        
+        App::name;
+    "#;
+    assert_eq!(eval_str(code), "axe");
+}
+
+#[test]
+fn static_method_call_no_args() {
+    let code = r#"
+        class MathUtils {
+            fn pi() {
+                3;
+            }
+        }
+        
+        MathUtils::pi();
+    "#;
+    assert_eq!(eval_int(code), 3);
+}
+
+#[test]
+fn static_method_call_with_args() {
+    let code = r#"
+        class MathUtils {
+            fn add(a, b) {
+                a + b;
+            }
+        }
+        
+        MathUtils::add(10, 20);
+    "#;
+    assert_eq!(eval_int(code), 30);
+}
+
+#[test]
+fn static_property_not_found_error() {
+    let code = r#"
+        class Empty {}
+        
+        Empty::missing;
+    "#;
+    assert!(eval(code).is_err());
+}
+
+#[test]
+fn static_method_not_found_error() {
+    let code = r#"
+        class Empty {}
+        
+        Empty::missing();
+    "#;
+    assert!(eval(code).is_err());
+}
+
+#[test]
+fn static_access_on_non_class_error() {
+    let code = r#"
+        let x = 42;
+        x::foo;
+    "#;
+    assert!(eval(code).is_err());
+}
+
+#[test]
+fn static_and_instance_coexist() {
+    let code = r#"
+        class Counter {
+            let default_start = 0;
+            
+            fn init(self, n) {
+                self.count = n;
+            }
+            
+            fn get(self) {
+                self.count;
+            }
+        }
+        
+        let c = new Counter(5);
+        Counter::default_start + c.get();
+    "#;
+    // 0 + 5 = 5
+    assert_eq!(eval_int(code), 5);
+}
+
+#[test]
+fn static_method_returns_value_used_in_expression() {
+    let code = r#"
+        class Factory {
+            fn magic() {
+                42;
+            }
+        }
+        
+        Factory::magic() + 8;
+    "#;
+    assert_eq!(eval_int(code), 50);
+}
+
+#[test]
+fn static_property_multiple_classes() {
+    let code = r#"
+        class A {
+            let val = 10;
+        }
+        
+        class B {
+            let val = 20;
+        }
+        
+        A::val + B::val;
+    "#;
+    assert_eq!(eval_int(code), 30);
+}

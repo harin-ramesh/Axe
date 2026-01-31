@@ -102,6 +102,8 @@ The `examples/` directory contains sample programs:
 | `fibonacci.ax` | Arithmetic sequences |
 | `simple_counter.ax` | Variable assignment |
 | `builtins.ax` | Operators demo |
+| `classes.ax` | Classes, methods, and `::` static access |
+| `lists.ax` | List creation and methods |
 | `scoping_explained.ax` | Block scoping guide |
 
 ```bash
@@ -119,6 +121,11 @@ cargo run --release examples/fibonacci.ax
 | For | `for i in range(10) { }` |
 | Function | `fn name(params) { }` |
 | Call | `name(args);` |
+| Class | `class Name { }` |
+| Inheritance | `class Child : Parent { }` |
+| Instance | `let obj = new Name(args);` |
+| Instance access | `obj.property`, `obj.method()` |
+| Static access | `Class::property`, `Class::method()` |
 
 ## Next Steps
 

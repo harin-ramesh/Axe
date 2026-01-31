@@ -66,12 +66,16 @@ pub enum Expr {
     Call(String, Vec<Expr>),
     /// A lambda expression: |params| body
     Lambda(Vec<String>, Box<Stmt>),
+    /// Object instantiation: new ClassName(args...)
+    New(String, Vec<Expr>),
     /// Property access: obj.property
     Property(Box<Expr>, String),
     /// Method call: obj.method(args...)
     MethodCall(Box<Expr>, String, Vec<Expr>),
-    /// Object instantiation: new ClassName(args...)
-    New(String, Vec<Expr>),
+    /// Static Property access: Class::property
+    StaticProperty(Box<Expr>, String),
+    /// Static Method call: Class.method(args...)
+    StaticMethodCall(Box<Expr>, String, Vec<Expr>),
 }
 
 /// Statement nodes in the AST.
