@@ -22,7 +22,7 @@ cargo run --release
 - **Variables** with block scoping and shadowing
 - **Control flow**: if/else statements, while loops, for loops
 - **Functions** with recursion and closures
-- **Classes** with inheritance and methods
+- **Classes** with inheritance, instance methods (`.`), and static access (`::`)
 - **Built-in functions**: `print`, `type`, `range`
 - **Methods** on strings and lists (`.len()`, `.concat()`, `.push()`, `.get()`)
 - **Operators**: arithmetic, comparison, logical, and bitwise
@@ -99,16 +99,17 @@ for i in range(1, 6) {
 ### Classes
 ```javascript
 class Counter {
-    
+    let default_start = 0;
+
     fn init(self, start) {
         self.count = start;
     }
-    
+
     fn increment(self) {
         self.count = self.count + 1;
         self.count;
     }
-    
+
     fn get(self) {
         self.count;
     }
@@ -118,6 +119,34 @@ let c = new Counter(0);
 c.increment();
 c.increment();
 print(c.get());  // 2
+```
+
+### Static Access (`::`)
+```javascript
+// Access class-level properties and static methods with ::
+class MathUtils {
+    let PI = 3;
+
+    fn add(a, b) {
+        a + b;
+    }
+}
+
+MathUtils::PI;           // 3 (class-level property)
+MathUtils::add(10, 20);  // 30 (static method, no self)
+
+// Instance methods use . as before
+class Box {
+    fn init(self, v) {
+        self.value = v;
+    }
+    fn get(self) {
+        self.value;
+    }
+}
+
+let b = new Box(42);
+b.get();  // 42 (instance method)
 ```
 
 ### Lists
@@ -221,6 +250,7 @@ axe/
 | Logical | `&&`, `\|\|`, `!` |
 | Bitwise | `&`, `\|`, `~` |
 | Unary | `-`, `+`, `!`, `~` |
+| Access | `.` (instance), `::` (static/class) |
 
 ### Built-in Functions
 

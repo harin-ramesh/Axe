@@ -362,6 +362,134 @@ printPrimes(20);
 let divisor = gcd(48, 18);  // 6
 ```
 
+## Classes
+
+```javascript
+// Define a class with constructor and methods
+class Counter {
+    fn init(self, start) {
+        self.count = start;
+    }
+
+    fn increment(self) {
+        self.count = self.count + 1;
+        self.count;
+    }
+
+    fn get(self) {
+        self.count;
+    }
+}
+
+// Create instances
+let c = new Counter(0);
+c.increment();
+c.increment();
+c.increment();
+print(c.get());  // 3
+
+// Multiple independent instances
+let a = new Counter(10);
+let b = new Counter(20);
+print(a.get());  // 10
+print(b.get());  // 20
+```
+
+## Inheritance
+
+```javascript
+class Animal {
+    let name = "";
+
+    fn speak(self) {
+        "sound";
+    }
+}
+
+class Dog : Animal {
+    fn bark(self) {
+        "woof";
+    }
+}
+```
+
+## Static Access (`::`)
+
+```javascript
+// Class-level properties accessed via ::
+class Config {
+    let max_retries = 3;
+    let timeout = 30;
+}
+
+print(Config::max_retries);  // 3
+print(Config::timeout);      // 30
+
+// Static methods (no self parameter) accessed via ::
+class MathUtils {
+    fn add(a, b) {
+        a + b;
+    }
+
+    fn square(x) {
+        x * x;
+    }
+}
+
+print(MathUtils::add(10, 20));  // 30
+print(MathUtils::square(5));    // 25
+
+// Mixing static and instance access
+class Counter {
+    let default_start = 0;
+
+    fn init(self, n) {
+        self.count = n;
+    }
+
+    fn get(self) {
+        self.count;
+    }
+}
+
+let c = new Counter(5);
+print(Counter::default_start);  // 0 (class-level)
+print(c.get());                 // 5 (instance-level)
+
+// Static access in expressions
+class Factory {
+    fn magic() {
+        42;
+    }
+}
+
+let result = Factory::magic() + 8;  // 50
+```
+
+## Lists
+
+```javascript
+// Create lists
+let nums = [1, 2, 3, 4, 5];
+let empty = [];
+
+// List methods
+print(nums.len());       // 5
+print(nums.get(0));      // 1
+print(nums.get(-1));     // 5
+
+let more = nums.push(6);
+let combined = [1, 2].concat([3, 4]);
+```
+
+## String Methods
+
+```javascript
+let greeting = "Hello";
+print(greeting.len());                    // 5
+print(greeting.concat(", World!"));       // "Hello, World!"
+```
+
 ## Running Examples
 
 All examples are in the `examples/` folder:
@@ -370,5 +498,6 @@ All examples are in the `examples/` folder:
 cargo run --release examples/hello.ax
 cargo run --release examples/fibonacci.ax
 cargo run --release examples/builtins.ax
+cargo run --release examples/classes.ax
 cargo run --release examples/scoping_explained.ax
 ```

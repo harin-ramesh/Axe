@@ -343,6 +343,155 @@ let x = 10;
 // x is still 10
 ```
 
+## Classes
+
+### Class Definition
+
+Define classes using the `class` keyword. Properties are declared with `let`, methods with `fn`:
+
+```javascript
+class ClassName {
+    let property = value;
+
+    fn init(self, params) {
+        self.property = params;
+    }
+
+    fn method(self) {
+        self.property;
+    }
+}
+```
+
+- Methods that operate on instances take `self` as the first parameter
+- `init` is the constructor, called automatically by `new`
+- Properties declared with `let` are class-level (static) properties
+
+### Object Instantiation
+
+Create instances using the `new` keyword:
+
+```javascript
+let obj = new ClassName(args);
+```
+
+### Instance Access (`.`)
+
+Use `.` to access properties and methods on instances:
+
+```javascript
+let p = new Point(10, 20);
+p.x;            // access instance property
+p.distance();   // call instance method
+```
+
+### Static Access (`::`)
+
+Use `::` to access class-level properties and static methods directly on the class, without creating an instance:
+
+```javascript
+class Config {
+    let max_retries = 3;
+    let timeout = 30;
+
+    fn default_name() {
+        "unnamed";
+    }
+}
+
+Config::max_retries;     // 3
+Config::timeout;         // 30
+Config::default_name();  // "unnamed"
+```
+
+Static methods are methods defined **without** `self` as the first parameter. They belong to the class itself, not to instances.
+
+Instance methods (with `self`) are only accessible via `.` on an instance. Static properties and methods (without `self`) are accessible via `::` on the class.
+
+| Access | Syntax | What it accesses |
+|--------|--------|-----------------|
+| `.` | `instance.prop` | Instance properties and methods (with `self`) |
+| `::` | `Class::prop` | Class-level properties and static methods (without `self`) |
+
+### Inheritance
+
+Use `:` to inherit from a parent class:
+
+```javascript
+class Animal {
+    let name = "";
+
+    fn speak(self) {
+        "sound";
+    }
+}
+
+class Dog : Animal {
+    fn bark(self) {
+        "woof";
+    }
+}
+```
+
+### Chaining
+
+Instance method calls can be chained with `.`:
+
+```javascript
+obj.foo.bar.baz;
+```
+
+Static access via `::` can be followed by `.` chaining when a static method returns an instance:
+
+```javascript
+Factory::create().name;
+```
+
+## Lists
+
+### List Literals
+
+```javascript
+let empty = [];
+let nums = [1, 2, 3];
+let mixed = [1, "two", true, null];
+```
+
+### List Methods
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `.len()` | Get length | `[1, 2, 3].len()` = `3` |
+| `.get(index)` | Get element (supports negative indexing) | `[1, 2, 3].get(0)` = `1` |
+| `.push(value)` | Return new list with value appended | `[1, 2].push(3)` = `[1, 2, 3]` |
+| `.concat(other)` | Return new list with other appended | `[1].concat([2, 3])` = `[1, 2, 3]` |
+
+```javascript
+let nums = [10, 20, 30];
+nums.len();        // 3
+nums.get(0);       // 10
+nums.get(-1);      // 30 (negative indexing)
+nums.push(40);     // [10, 20, 30, 40]
+```
+
+## Strings
+
+### String Methods
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `.len()` | Get length | `"hello".len()` = `5` |
+| `.concat(other)` | Concatenate strings | `"hi".concat(" there")` = `"hi there"` |
+
+## Built-in Functions
+
+| Function | Description |
+|----------|-------------|
+| `print(value)` | Print a value to stdout |
+| `type(value)` | Get the type as a string |
+| `range(end)` | Generate `[0, 1, ..., end-1]` |
+| `range(start, end)` | Generate `[start, ..., end-1]` |
+
 ## Truthiness
 
 ### Falsy Values

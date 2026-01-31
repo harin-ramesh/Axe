@@ -285,13 +285,22 @@ impl TreeWalker {
             .borrow_mut()
             .set(name, Value::Object(class_env.clone()));
 
+        let self_env = Environment::extend(class_env.clone());
+        class_env
+            .borrow_mut()
+            .set("self".to_string(), Value::Object(self_env.clone()));
+
         for expr in body {
             match expr {
                 Stmt::Let(decls) => {
                     self.eval_let(decls, class_env.clone())?;
                 }
                 Stmt::Function(name, params, body) => {
-                    self.eval_function(name, params, body, class_env.clone())?;
+                    if params.first().map(|s| s.as_str()) == Some("self") {
+                        self.eval_function(name, params, body, self_env.clone())?;
+                    } else {
+                        self.eval_function(name, params, body, class_env.clone())?;
+                    }
                 }
                 _ => return Err("Invalid class definition"),
             }
@@ -389,12 +398,16 @@ impl TreeWalker {
                     return Err("Class not found");
                 };
 
-                let instance = Value::Object(Environment::extend(class_env.clone()));
+                let Some(Value::Object(instance_env)) = class_env.borrow().get("self") else {
+                    return Err("Class not found");
+                };
 
-                let func = class_env
+                let func = instance_env
                     .borrow()
                     .get("init")
                     .ok_or("undefined constructor")?;
+
+                let instance = Value::Object(Environment::extend(instance_env.clone()));
 
                 if let Value::Function(params, body, closure_env) = func {
                     if params.len() != (args.len() + 1) {
@@ -448,6 +461,53 @@ impl TreeWalker {
                 }
 
                 self.call_method(obj, &method, arg_values, env)
+            }
+            Expr::StaticProperty(obj_expr, name) => {
+                let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
+
+                let Value::Object(obj_env) = obj else {
+                    return Err("Cannot access property on non-object");
+                };
+
+                match obj_env.borrow().get(&name) {
+                    Some(value) => Ok(value.clone()),
+                    None => Err("Property not found"),
+                }
+            }
+            Expr::StaticMethodCall(obj_expr, method, args) => {
+                let Value::Object(class_env) = self.eval_expr(*obj_expr, Some(env.clone()))? else {
+                    return Err("Undefined class");
+                };
+
+                let func = class_env.borrow().get(&method).ok_or("Method not found")?;
+
+                match func {
+                    Value::Function(params, body, closure_env) => {
+                        if params.len() != args.len() {
+                            return Err("argument count mismatch");
+                        }
+
+                        // Evaluate arguments in the caller's environment
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
+                        }
+
+                        let func_env = Environment::extend(closure_env);
+                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                            func_env.borrow_mut().set(param.clone(), value.clone());
+                        }
+
+                        self.eval_block(
+                            match *body {
+                                Stmt::Block(stmts) => stmts,
+                                _ => return Err("function body must be a block"),
+                            },
+                            func_env,
+                        )
+                    }
+                    _ => Err("not a function"),
+                }
             }
         }
     }
@@ -532,25 +592,19 @@ impl TreeWalker {
 
                 match func {
                     Value::Function(params, body, closure_env) => {
-                        // For object methods, first param is 'self'
                         if params.len() != args.len() + 1 {
                             return Err("argument count mismatch");
                         }
 
                         let func_env = Environment::extend(closure_env);
 
-                        // Bind 'self' (first param) to the object
                         func_env
                             .borrow_mut()
                             .set(params[0].clone(), Value::Object(obj_env.clone()));
 
-                        // Bind remaining params to arguments
                         for (param, value) in params.iter().skip(1).zip(args.iter()) {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
-                        func_env
-                            .borrow_mut()
-                            .set("self".to_string(), Value::Object(obj_env.clone()));
                         self.eval_block(
                             match *body {
                                 Stmt::Block(stmts) => stmts,
