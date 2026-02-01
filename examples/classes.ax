@@ -15,14 +15,14 @@ class Point {
     // Method to calculate distance from origin
     fn distanceFromOrigin(self) {
         // Using Pythagorean theorem (simplified without sqrt)
-        self.x * self.x + self.y * self.y;
+        return self.x * self.x + self.y * self.y;
     }
     
     // Method to add two points
     fn add(self, other) {
         let newX = self.x + other.x;
         let newY = self.y + other.y;
-        new Point(newX, newY);
+        return new Point(newX, newY);
     }
 }
 
@@ -57,21 +57,21 @@ class Counter {
     
     fn increment(self) {
         self.count = self.count + 1;
-        self.count;
+        return self.count;
     }
     
     fn decrement(self) {
         self.count = self.count - 1;
-        self.count;
+        return self.count;
     }
     
     fn reset(self) {
         self.count = 0;
-        self.count;
+        return self.count;
     }
     
     fn get(self) {
-        self.count;
+        return self.count;
     }
 }
 

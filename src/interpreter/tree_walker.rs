@@ -3,6 +3,8 @@
 //! This is the reference implementation for the Axe language.
 //! It directly traverses the AST and executes statements/expressions.
 
+use std::fmt;
+
 use regex::Regex;
 
 use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
@@ -12,9 +14,67 @@ use super::builtins::*;
 use super::environment::{EnvRef, Environment};
 use super::value::Value;
 
+/// Signals that can arise during evaluation.
+///
+/// `Return` is not an error -- it's a control flow signal used to unwind
+/// back to the nearest function call boundary and deliver a return value.
+#[derive(Debug)]
+pub enum EvalSignal {
+    /// A real runtime error.
+    Error(String),
+    /// A return statement was executed; carries the returned value.
+    Return(Value),
+    /// A break statement was executed.
+    Break,
+    /// A continue statement was executed.
+    Continue,
+}
+
+impl fmt::Display for EvalSignal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EvalSignal::Error(msg) => write!(f, "{}", msg),
+            EvalSignal::Return(_) => write!(f, "return outside function"),
+            EvalSignal::Break => write!(f, "break outside loop"),
+            EvalSignal::Continue => write!(f, "continue outside loop"),
+        }
+    }
+}
+
+/// Allow `?` to automatically convert `&'static str` errors into `EvalSignal::Error`.
+/// This keeps most existing error sites unchanged.
+impl From<&'static str> for EvalSignal {
+    fn from(s: &'static str) -> Self {
+        EvalSignal::Error(s.to_string())
+    }
+}
+
+/// Allow `assert_eq!(signal, "error message")` in tests.
+impl PartialEq<&str> for EvalSignal {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            EvalSignal::Error(msg) => msg == *other,
+            _ => false,
+        }
+    }
+}
+
 fn is_valid_var_name(name: &str) -> bool {
     let re = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap();
     re.is_match(name)
+}
+
+/// Helper: run `eval_block` on a function body and catch `EvalSignal::Return`.
+///
+/// - If the block completes normally, return `Null` (no implicit return).
+/// - If the block triggers `EvalSignal::Return(val)`, return `Ok(val)`.
+/// - If the block triggers a real error, propagate it.
+fn catch_return(result: Result<Value, EvalSignal>) -> Result<Value, EvalSignal> {
+    match result {
+        Ok(_) => Ok(Value::Literal(Literal::Null)),
+        Err(EvalSignal::Return(val)) => Ok(val),
+        Err(e) => Err(e),
+    }
 }
 
 /// Tree-walking interpreter for the Axe language.
@@ -22,7 +82,6 @@ fn is_valid_var_name(name: &str) -> bool {
 /// This interpreter directly evaluates the AST by recursively traversing
 /// the tree structure. It's simpler than a bytecode VM but less efficient
 /// for repeated execution of the same code.
-#[allow(dead_code)]
 pub struct TreeWalker {
     globals: EnvRef,
     transformer: Transformer,
@@ -52,20 +111,26 @@ impl TreeWalker {
         }
     }
 
-    pub fn run(&self, program: Program) -> Result<Value, &'static str> {
+    pub fn run(&mut self, program: Program) -> Result<Value, EvalSignal> {
         self.eval_program(program, None)
     }
 
-    fn eval_program(&self, program: Program, env: Option<EnvRef>) -> Result<Value, &'static str> {
+    fn eval_program(&mut self, program: Program, env: Option<EnvRef>) -> Result<Value, EvalSignal> {
         let env = env.unwrap_or_else(|| self.globals.clone());
         let mut result = Value::Literal(Literal::Null);
         for stmt in program.stmts {
-            result = self.eval_stmt(stmt, Some(env.clone()))?;
+            result = match self.eval_stmt(stmt, Some(env.clone())) {
+                Ok(val) => val,
+                Err(EvalSignal::Return(_)) => {
+                    return Err(EvalSignal::Error("return outside function".to_string()));
+                }
+                Err(e) => return Err(e),
+            };
         }
         Ok(result)
     }
 
-    fn eval_stmt(&self, stmt: Stmt, env: Option<EnvRef>) -> Result<Value, &'static str> {
+    fn eval_stmt(&mut self, stmt: Stmt, env: Option<EnvRef>) -> Result<Value, EvalSignal> {
         let env = env.unwrap_or_else(|| self.globals.clone());
 
         match stmt {
@@ -80,18 +145,24 @@ impl TreeWalker {
             Stmt::For(var, iterable, body) => self.eval_for(var, iterable, body, env),
             Stmt::Function(name, params, body) => self.eval_function(name, params, body, env),
             Stmt::Class(name, parent, body) => self.eval_class(name, parent, body, env),
+            Stmt::Return(expr) => {
+                let value = self.eval_expr(*expr, Some(env))?;
+                Err(EvalSignal::Return(value))
+            }
+            Stmt::Break => Err(EvalSignal::Break),
+            Stmt::Continue => Err(EvalSignal::Continue),
         }
     }
 
     fn eval_let(
-        &self,
+        &mut self,
         declarations: Vec<(String, Option<Expr>, Option<Expr>)>,
         env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         for decl in declarations {
             let (name, expr_opt, expr_obj) = decl;
             if !is_valid_var_name(&name) {
-                return Err("invalid variable name");
+                return Err("invalid variable name".into());
             }
             let value = if let Some(expr) = expr_opt {
                 self.eval_expr(expr, Some(env.clone()))?
@@ -103,7 +174,7 @@ impl TreeWalker {
                 if let Value::Object(obj_env) = obj {
                     obj_env.borrow_mut().set(name.clone(), value);
                 } else {
-                    return Err("expected object for let ... in ...");
+                    return Err("expected object for let ... in ...".into());
                 }
             } else {
                 env.borrow_mut().set(name.to_string(), value);
@@ -112,19 +183,21 @@ impl TreeWalker {
         Ok(Value::Literal(Literal::Null))
     }
 
-    fn eval_assign(&self, name: String, expr: Expr, env: EnvRef) -> Result<Value, &'static str> {
+    fn eval_assign(&mut self, name: String, expr: Expr, env: EnvRef) -> Result<Value, EvalSignal> {
         let value = self.eval_expr(expr, Some(env.clone()))?;
-        env.borrow_mut().update(name.clone(), value.clone())?;
+        env.borrow_mut()
+            .update(name.clone(), value.clone())
+            .map_err(EvalSignal::from)?;
         Ok(value)
     }
 
     fn eval_if(
-        &self,
+        &mut self,
         condition: Expr,
         then_branch: Box<Stmt>,
         else_branch: Box<Stmt>,
         env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         let cond_value = self.eval_expr(condition, Some(env.clone()))?;
 
         let is_truthy = match cond_value {
@@ -136,21 +209,18 @@ impl TreeWalker {
         };
 
         let branch_exprs = if is_truthy { then_branch } else { else_branch };
-        let result = match branch_exprs.as_ref() {
-            Stmt::Block(stmts) => self.eval_block(stmts.clone(), env.clone())?,
-            _ => {
-                return Err("Ivalid if branch");
-            }
-        };
-        Ok(result)
+        match branch_exprs.as_ref() {
+            Stmt::Block(stmts) => self.eval_block(stmts.clone(), env.clone()),
+            _ => Err("Invalid if branch".into()),
+        }
     }
 
     fn eval_while(
-        &self,
+        &mut self,
         condition: Expr,
         body: Box<Stmt>,
         env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         loop {
             let cond_value = self.eval_expr(condition.clone(), Some(env.clone()))?;
 
@@ -168,32 +238,36 @@ impl TreeWalker {
 
             match body.as_ref() {
                 Stmt::Block(stmts) => {
-                    self.eval_block(stmts.clone(), env.clone())?;
+                    match self.eval_block(stmts.clone(), env.clone()) {
+                        Ok(_) => (),
+                        Err(EvalSignal::Break) => break,
+                        Err(EvalSignal::Continue) => continue,
+                        Err(e) => return Err(e),
+                    }
                 }
-                _ => {
-                    return Err("Ivalid if branch");
-                }
+                _ => return Err("Invalid while body".into()),
             };
         }
 
         Ok(Value::Literal(Literal::Null))
     }
 
-    fn eval_block(&self, stmts: Vec<Stmt>, env: EnvRef) -> Result<Value, &'static str> {
-        let mut result = Value::Literal(Literal::Null);
+    fn eval_block(&mut self, stmts: Vec<Stmt>, env: EnvRef) -> Result<Value, EvalSignal> {
         for stmt in stmts {
-            result = self.eval_stmt(stmt, Some(env.clone()))?;
+            // If a return signal occurs, the `?` propagates it as
+            // Err(EvalSignal::Return(val)) up the call stack.
+            self.eval_stmt(stmt, Some(env.clone()))?;
         }
-        Ok(result)
+        Ok(Value::Literal(Literal::Null))
     }
 
     fn eval_function(
-        &self,
+        &mut self,
         name: String,
         params: Vec<String>,
         body: Box<Stmt>,
         env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         // Transform fn to let + lambda, then evaluate as let statement
         let transformed = self
             .transformer
@@ -202,12 +276,12 @@ impl TreeWalker {
     }
 
     fn eval_for(
-        &self,
+        &mut self,
         var: String,
         iterable: Expr,
         body: Box<Stmt>,
         env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         // For is syntactic sugar for while - transform then evaluate in a child scope
         // so that internal loop variables (__iter_N, __idx_N, __len_N) and the
         // loop variable don't leak into the outer scope.
@@ -218,65 +292,18 @@ impl TreeWalker {
         self.eval_stmt(transformed, Some(for_scope))
     }
 
-    #[allow(dead_code)]
-    fn eval_function_call(
-        &self,
-        name: String,
-        args: Vec<Expr>,
-        env: EnvRef,
-    ) -> Result<Value, &'static str> {
-        let func = env.borrow().get(&name).ok_or("undefined function")?;
-
-        match func {
-            Value::Function(params, body, closure_env) => {
-                if params.len() != args.len() {
-                    return Err("argument count mismatch");
-                }
-
-                let mut arg_values = Vec::new();
-                for arg in args {
-                    arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
-                }
-
-                let func_env = Environment::extend(closure_env);
-
-                for (param, value) in params.iter().zip(arg_values.iter()) {
-                    func_env.borrow_mut().set(param.clone(), value.clone());
-                }
-
-                let result = self.eval_block(
-                    match *body {
-                        Stmt::Block(stmts) => stmts,
-                        _ => return Err("function body must be a block"),
-                    },
-                    func_env,
-                )?;
-                Ok(result)
-            }
-            Value::NativeFunction(_, native_fn) => {
-                let mut arg_values = Vec::new();
-                for arg in args {
-                    arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
-                }
-
-                native_fn(&arg_values)
-            }
-            _ => Err("not a function"),
-        }
-    }
-
     fn eval_class(
-        &self,
+        &mut self,
         name: String,
         parent: Option<String>,
         body: Vec<Stmt>,
         env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         let class_env = if let Some(p) = parent {
             if let Some(Value::Object(p_env)) = self.globals.borrow().get(&p) {
                 Environment::extend(p_env.clone())
             } else {
-                return Err("Parent class not found");
+                return Err("Parent class not found".into());
             }
         } else {
             Environment::extend(env.clone())
@@ -302,18 +329,17 @@ impl TreeWalker {
                         self.eval_function(name, params, body, class_env.clone())?;
                     }
                 }
-                _ => return Err("Invalid class definition"),
+                _ => return Err("Invalid class definition".into()),
             }
         }
 
         Ok(Value::Literal(Literal::Null))
     }
 
-    fn eval_expr(&self, expr: Expr, env: Option<EnvRef>) -> Result<Value, &'static str> {
+    fn eval_expr(&mut self, expr: Expr, env: Option<EnvRef>) -> Result<Value, EvalSignal> {
         let env = env.unwrap_or_else(|| self.globals.clone());
         match expr {
             Expr::Literal(lit) => Ok(Self::eval_literal(lit)),
-
             Expr::List(elements) => {
                 // Evaluate each element and create a list
                 let mut values = Vec::new();
@@ -322,7 +348,10 @@ impl TreeWalker {
                 }
                 Ok(Value::List(values))
             }
-            Expr::Var(name) => env.borrow().get(&name).ok_or("undefined variable"),
+            Expr::Var(name) => env
+                .borrow()
+                .get(&name)
+                .ok_or_else(|| EvalSignal::Error("undefined variable".to_string())),
             Expr::Binary(op, lhs, rhs) => {
                 let left = self.eval_expr(*lhs, Some(env.clone()))?;
                 let right = self.eval_expr(*rhs, Some(env))?;
@@ -336,7 +365,7 @@ impl TreeWalker {
                 // Validate parameter names
                 for param in &params {
                     if !is_valid_var_name(param) {
-                        return Err("invalid parameter name");
+                        return Err("invalid parameter name".into());
                     }
                 }
 
@@ -347,13 +376,15 @@ impl TreeWalker {
             }
             Expr::Call(name, args) => {
                 // Get the function from the environment
-
-                let func = env.borrow().get(&name).ok_or("undefined function")?;
+                let func = env
+                    .borrow()
+                    .get(&name)
+                    .ok_or_else(|| EvalSignal::Error("undefined function".to_string()))?;
                 match func {
                     Value::Function(params, body, closure_env) => {
                         // Check argument count
                         if params.len() != args.len() {
-                            return Err("argument count mismatch");
+                            return Err("argument count mismatch".into());
                         }
 
                         // Evaluate arguments in the caller's environment
@@ -370,15 +401,14 @@ impl TreeWalker {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
 
-                        let result = self.eval_block(
+                        // Evaluate function body and catch return signals
+                        catch_return(self.eval_block(
                             match *body {
                                 Stmt::Block(stmts) => stmts,
-                                _ => return Err("function body must be a block"),
+                                _ => return Err("function body must be a block".into()),
                             },
                             func_env,
-                        )?;
-
-                        Ok(result)
+                        ))
                     }
                     Value::NativeFunction(_, native_fn) => {
                         // Evaluate arguments in the caller's environment
@@ -390,28 +420,28 @@ impl TreeWalker {
                         // Call the native function
                         native_fn(&arg_values)
                     }
-                    _ => Err("not a function"),
+                    _ => Err("not a function".into()),
                 }
             }
             Expr::New(class, args) => {
                 let Some(Value::Object(class_env)) = self.globals.borrow().get(&class) else {
-                    return Err("Class not found");
+                    return Err("Class not found".into());
                 };
 
                 let Some(Value::Object(instance_env)) = class_env.borrow().get("self") else {
-                    return Err("Class not found");
+                    return Err("Class not found".into());
                 };
 
                 let func = instance_env
                     .borrow()
                     .get("init")
-                    .ok_or("undefined constructor")?;
+                    .ok_or_else(|| EvalSignal::Error("undefined constructor".to_string()))?;
 
                 let instance = Value::Object(Environment::extend(instance_env.clone()));
 
                 if let Value::Function(params, body, closure_env) = func {
                     if params.len() != (args.len() + 1) {
-                        return Err("Argument count mismatch");
+                        return Err("Argument count mismatch".into());
                     }
 
                     let mut arg_values = Vec::new();
@@ -428,13 +458,14 @@ impl TreeWalker {
                         .borrow_mut()
                         .set("self".to_string(), instance.clone());
 
-                    self.eval_block(
+                    // Constructor: catch return but discard the value -- always return instance
+                    catch_return(self.eval_block(
                         match *body {
                             Stmt::Block(stmts) => stmts,
-                            _ => return Err("function body must be a block"),
+                            _ => return Err("function body must be a block".into()),
                         },
                         func_env,
-                    )?;
+                    ))?;
                 }
 
                 Ok(instance)
@@ -443,12 +474,12 @@ impl TreeWalker {
                 let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
 
                 let Value::Object(obj_env) = obj else {
-                    return Err("Cannot access property on non-object");
+                    return Err("Cannot access property on non-object".into());
                 };
 
                 match obj_env.borrow().get(&name) {
                     Some(value) => Ok(value.clone()),
-                    None => Err("Property not found"),
+                    None => Err("Property not found".into()),
                 }
             }
             Expr::MethodCall(obj_expr, method, args) => {
@@ -466,25 +497,28 @@ impl TreeWalker {
                 let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
 
                 let Value::Object(obj_env) = obj else {
-                    return Err("Cannot access property on non-object");
+                    return Err("Cannot access property on non-object".into());
                 };
 
                 match obj_env.borrow().get(&name) {
                     Some(value) => Ok(value.clone()),
-                    None => Err("Property not found"),
+                    None => Err("Property not found".into()),
                 }
             }
             Expr::StaticMethodCall(obj_expr, method, args) => {
                 let Value::Object(class_env) = self.eval_expr(*obj_expr, Some(env.clone()))? else {
-                    return Err("Undefined class");
+                    return Err("Undefined class".into());
                 };
 
-                let func = class_env.borrow().get(&method).ok_or("Method not found")?;
+                let func = class_env
+                    .borrow()
+                    .get(&method)
+                    .ok_or_else(|| EvalSignal::Error("Method not found".to_string()))?;
 
                 match func {
                     Value::Function(params, body, closure_env) => {
                         if params.len() != args.len() {
-                            return Err("argument count mismatch");
+                            return Err("argument count mismatch".into());
                         }
 
                         // Evaluate arguments in the caller's environment
@@ -498,33 +532,34 @@ impl TreeWalker {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
 
-                        self.eval_block(
+                        // Catch return signals at function boundary
+                        catch_return(self.eval_block(
                             match *body {
                                 Stmt::Block(stmts) => stmts,
-                                _ => return Err("function body must be a block"),
+                                _ => return Err("function body must be a block".into()),
                             },
                             func_env,
-                        )
+                        ))
                     }
-                    _ => Err("not a function"),
+                    _ => Err("not a function".into()),
                 }
             }
         }
     }
 
     fn call_method(
-        &self,
+        &mut self,
         obj: Value,
         method: &str,
         args: Vec<Value>,
         _env: EnvRef,
-    ) -> Result<Value, &'static str> {
+    ) -> Result<Value, EvalSignal> {
         match obj {
             // String methods
             Value::Literal(Literal::Str(ref s)) => match method {
                 "len" => {
                     if !args.is_empty() {
-                        return Err("len() takes no arguments");
+                        return Err("len() takes no arguments".into());
                     }
                     Ok(Value::Literal(Literal::Int(s.len() as i64)))
                 }
@@ -533,25 +568,25 @@ impl TreeWalker {
                     for arg in args {
                         match arg {
                             Value::Literal(Literal::Str(other)) => result.push_str(&other),
-                            _ => return Err("concat() requires string arguments"),
+                            _ => return Err("concat() requires string arguments".into()),
                         }
                     }
                     Ok(Value::Literal(Literal::Str(result)))
                 }
-                _ => Err("Unknown string method"),
+                _ => Err("Unknown string method".into()),
             },
 
             // List methods
             Value::List(ref items) => match method {
                 "len" => {
                     if !args.is_empty() {
-                        return Err("len() takes no arguments");
+                        return Err("len() takes no arguments".into());
                     }
                     Ok(Value::Literal(Literal::Int(items.len() as i64)))
                 }
                 "push" => {
                     if args.len() != 1 {
-                        return Err("push() takes exactly 1 argument");
+                        return Err("push() takes exactly 1 argument".into());
                     }
                     let mut new_list = items.clone();
                     new_list.push(args.into_iter().next().unwrap());
@@ -559,7 +594,7 @@ impl TreeWalker {
                 }
                 "get" => {
                     if args.len() != 1 {
-                        return Err("get() takes exactly 1 argument");
+                        return Err("get() takes exactly 1 argument".into());
                     }
                     match &args[0] {
                         Value::Literal(Literal::Int(idx)) => {
@@ -568,9 +603,12 @@ impl TreeWalker {
                             } else {
                                 *idx as usize
                             };
-                            items.get(index).cloned().ok_or("index out of bounds")
+                            items
+                                .get(index)
+                                .cloned()
+                                .ok_or_else(|| EvalSignal::Error("index out of bounds".to_string()))
                         }
-                        _ => Err("get() requires an integer argument"),
+                        _ => Err("get() requires an integer argument".into()),
                     }
                 }
                 "concat" => {
@@ -578,22 +616,25 @@ impl TreeWalker {
                     for arg in args {
                         match arg {
                             Value::List(other) => result.extend(other),
-                            _ => return Err("concat() requires list arguments"),
+                            _ => return Err("concat() requires list arguments".into()),
                         }
                     }
                     Ok(Value::List(result))
                 }
-                _ => Err("Unknown list method"),
+                _ => Err("Unknown list method".into()),
             },
 
             // Object methods - look up method in object's environment
             Value::Object(obj_env) => {
-                let func = obj_env.borrow().get(method).ok_or("Method not found")?;
+                let func = obj_env
+                    .borrow()
+                    .get(method)
+                    .ok_or_else(|| EvalSignal::Error("Method not found".to_string()))?;
 
                 match func {
                     Value::Function(params, body, closure_env) => {
                         if params.len() != args.len() + 1 {
-                            return Err("argument count mismatch");
+                            return Err("argument count mismatch".into());
                         }
 
                         let func_env = Environment::extend(closure_env);
@@ -605,20 +646,22 @@ impl TreeWalker {
                         for (param, value) in params.iter().skip(1).zip(args.iter()) {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
-                        self.eval_block(
+
+                        // Catch return signals at method boundary
+                        catch_return(self.eval_block(
                             match *body {
                                 Stmt::Block(stmts) => stmts,
-                                _ => return Err("function body must be a block"),
+                                _ => return Err("function body must be a block".into()),
                             },
                             func_env,
-                        )
+                        ))
                     }
                     Value::NativeFunction(_, native_fn) => native_fn(&args),
-                    _ => Err("not a method"),
+                    _ => Err("not a method".into()),
                 }
             }
 
-            _ => Err("Cannot call method on this type"),
+            _ => Err("Cannot call method on this type".into()),
         }
     }
 
@@ -626,7 +669,7 @@ impl TreeWalker {
         Value::Literal(lit)
     }
 
-    fn eval_binary(op: Operation, left: Value, right: Value) -> Result<Value, &'static str> {
+    fn eval_binary(op: Operation, left: Value, right: Value) -> Result<Value, EvalSignal> {
         use Literal::*;
         use Operation::*;
 
@@ -638,7 +681,7 @@ impl TreeWalker {
             (Mod, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a % b))),
             (Div, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
                 if b == 0 {
-                    Err("division by zero")
+                    Err("division by zero".into())
                 } else {
                     Ok(Value::Literal(Int(a / b)))
                 }
@@ -668,7 +711,7 @@ impl TreeWalker {
             }
             (Div, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
                 if b == 0.0 {
-                    Err("division by zero")
+                    Err("division by zero".into())
                 } else {
                     Ok(Value::Literal(Float(a / b)))
                 }
@@ -751,11 +794,11 @@ impl TreeWalker {
             (Eq, _, _) => Ok(Value::Literal(Bool(false))),
             (Neq, _, _) => Ok(Value::Literal(Bool(true))),
 
-            _ => Err("Invalid operation"),
+            _ => Err("Invalid operation".into()),
         }
     }
 
-    fn eval_unary(op: UnaryOp, operand: Value) -> Result<Value, &'static str> {
+    fn eval_unary(op: UnaryOp, operand: Value) -> Result<Value, EvalSignal> {
         use Literal::*;
         use UnaryOp::*;
 
@@ -780,7 +823,7 @@ impl TreeWalker {
             // Bitwise invert: ~x
             (Inv, Value::Literal(Int(n))) => Ok(Value::Literal(Int(!n))),
 
-            _ => Err("Invalid unary operation"),
+            _ => Err("Invalid unary operation".into()),
         }
     }
 }

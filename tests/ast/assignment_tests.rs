@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
 
 #[test]
 fn assign_to_existing_global_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -17,7 +17,7 @@ fn assign_to_existing_global_variable() {
 
 #[test]
 fn let_creates_variable_if_not_exists() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
@@ -33,7 +33,7 @@ fn let_creates_variable_if_not_exists() {
 
 #[test]
 fn assign_with_invalid_name_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
@@ -49,7 +49,7 @@ fn assign_with_invalid_name_fails() {
 
 #[test]
 fn assign_using_expression() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -71,7 +71,7 @@ fn assign_using_expression() {
 
 #[test]
 fn let_in_block_updates_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -89,7 +89,7 @@ fn let_in_block_updates_variable() {
 
 #[test]
 fn let_in_nested_block_updates() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -108,7 +108,7 @@ fn let_in_nested_block_updates() {
 
 #[test]
 fn let_in_same_scope_updates() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -123,7 +123,7 @@ fn let_in_same_scope_updates() {
 
 #[test]
 fn let_updates_through_blocks() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![

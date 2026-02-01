@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
 fn empty_block_returns_null() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Block(vec![])],
     };
@@ -12,7 +12,7 @@ fn empty_block_returns_null() {
 
 #[test]
 fn block_returns_last_expression() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Block with multiple expressions
     let program = Program {
@@ -29,7 +29,7 @@ fn block_returns_last_expression() {
 
 #[test]
 fn block_with_variables() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Block: let x = 10, let y = 20, return x + y
     let program = Program {

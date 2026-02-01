@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
 fn while_basic_countdown() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -31,7 +31,7 @@ fn while_basic_countdown() {
 
 #[test]
 fn while_with_comparison_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -79,7 +79,7 @@ fn while_with_comparison_condition() {
 
 #[test]
 fn while_never_executes() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -104,7 +104,7 @@ fn while_never_executes() {
 
 #[test]
 fn while_with_false_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -133,7 +133,7 @@ fn while_with_false_condition() {
 
 #[test]
 fn while_with_nested_blocks() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -192,7 +192,7 @@ fn while_with_nested_blocks() {
 
 #[test]
 fn while_count_1_to_10_sum_is_correct() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Count from 1 to 10 and sum the values
     // Expected sum: 1+2+3+4+5+6+7+8+9+10 = 55
@@ -249,7 +249,7 @@ fn while_count_1_to_10_sum_is_correct() {
 
 #[test]
 fn while_empty_body_returns_null() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![Stmt::While(
@@ -264,7 +264,7 @@ fn while_empty_body_returns_null() {
 
 #[test]
 fn while_with_variable_modification() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -297,7 +297,7 @@ fn while_with_variable_modification() {
 
 #[test]
 fn nested_while_loops() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -368,7 +368,7 @@ fn nested_while_loops() {
 
 #[test]
 fn while_with_if_inside() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![

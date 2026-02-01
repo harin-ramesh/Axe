@@ -115,7 +115,7 @@ fn environment_update_parent_variable() {
 
 #[test]
 fn eval_int_literal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Int(42)))],
     };
@@ -125,7 +125,7 @@ fn eval_int_literal() {
 
 #[test]
 fn eval_float_literal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Float(3.14)))],
     };
@@ -135,7 +135,7 @@ fn eval_float_literal() {
 
 #[test]
 fn eval_string_literal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Str("hello".to_string())))],
     };
@@ -145,7 +145,7 @@ fn eval_string_literal() {
 
 #[test]
 fn eval_bool_literal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Bool(true)))],
     };
@@ -155,7 +155,7 @@ fn eval_bool_literal() {
 
 #[test]
 fn eval_null_literal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Null))],
     };
@@ -179,7 +179,7 @@ fn make_int_binary(op: Operation, a: i64, b: i64) -> Program {
 
 #[test]
 fn eval_int_addition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Add, 10, 5);
     let result = axe.run(program).unwrap();
     match result {
@@ -190,35 +190,35 @@ fn eval_int_addition() {
 
 #[test]
 fn eval_int_subtraction() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Sub, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_multiplication() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Mul, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_division() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Div, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_modulo() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Mod, 10, 3);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_division_by_zero_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Div, 10, 0);
     let result = axe.run(program);
     assert!(result.is_err());
@@ -227,42 +227,42 @@ fn eval_division_by_zero_fails() {
 
 #[test]
 fn eval_int_greater_than() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Gt, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_less_than() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Lt, 5, 10);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_equal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Eq, 5, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_not_equal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::Neq, 5, 10);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_bitwise_and() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::BitwiseAnd, 0b1010, 0b1100);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_bitwise_or() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_int_binary(Operation::BitwiseOr, 0b1010, 0b1100);
     assert!(axe.run(program).is_ok());
 }
@@ -283,35 +283,35 @@ fn make_float_binary(op: Operation, a: f64, b: f64) -> Program {
 
 #[test]
 fn eval_float_addition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_float_binary(Operation::Add, 2.5, 1.5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_subtraction() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_float_binary(Operation::Sub, 5.0, 2.5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_multiplication() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_float_binary(Operation::Mul, 2.0, 3.0);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_division() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_float_binary(Operation::Div, 10.0, 2.0);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_division_by_zero_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_float_binary(Operation::Div, 10.0, 0.0);
     let result = axe.run(program);
     assert!(result.is_err());
@@ -334,35 +334,35 @@ fn make_bool_binary(op: Operation, a: bool, b: bool) -> Program {
 
 #[test]
 fn eval_bool_and_true_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_bool_binary(Operation::And, true, true);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_and_true_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_bool_binary(Operation::And, true, false);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_or_false_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_bool_binary(Operation::Or, false, false);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_or_true_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_bool_binary(Operation::Or, true, false);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_equality() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_bool_binary(Operation::Eq, true, true);
     assert!(axe.run(program).is_ok());
 }
@@ -383,14 +383,14 @@ fn make_str_binary(op: Operation, a: &str, b: &str) -> Program {
 
 #[test]
 fn eval_string_equality() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_str_binary(Operation::Eq, "hello", "hello");
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_string_inequality() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = make_str_binary(Operation::Neq, "hello", "world");
     assert!(axe.run(program).is_ok());
 }
@@ -401,7 +401,7 @@ fn eval_string_inequality() {
 
 #[test]
 fn eval_let_with_value() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -417,7 +417,7 @@ fn eval_let_with_value() {
 
 #[test]
 fn eval_let_without_value_is_null() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![("x".to_string(), None, None)]),
@@ -429,7 +429,7 @@ fn eval_let_without_value_is_null() {
 
 #[test]
 fn eval_let_multiple_declarations() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![
@@ -448,7 +448,7 @@ fn eval_let_multiple_declarations() {
 
 #[test]
 fn eval_let_invalid_name_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             "123invalid".to_string(),
@@ -467,7 +467,7 @@ fn eval_let_invalid_name_fails() {
 
 #[test]
 fn eval_assign_existing_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -484,7 +484,7 @@ fn eval_assign_existing_variable() {
 
 #[test]
 fn eval_assign_undefined_variable_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Assign(
             "x".to_string(),
@@ -502,7 +502,7 @@ fn eval_assign_undefined_variable_fails() {
 
 #[test]
 fn eval_empty_block() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Block(vec![])],
     };
@@ -511,7 +511,7 @@ fn eval_empty_block() {
 
 #[test]
 fn eval_block_returns_last_value() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Block(vec![
             Stmt::Expr(Expr::Literal(Literal::Int(1))),
@@ -528,7 +528,7 @@ fn eval_block_returns_last_value() {
 
 #[test]
 fn eval_if_true_branch() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -554,7 +554,7 @@ fn eval_if_true_branch() {
 
 #[test]
 fn eval_if_false_branch() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -580,7 +580,7 @@ fn eval_if_false_branch() {
 
 #[test]
 fn eval_if_truthy_int() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Non-zero int is truthy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -598,7 +598,7 @@ fn eval_if_truthy_int() {
 
 #[test]
 fn eval_if_falsy_zero() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Zero is falsy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -616,7 +616,7 @@ fn eval_if_falsy_zero() {
 
 #[test]
 fn eval_if_falsy_null() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Null is falsy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -638,7 +638,7 @@ fn eval_if_falsy_null() {
 
 #[test]
 fn eval_while_loop() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -668,7 +668,7 @@ fn eval_while_loop() {
 
 #[test]
 fn eval_while_false_condition_never_executes() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::While(
             Expr::Literal(Literal::Bool(false)),
@@ -686,7 +686,7 @@ fn eval_while_false_condition_never_executes() {
 
 #[test]
 fn eval_function_definition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Function(
             "add".to_string(),
@@ -703,7 +703,7 @@ fn eval_function_definition() {
 
 #[test]
 fn eval_function_call() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Function(
@@ -726,7 +726,7 @@ fn eval_function_call() {
 
 #[test]
 fn eval_function_call_wrong_arg_count_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Function(
@@ -749,7 +749,7 @@ fn eval_function_call_wrong_arg_count_fails() {
 
 #[test]
 fn eval_undefined_function_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call("nonexistent".to_string(), vec![]))],
     };
@@ -764,7 +764,7 @@ fn eval_undefined_function_fails() {
 
 #[test]
 fn eval_list_literal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::List(vec![
             Expr::Literal(Literal::Int(1)),
@@ -777,7 +777,7 @@ fn eval_list_literal() {
 
 #[test]
 fn eval_empty_list() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::List(vec![]))],
     };
@@ -790,7 +790,7 @@ fn eval_empty_list() {
 
 #[test]
 fn eval_native_len_list() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: [1, 2, 3].len()
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -808,7 +808,7 @@ fn eval_native_len_list() {
 
 #[test]
 fn eval_native_len_string() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: "hello".len()
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -822,7 +822,7 @@ fn eval_native_len_string() {
 
 #[test]
 fn eval_native_type() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
             "type".to_string(),
@@ -834,7 +834,7 @@ fn eval_native_type() {
 
 #[test]
 fn eval_native_range_single_arg() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
             "range".to_string(),
@@ -846,7 +846,7 @@ fn eval_native_range_single_arg() {
 
 #[test]
 fn eval_native_range_two_args() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
             "range".to_string(),
@@ -861,7 +861,7 @@ fn eval_native_range_two_args() {
 
 #[test]
 fn eval_native_range_three_args() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
             "range".to_string(),
@@ -877,7 +877,7 @@ fn eval_native_range_three_args() {
 
 #[test]
 fn eval_native_concat_strings() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: "hello".concat(" world")
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -891,7 +891,7 @@ fn eval_native_concat_strings() {
 
 #[test]
 fn eval_native_concat_lists() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: [1].concat([2])
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -905,7 +905,7 @@ fn eval_native_concat_lists() {
 
 #[test]
 fn eval_native_push() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: [1].push(2)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -919,7 +919,7 @@ fn eval_native_push() {
 
 #[test]
 fn eval_native_get() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: [10, 20, 30].get(1)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -937,7 +937,7 @@ fn eval_native_get() {
 
 #[test]
 fn eval_native_get_negative_index() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Using method syntax: [10, 20, 30].get(-1)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -959,7 +959,7 @@ fn eval_native_get_negative_index() {
 
 #[test]
 fn eval_class_definition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Class(
             "Point".to_string(),
@@ -983,7 +983,7 @@ fn eval_class_definition() {
 
 #[test]
 fn eval_class_with_method() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Class(
             "Counter".to_string(),
@@ -1011,7 +1011,7 @@ fn eval_class_with_method() {
 
 #[test]
 fn eval_cross_type_equality_is_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Int == String should be false
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
@@ -1025,7 +1025,7 @@ fn eval_cross_type_equality_is_false() {
 
 #[test]
 fn eval_cross_type_inequality_is_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Int != String should be true
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
