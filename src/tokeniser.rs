@@ -35,6 +35,9 @@ pub enum TokenKind {
     New,
     Colon,
     StaticAccess,
+    Return,
+    Break,
+    Continue,
 
     // Comparison operators
     Eq,  // ==
@@ -91,6 +94,9 @@ impl fmt::Display for TokenKind {
             TokenKind::New => "new",
             TokenKind::Colon => ":",
             TokenKind::StaticAccess => "::",
+            TokenKind::Return => "return",
+            TokenKind::Break => "break",
+            TokenKind::Continue => "continue",
 
             // Comparisons
             TokenKind::Eq => "==",
@@ -174,6 +180,9 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::True, Regex::new(r"^true\b").unwrap()),
         (TokenKind::False, Regex::new(r"^false\b").unwrap()),
         (TokenKind::Null, Regex::new(r"^null\b").unwrap()),
+        (TokenKind::Return, Regex::new(r"^return\b").unwrap()),
+        (TokenKind::Break, Regex::new(r"^break\b").unwrap()),
+        (TokenKind::Continue, Regex::new(r"^continue\b").unwrap()),
         (TokenKind::Identifier, Regex::new(r"^[a-zA-Z_]\w*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),

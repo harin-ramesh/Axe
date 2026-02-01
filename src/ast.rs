@@ -99,4 +99,10 @@ pub enum Stmt {
     Function(String, Vec<String>, Box<Stmt>),
     /// Class declaration: class Name [: Parent] { body }
     Class(String, Option<String>, Vec<Stmt>),
+    /// A return statement: return expr
+    Return(Box<Expr>),
+    /// A break statement: break;
+    Break,
+    /// A continue statement: continue;
+    Continue,
 }

@@ -1,10 +1,12 @@
-use axe::{Axe, Literal, Parser, Value};
+use axe::{Axe, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
-fn eval(code: &str) -> Result<Value, &'static str> {
+fn eval(code: &str) -> Result<Value, EvalSignal> {
     let mut parser = Parser::new(code);
-    let program = parser.parse().map_err(|_| "parse error")?;
-    let axe = Axe::new();
+    let program = parser
+        .parse()
+        .map_err(|e| EvalSignal::Error(e.to_string()))?;
+    let mut axe = Axe::new();
     axe.run(program)
 }
 
@@ -325,11 +327,11 @@ fn edge_case_deeply_nested_expression() {
 #[test]
 fn edge_case_many_nested_functions() {
     let code = r#"
-        fn a(x) { x + 1; }
-        fn b(x) { a(x) + 1; }
-        fn c(x) { b(x) + 1; }
-        fn d(x) { c(x) + 1; }
-        fn e(x) { d(x) + 1; }
+        fn a(x) { return x + 1; }
+        fn b(x) { return a(x) + 1; }
+        fn c(x) { return b(x) + 1; }
+        fn d(x) { return c(x) + 1; }
+        fn e(x) { return d(x) + 1; }
         e(0);
     "#;
     assert_eq!(eval_int(code), 5);
@@ -340,9 +342,9 @@ fn edge_case_recursive_fibonacci() {
     let code = r#"
         fn fib(n) {
             if (n <= 1) {
-                n;
+                return n;
             } else {
-                fib(n - 1) + fib(n - 2);
+                return fib(n - 1) + fib(n - 2);
             }
         }
         fib(10);
@@ -355,17 +357,17 @@ fn edge_case_mutual_recursion() {
     let code = r#"
         fn isEven(n) {
             if (n == 0) {
-                true;
+                return true;
             } else {
-                isOdd(n - 1);
+                return isOdd(n - 1);
             }
         }
         
         fn isOdd(n) {
             if (n == 0) {
-                false;
+                return false;
             } else {
-                isEven(n - 1);
+                return isEven(n - 1);
             }
         }
         
@@ -416,11 +418,14 @@ fn edge_case_string_with_spaces() {
 #[test]
 fn truthiness_zero_is_falsy() {
     let code = r#"
-        if (0) {
-            1;
-        } else {
-            2;
+        fn test() {
+            if (0) {
+                return 1;
+            } else {
+                return 2;
+            }
         }
+        test();
     "#;
     assert_eq!(eval_int(code), 2);
 }
@@ -428,12 +433,14 @@ fn truthiness_zero_is_falsy() {
 #[test]
 fn truthiness_null_is_falsy() {
     let code = r#"
-        let x = null;
-        if (x) {
-            1;
-        } else {
-            2;
+        fn test(x) {
+            if (x) {
+                return 1;
+            } else {
+                return 2;
+            }
         }
+        test(null);
     "#;
     assert_eq!(eval_int(code), 2);
 }
@@ -442,11 +449,14 @@ fn truthiness_null_is_falsy() {
 fn truthiness_empty_string_is_truthy() {
     // Note: In Axe, empty string IS truthy according to the docs
     let code = r#"
-        if ("") {
-            1;
-        } else {
-            2;
+        fn test() {
+            if ("") {
+                return 1;
+            } else {
+                return 2;
+            }
         }
+        test();
     "#;
     assert_eq!(eval_int(code), 1);
 }
@@ -454,11 +464,14 @@ fn truthiness_empty_string_is_truthy() {
 #[test]
 fn truthiness_non_zero_is_truthy() {
     let code = r#"
-        if (42) {
-            1;
-        } else {
-            2;
+        fn test() {
+            if (42) {
+                return 1;
+            } else {
+                return 2;
+            }
         }
+        test();
     "#;
     assert_eq!(eval_int(code), 1);
 }
@@ -466,11 +479,14 @@ fn truthiness_non_zero_is_truthy() {
 #[test]
 fn truthiness_negative_is_truthy() {
     let code = r#"
-        if (-1) {
-            1;
-        } else {
-            2;
+        fn test() {
+            if (-1) {
+                return 1;
+            } else {
+                return 2;
+            }
         }
+        test();
     "#;
     assert_eq!(eval_int(code), 1);
 }

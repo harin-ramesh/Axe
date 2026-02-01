@@ -27,7 +27,7 @@ fn run_file(filename: &str) {
         }
     };
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let trimmed_content = content.trim();
     if trimmed_content.is_empty() {
@@ -59,7 +59,7 @@ fn run_repl() {
     );
     println!();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let mut line = String::new();
     let mut accumulated_input = String::new();
 

@@ -3,7 +3,7 @@ use axe::{Axe, Literal, Parser, Value};
 fn eval(input: &str) -> Value {
     let mut parser = Parser::new(input);
     let program = parser.parse().expect("parse failed");
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     axe.run(program).expect("eval failed")
 }
 
@@ -181,7 +181,10 @@ fn unary_plus_and_minus_mixed() {
 
 #[test]
 fn unary_minus_in_if_condition() {
-    assert_eq!(eval_int("let x = -1; if (x < 0) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { let x = -1; if (x < 0) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 // Note: Comparison operators (< > <= >= == !=) are only supported inside
@@ -190,32 +193,50 @@ fn unary_minus_in_if_condition() {
 #[test]
 fn unary_minus_in_if_less_than() {
     // Use if statement to test comparison with negative numbers
-    assert_eq!(eval_int("if ((-5) < 0) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if ((-5) < 0) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 #[test]
 fn unary_minus_in_if_greater_than() {
-    assert_eq!(eval_int("if (0 > (-5)) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if (0 > (-5)) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 #[test]
 fn unary_minus_in_if_equality() {
-    assert_eq!(eval_int("if ((-5) == (-5)) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if ((-5) == (-5)) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 #[test]
 fn unary_minus_in_if_inequality() {
-    assert_eq!(eval_int("if ((-5) != 5) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if ((-5) != 5) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 #[test]
 fn unary_minus_in_if_less_than_or_equal() {
-    assert_eq!(eval_int("if ((-5) <= (-5)) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if ((-5) <= (-5)) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 #[test]
 fn unary_minus_in_if_greater_than_or_equal() {
-    assert_eq!(eval_int("if ((-5) >= (-10)) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if ((-5) >= (-10)) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 // =============================================================================
@@ -298,7 +319,10 @@ fn logical_not_with_variable() {
 
 #[test]
 fn logical_not_in_if_condition() {
-    assert_eq!(eval_int("if (!false) { 1; } else { 0; }"), 1);
+    assert_eq!(
+        eval_int("fn test() { if (!false) { return 1; } else { return 0; } } test();"),
+        1
+    );
 }
 
 #[test]

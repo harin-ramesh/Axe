@@ -11,14 +11,14 @@ greet();
 
 // Function with one parameter
 fn square(x) {
-    x * x;
+    return x * x;
 }
 print("square(5) =");
 print(square(5));  // 25
 
 // Function with multiple parameters
 fn add(a, b) {
-    a + b;
+    return a + b;
 }
 print("add(3, 7) =");
 print(add(3, 7));  // 10
@@ -26,7 +26,7 @@ print(add(3, 7));  // 10
 // Function with local variables
 fn calculateArea(width, height) {
     let area = width * height;
-    area;
+    return area;
 }
 print("Area of 4x5 rectangle:");
 print(calculateArea(4, 5));  // 20
@@ -36,9 +36,9 @@ print("=== Functions with Conditionals ===");
 // Absolute value
 fn abs(n) {
     if (n < 0) {
-        -n;
+        return -n;
     } else {
-        n;
+        return n;
     }
 }
 print("abs(-42) =");
@@ -49,9 +49,9 @@ print(abs(42));   // 42
 // Max of two numbers
 fn max(a, b) {
     if (a > b) {
-        a;
+        return a;
     } else {
-        b;
+        return b;
     }
 }
 print("max(10, 20) =");
@@ -60,9 +60,9 @@ print(max(10, 20));  // 20
 // Min of two numbers
 fn min(a, b) {
     if (a < b) {
-        a;
+        return a;
     } else {
-        b;
+        return b;
     }
 }
 print("min(10, 20) =");
@@ -71,12 +71,12 @@ print(min(10, 20));  // 10
 // Clamp a value between min and max
 fn clamp(value, minVal, maxVal) {
     if (value < minVal) {
-        minVal;
+        return minVal;
     } else {
         if (value > maxVal) {
-            maxVal;
+            return maxVal;
         } else {
-            value;
+            return value;
         }
     }
 }
@@ -95,7 +95,7 @@ fn factorial(n) {
     for i in range(1, n + 1) {
         result = result * i;
     }
-    result;
+    return result;
 }
 print("factorial(5) =");
 print(factorial(5));  // 120
@@ -106,7 +106,7 @@ fn sumTo(n) {
     for i in range(1, n + 1) {
         total = total + i;
     }
-    total;
+    return total;
 }
 print("sumTo(10) =");
 print(sumTo(10));  // 55
@@ -114,7 +114,7 @@ print(sumTo(10));  // 55
 // Check if a number is prime
 fn isPrime(n) {
     if (n < 2) {
-        false;
+        return false;
     } else {
         let i = 2;
         let result = true;
@@ -126,7 +126,7 @@ fn isPrime(n) {
             }
             i = i + 1;
         }
-        result;
+        return result;
     }
 }
 print("isPrime(7) =");
@@ -138,13 +138,13 @@ print("=== Higher-Order Patterns ===");
 
 // Apply function twice (simulated)
 fn double(x) {
-    x * 2;
+    return x * 2;
 }
 
 fn applyTwice(x, func) {
     // Note: Axe doesn't support passing functions as arguments directly
     // This demonstrates a pattern
-    func(func(x));
+    return func(func(x));
 }
 
 // Simulate by calling double twice manually
@@ -157,23 +157,23 @@ print(value);  // 20
 print("=== Function Composition ===");
 
 fn increment(x) {
-    x + 1;
+    return x + 1;
 }
 
 fn triple(x) {
-    x * 3;
+    return x * 3;
 }
 
 // Compose: triple then increment
 fn tripleAndIncrement(x) {
-    increment(triple(x));
+    return increment(triple(x));
 }
 print("tripleAndIncrement(5) =");
 print(tripleAndIncrement(5));  // 16 (5*3 + 1)
 
 // Compose: increment then triple
 fn incrementAndTriple(x) {
-    triple(increment(x));
+    return triple(increment(x));
 }
 print("incrementAndTriple(5) =");
 print(incrementAndTriple(5));  // 18 ((5+1) * 3)
@@ -186,7 +186,7 @@ fn power(base, exp) {
     for i in range(exp) {
         result = result * base;
     }
-    result;
+    return result;
 }
 print("power(2, 10) =");
 print(power(2, 10));  // 1024
@@ -198,14 +198,14 @@ fn gcdIterative(a, b) {
         b = a % b;
         a = temp;
     }
-    a;
+    return a;
 }
 print("gcd(48, 18) =");
 print(gcdIterative(48, 18));  // 6
 
 // LCM using GCD
 fn lcm(a, b) {
-    (a * b) / gcdIterative(a, b);
+    return (a * b) / gcdIterative(a, b);
 }
 print("lcm(4, 6) =");
 print(lcm(4, 6));  // 12

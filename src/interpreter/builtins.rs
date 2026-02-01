@@ -2,9 +2,10 @@
 
 use crate::ast::Literal;
 
+use super::tree_walker::EvalSignal;
 use super::value::Value;
 
-pub fn native_print(args: &[Value]) -> Result<Value, &'static str> {
+pub fn native_print(args: &[Value]) -> Result<Value, EvalSignal> {
     for (i, arg) in args.iter().enumerate() {
         if i > 0 {
             print!(" ");
@@ -25,9 +26,9 @@ pub fn native_print(args: &[Value]) -> Result<Value, &'static str> {
     Ok(Value::Literal(Literal::Null))
 }
 
-pub fn native_type(args: &[Value]) -> Result<Value, &'static str> {
+pub fn native_type(args: &[Value]) -> Result<Value, EvalSignal> {
     if args.len() != 1 {
-        return Err("type expects exactly 1 argument");
+        return Err("type expects exactly 1 argument".into());
     }
     let type_name = match &args[0] {
         Value::Literal(lit) => match lit {
@@ -45,13 +46,13 @@ pub fn native_type(args: &[Value]) -> Result<Value, &'static str> {
     Ok(Value::Literal(Literal::Str(type_name.to_string())))
 }
 
-pub fn native_range(args: &[Value]) -> Result<Value, &'static str> {
+pub fn native_range(args: &[Value]) -> Result<Value, EvalSignal> {
     match args.len() {
         1 => match &args[0] {
             Value::Literal(n) => match n {
                 Literal::Int(n_val) => {
                     if *n_val < 0 {
-                        return Err("range expects non-negative integer");
+                        return Err("range expects non-negative integer".into());
                     }
                     let values: Vec<Value> = (0..*n_val)
                         .map(|i| Value::Literal(Literal::Int(i)))
@@ -59,9 +60,9 @@ pub fn native_range(args: &[Value]) -> Result<Value, &'static str> {
 
                     Ok(Value::List(values))
                 }
-                _ => Err("range expects integer argument"),
+                _ => Err("range expects integer argument".into()),
             },
-            _ => Err("range expects integer argument"),
+            _ => Err("range expects integer argument".into()),
         },
         2 => {
             // range(start, end) -> [start, start+1, ..., end-1]
@@ -73,9 +74,9 @@ pub fn native_range(args: &[Value]) -> Result<Value, &'static str> {
                             .collect();
                         Ok(Value::List(values))
                     }
-                    _ => Err("range expects integer arguments"),
+                    _ => Err("range expects integer arguments".into()),
                 },
-                _ => Err("range expects integer arguments"),
+                _ => Err("range expects integer arguments".into()),
             }
         }
         3 => {
@@ -85,7 +86,7 @@ pub fn native_range(args: &[Value]) -> Result<Value, &'static str> {
                     match (start, end, step) {
                         (Literal::Int(start), Literal::Int(end), Literal::Int(step)) => {
                             if *step == 0 {
-                                return Err("range step cannot be zero");
+                                return Err("range step cannot be zero".into());
                             }
                             let mut values = Vec::new();
                             let mut current = *start;
@@ -102,12 +103,12 @@ pub fn native_range(args: &[Value]) -> Result<Value, &'static str> {
                             }
                             Ok(Value::List(values))
                         }
-                        _ => Err("range expects integer arguments"),
+                        _ => Err("range expects integer arguments".into()),
                     }
                 }
-                _ => Err("range expects integer arguments"),
+                _ => Err("range expects integer arguments".into()),
             }
         }
-        _ => Err("range expects 1, 2, or 3 arguments"),
+        _ => Err("range expects 1, 2, or 3 arguments".into()),
     }
 }

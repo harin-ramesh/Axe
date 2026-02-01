@@ -1,10 +1,12 @@
-use axe::{Axe, Literal, Parser, Value};
+use axe::{Axe, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
-fn eval(code: &str) -> Result<Value, &'static str> {
+fn eval(code: &str) -> Result<Value, EvalSignal> {
     let mut parser = Parser::new(code);
-    let program = parser.parse().map_err(|_| "parse error")?;
-    let axe = Axe::new();
+    let program = parser
+        .parse()
+        .map_err(|e| EvalSignal::Error(e.to_string()))?;
+    let mut axe = Axe::new();
     axe.run(program)
 }
 
@@ -205,7 +207,7 @@ fn for_loop_with_odd_sum() {
 fn for_loop_with_function_call() {
     let code = r#"
         fn square(x) {
-            x * x;
+            return x * x;
         }
         
         let sum = 0;
@@ -226,7 +228,7 @@ fn for_loop_inside_function() {
             for i in range(1, n + 1) {
                 total = total + i;
             }
-            total;
+            return total;
         }
         
         sumRange(10);
@@ -242,7 +244,7 @@ fn for_loop_function_factorial() {
             for i in range(1, n + 1) {
                 result = result * i;
             }
-            result;
+            return result;
         }
         
         factorial(5);

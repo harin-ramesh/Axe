@@ -3,7 +3,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
 // Greater than tests
 #[test]
 fn gt_int_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
@@ -16,7 +16,7 @@ fn gt_int_true() {
 
 #[test]
 fn gt_int_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
@@ -29,7 +29,7 @@ fn gt_int_false() {
 
 #[test]
 fn gt_float_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
@@ -43,7 +43,7 @@ fn gt_float_true() {
 // Less than tests
 #[test]
 fn lt_int_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lt,
@@ -56,7 +56,7 @@ fn lt_int_true() {
 
 #[test]
 fn lt_int_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lt,
@@ -70,7 +70,7 @@ fn lt_int_false() {
 // Greater than or equal tests
 #[test]
 fn gte_int_true_greater() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gte,
@@ -83,7 +83,7 @@ fn gte_int_true_greater() {
 
 #[test]
 fn gte_int_true_equal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gte,
@@ -96,7 +96,7 @@ fn gte_int_true_equal() {
 
 #[test]
 fn gte_int_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gte,
@@ -110,7 +110,7 @@ fn gte_int_false() {
 // Less than or equal tests
 #[test]
 fn lte_int_true_less() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lte,
@@ -123,7 +123,7 @@ fn lte_int_true_less() {
 
 #[test]
 fn lte_int_true_equal() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lte,
@@ -136,7 +136,7 @@ fn lte_int_true_equal() {
 
 #[test]
 fn lte_int_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lte,
@@ -150,7 +150,7 @@ fn lte_int_false() {
 // Equality tests
 #[test]
 fn eq_int_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -163,7 +163,7 @@ fn eq_int_true() {
 
 #[test]
 fn eq_int_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -176,7 +176,7 @@ fn eq_int_false() {
 
 #[test]
 fn eq_float_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -189,7 +189,7 @@ fn eq_float_true() {
 
 #[test]
 fn eq_string_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -202,7 +202,7 @@ fn eq_string_true() {
 
 #[test]
 fn eq_string_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -215,7 +215,7 @@ fn eq_string_false() {
 
 #[test]
 fn eq_bool_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -228,7 +228,7 @@ fn eq_bool_true() {
 
 #[test]
 fn eq_null_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -242,7 +242,7 @@ fn eq_null_true() {
 // Not equal tests
 #[test]
 fn neq_int_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
@@ -255,7 +255,7 @@ fn neq_int_true() {
 
 #[test]
 fn neq_int_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
@@ -269,7 +269,7 @@ fn neq_int_false() {
 // Cross-type comparisons
 #[test]
 fn eq_cross_type_false() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -282,7 +282,7 @@ fn eq_cross_type_false() {
 
 #[test]
 fn neq_cross_type_true() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
@@ -296,7 +296,7 @@ fn neq_cross_type_true() {
 // Comparison with variables
 #[test]
 fn comparison_with_variables() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -322,7 +322,7 @@ fn comparison_with_variables() {
 // Comparison in if expressions
 #[test]
 fn comparison_in_if_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // if (10 > 5) { "yes" } else { "no" }
     let program = Program {
         stmts: vec![Stmt::If(
@@ -344,7 +344,7 @@ fn comparison_in_if_condition() {
 
 #[test]
 fn comparison_false_in_if_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // if (5 > 10) { "yes" } else { "no" }
     let program = Program {
         stmts: vec![Stmt::If(
@@ -367,7 +367,7 @@ fn comparison_false_in_if_condition() {
 // Boolean values in if expressions
 #[test]
 fn bool_true_in_if_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Bool(true)),
@@ -384,7 +384,7 @@ fn bool_true_in_if_condition() {
 
 #[test]
 fn bool_false_in_if_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Bool(false)),
@@ -402,7 +402,7 @@ fn bool_false_in_if_condition() {
 // Nested comparisons
 #[test]
 fn nested_comparison_expressions() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // (10 > 5) == (3 < 7)  -> true == true -> true
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
@@ -424,7 +424,7 @@ fn nested_comparison_expressions() {
 
 #[test]
 fn comparison_type_error() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Can't use > on strings
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(

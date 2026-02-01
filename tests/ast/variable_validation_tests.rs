@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Program, Stmt};
 
 #[test]
 fn valid_variable_names() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Valid names starting with letter
     let program = Program {
@@ -42,7 +42,7 @@ fn valid_variable_names() {
 
 #[test]
 fn invalid_variable_name_starting_with_number() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             "123var".into(),
@@ -56,7 +56,7 @@ fn invalid_variable_name_starting_with_number() {
 
 #[test]
 fn invalid_variable_name_with_special_chars() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
@@ -101,7 +101,7 @@ fn invalid_variable_name_with_special_chars() {
 
 #[test]
 fn invalid_variable_name_empty() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             "".into(),

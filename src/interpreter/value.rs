@@ -9,7 +9,10 @@ pub enum Value {
     Literal(Literal),
     List(Vec<Value>),
     Function(Vec<String>, Box<Stmt>, EnvRef),
-    NativeFunction(String, fn(&[Value]) -> Result<Value, &'static str>),
+    NativeFunction(
+        String,
+        fn(&[Value]) -> Result<Value, super::tree_walker::EvalSignal>,
+    ),
     Object(EnvRef),
 }
 

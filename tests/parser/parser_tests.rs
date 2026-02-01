@@ -707,7 +707,7 @@ fn eval_simple_addition() {
     let mut parser = Parser::new("1 + 2;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -717,7 +717,7 @@ fn eval_chained_addition() {
     let mut parser = Parser::new("1 + 2 + 3;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -727,7 +727,7 @@ fn eval_parenthesized_addition() {
     let mut parser = Parser::new("(10 + 20) + 30;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -737,7 +737,7 @@ fn eval_float_addition() {
     let mut parser = Parser::new("1.5 + 2.5;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -747,7 +747,7 @@ fn eval_simple_subtraction() {
     let mut parser = Parser::new("10 - 3;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -757,7 +757,7 @@ fn eval_simple_multiplication() {
     let mut parser = Parser::new("3 * 4;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -767,7 +767,7 @@ fn eval_simple_division() {
     let mut parser = Parser::new("10 / 2;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -777,7 +777,7 @@ fn eval_precedence_mul_over_add() {
     let mut parser = Parser::new("1 + 2 * 3;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -787,7 +787,7 @@ fn eval_precedence_with_parentheses() {
     let mut parser = Parser::new("(1 + 2) * 3;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -797,7 +797,7 @@ fn eval_complex_expression() {
     let mut parser = Parser::new("2 + 3 * 4 - 10 / 2;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -807,7 +807,7 @@ fn eval_unary_minus_in_expression() {
     let mut parser = Parser::new("5 + -3;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -817,7 +817,7 @@ fn eval_unary_minus_with_multiplication() {
     let mut parser = Parser::new("2 * -3;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -827,7 +827,7 @@ fn eval_nested_parentheses_complex() {
     let mut parser = Parser::new("((2 + 3) * (4 - 1));");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -837,7 +837,7 @@ fn eval_true_literal() {
     let mut parser = Parser::new("true;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -847,7 +847,7 @@ fn eval_false_literal() {
     let mut parser = Parser::new("false;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -857,7 +857,7 @@ fn eval_null_literal() {
     let mut parser = Parser::new("null;");
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }
@@ -895,7 +895,7 @@ fn eval_while_count_1_to_10_sum_is_correct() {
     let mut parser = Parser::new(code);
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program).unwrap();
     // sum == 55 should evaluate to true
     assert!(matches!(
@@ -1086,7 +1086,7 @@ fn eval_string_len_method() {
     let mut parser = Parser::new(code);
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program).unwrap();
     assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(5))));
 }
@@ -1097,7 +1097,7 @@ fn eval_string_concat_method() {
     let mut parser = Parser::new(code);
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program).unwrap();
     assert!(matches!(result, axe::Value::Literal(axe::Literal::Str(_))));
 }
@@ -1111,7 +1111,7 @@ fn eval_method_on_variable() {
     let mut parser = Parser::new(code);
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program).unwrap();
     assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(5))));
 }
@@ -1122,7 +1122,7 @@ fn eval_chained_method_calls() {
     let mut parser = Parser::new(code);
     let program = parser.parse().unwrap();
 
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let result = axe.run(program);
     assert!(result.is_ok());
 }

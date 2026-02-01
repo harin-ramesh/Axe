@@ -4,9 +4,9 @@
 // Classic factorial function
 fn factorial(n) {
     if (n <= 1) {
-        1;
+        return 1;
     } else {
-        n * factorial(n - 1);
+        return n * factorial(n - 1);
     }
 }
 
@@ -19,9 +19,9 @@ print(factorial(10));  // 3628800
 // Fibonacci sequence using recursion
 fn fib(n) {
     if (n <= 1) {
-        n;
+        return n;
     } else {
-        fib(n - 1) + fib(n - 2);
+        return fib(n - 1) + fib(n - 2);
     }
 }
 
@@ -34,9 +34,9 @@ print(fib(15));  // 610
 // Sum of digits
 fn sumOfDigits(n) {
     if (n < 10) {
-        n;
+        return n;
     } else {
-        n % 10 + sumOfDigits(n / 10);
+        return n % 10 + sumOfDigits(n / 10);
     }
 }
 
@@ -47,9 +47,9 @@ print(sumOfDigits(12345));  // 15
 // Power function
 fn power(base, exp) {
     if (exp == 0) {
-        1;
+        return 1;
     } else {
-        base * power(base, exp - 1);
+        return base * power(base, exp - 1);
     }
 }
 
@@ -62,9 +62,9 @@ print(power(3, 5));   // 243
 // Greatest Common Divisor (Euclidean algorithm)
 fn gcd(a, b) {
     if (b == 0) {
-        a;
+        return a;
     } else {
-        gcd(b, a % b);
+        return gcd(b, a % b);
     }
 }
 
@@ -78,10 +78,10 @@ print(gcd(100, 35)); // 5
 fn countdown(n) {
     if (n <= 0) {
         print("Blast off!");
-        0;
+        return 0;
     } else {
         print(n);
-        countdown(n - 1);
+        return countdown(n - 1);
     }
 }
 
@@ -91,17 +91,17 @@ countdown(5);
 // Mutual recursion: isEven and isOdd
 fn isEven(n) {
     if (n == 0) {
-        true;
+        return true;
     } else {
-        isOdd(n - 1);
+        return isOdd(n - 1);
     }
 }
 
 fn isOdd(n) {
     if (n == 0) {
-        false;
+        return false;
     } else {
-        isEven(n - 1);
+        return isEven(n - 1);
     }
 }
 
@@ -113,9 +113,9 @@ print(isOdd(7));    // true
 // Sum from 1 to n recursively
 fn sumTo(n) {
     if (n <= 0) {
-        0;
+        return 0;
     } else {
-        n + sumTo(n - 1);
+        return n + sumTo(n - 1);
     }
 }
 

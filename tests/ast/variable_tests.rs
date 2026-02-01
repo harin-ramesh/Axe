@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
 
 #[test]
 fn set_and_get_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -17,7 +17,7 @@ fn set_and_get_variable() {
 
 #[test]
 fn nested_expression_with_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -40,7 +40,7 @@ fn nested_expression_with_variable() {
 
 #[test]
 fn undefined_variable_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Var("y".into()))],
     };
@@ -50,7 +50,7 @@ fn undefined_variable_fails() {
 
 #[test]
 fn null_can_be_stored_in_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![

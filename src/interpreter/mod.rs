@@ -10,5 +10,5 @@ mod tree_walker;
 mod value;
 
 pub use environment::{EnvRef, Environment};
-pub use tree_walker::TreeWalker;
+pub use tree_walker::{EvalSignal, TreeWalker};
 pub use value::Value;

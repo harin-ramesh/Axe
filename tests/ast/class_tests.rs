@@ -1,10 +1,12 @@
-use axe::{Axe, Literal, Parser, Value};
+use axe::{Axe, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
-fn eval(code: &str) -> Result<Value, &'static str> {
+fn eval(code: &str) -> Result<Value, EvalSignal> {
     let mut parser = Parser::new(code);
-    let program = parser.parse().map_err(|_| "parse error")?;
-    let axe = Axe::new();
+    let program = parser
+        .parse()
+        .map_err(|e| EvalSignal::Error(e.to_string()))?;
+    let mut axe = Axe::new();
     axe.run(program)
 }
 
@@ -141,7 +143,7 @@ fn method_call_simple() {
             }
             
             fn double(self) {
-                self.result * 2;
+                return self.result * 2;
             }
         }
         
@@ -162,11 +164,11 @@ fn method_call_with_arguments() {
             }
             
             fn add(self, n) {
-                self.base + n;
+                return self.base + n;
             }
             
             fn multiply(self, n) {
-                self.base * n;
+                return self.base * n;
             }
         }
         
@@ -189,11 +191,11 @@ fn method_call_modifies_state() {
             
             fn increment(self) {
                 self.count = self.count + 1;
-                self.count;
+                return self.count;
             }
             
             fn get(self) {
-                self.count;
+                return self.count;
             }
         }
         
@@ -300,7 +302,7 @@ fn multiple_objects_independent() {
             }
             
             fn get(self) {
-                self.value;
+                return self.value;
             }
         }
         
@@ -329,9 +331,9 @@ fn class_with_conditional_method() {
             
             fn isPositive(self) {
                 if (self.value > 0) {
-                    true;
+                    return true;
                 } else {
-                    false;
+                    return false;
                 }
             }
         }
@@ -362,7 +364,7 @@ fn class_with_loop_in_method() {
                     total = total + i;
                     i = i + 1;
                 }
-                total;
+                return total;
             }
         }
         
@@ -444,7 +446,7 @@ fn static_method_call_no_args() {
     let code = r#"
         class MathUtils {
             fn pi() {
-                3;
+                return 3;
             }
         }
         
@@ -458,7 +460,7 @@ fn static_method_call_with_args() {
     let code = r#"
         class MathUtils {
             fn add(a, b) {
-                a + b;
+                return a + b;
             }
         }
         
@@ -507,7 +509,7 @@ fn static_and_instance_coexist() {
             }
             
             fn get(self) {
-                self.count;
+                return self.count;
             }
         }
         
@@ -523,7 +525,7 @@ fn static_method_returns_value_used_in_expression() {
     let code = r#"
         class Factory {
             fn magic() {
-                42;
+                return 42;
             }
         }
         

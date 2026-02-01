@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
 
 #[test]
 fn if_with_truthy_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Int(1)),
@@ -19,7 +19,7 @@ fn if_with_truthy_condition() {
 
 #[test]
 fn if_with_null_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Null),
@@ -36,7 +36,7 @@ fn if_with_null_condition() {
 
 #[test]
 fn if_with_expression_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Binary(
@@ -57,7 +57,7 @@ fn if_with_expression_condition() {
 
 #[test]
 fn if_with_block_branches() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![("x".to_string(), None, None)]),
@@ -82,7 +82,7 @@ fn if_with_block_branches() {
 
 #[test]
 fn nested_if_expressions() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Int(1)),
@@ -105,7 +105,7 @@ fn nested_if_expressions() {
 
 #[test]
 fn if_with_variable_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -129,7 +129,7 @@ fn if_with_variable_condition() {
 
 #[test]
 fn if_non_zero_numbers_are_truthy() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Int(1)),
@@ -146,7 +146,7 @@ fn if_non_zero_numbers_are_truthy() {
 
 #[test]
 fn if_bool_true_is_truthy() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Bool(true)),
@@ -163,7 +163,7 @@ fn if_bool_true_is_truthy() {
 
 #[test]
 fn if_bool_false_is_falsy() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Bool(false)),
@@ -180,7 +180,7 @@ fn if_bool_false_is_falsy() {
 
 #[test]
 fn if_with_comparison_as_condition() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Binary(
@@ -201,7 +201,7 @@ fn if_with_comparison_as_condition() {
 
 #[test]
 fn if_with_equality_check() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Binary(
@@ -222,7 +222,7 @@ fn if_with_equality_check() {
 
 #[test]
 fn if_with_bool_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -246,7 +246,7 @@ fn if_with_bool_variable() {
 
 #[test]
 fn if_with_false_bool_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
@@ -270,7 +270,7 @@ fn if_with_false_bool_variable() {
 
 #[test]
 fn if_falsy_values() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     // Test Null is falsy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -288,7 +288,7 @@ fn if_falsy_values() {
 
 #[test]
 fn if_zero_is_falsy() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Int(0)),
@@ -305,7 +305,7 @@ fn if_zero_is_falsy() {
 
 #[test]
 fn if_zero_float_is_falsy() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Float(0.0)),
@@ -322,7 +322,7 @@ fn if_zero_float_is_falsy() {
 
 #[test]
 fn if_arithmetic_result_zero_is_falsy() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Binary(

@@ -8,7 +8,7 @@ pub mod transformer;
 pub use ast::{Expr, Literal, Operation, Program, Stmt};
 
 // Re-export interpreter types
-pub use interpreter::{EnvRef, Environment, TreeWalker, Value};
+pub use interpreter::{EnvRef, Environment, EvalSignal, TreeWalker, Value};
 
 // Re-export for backwards compatibility
 pub use interpreter::TreeWalker as Axe;

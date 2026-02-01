@@ -2,7 +2,7 @@ use axe::{Axe, Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
 fn let_creates_new_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Create a variable with Let (declaration)
     let program = Program {
@@ -23,7 +23,7 @@ fn let_creates_new_variable() {
 
 #[test]
 fn let_overwrites_in_same_scope() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Create a variable with Let, then overwrite
     let program = Program {
@@ -44,7 +44,7 @@ fn let_overwrites_in_same_scope() {
 
 #[test]
 fn assign_updates_existing_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Create a variable with Let then update with Assign
     let program = Program {
@@ -64,7 +64,7 @@ fn assign_updates_existing_variable() {
 
 #[test]
 fn assign_fails_on_undefined_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Assign to undefined variable should fail
     let program = Program {
@@ -80,7 +80,7 @@ fn assign_fails_on_undefined_variable() {
 
 #[test]
 fn assign_updates_parent_scope() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Create global variable
     // Create function that uses Assign to update global
@@ -115,7 +115,7 @@ fn assign_updates_parent_scope() {
 
 #[test]
 fn let_creates_local_variable_in_function() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Create global variable
     // Function with Let creates a local variable (shadows global)
@@ -148,7 +148,7 @@ fn let_creates_local_variable_in_function() {
 
 #[test]
 fn assign_in_while_loop() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![
@@ -196,7 +196,7 @@ fn assign_in_while_loop() {
 
 #[test]
 fn let_with_invalid_name_fails() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
@@ -212,7 +212,7 @@ fn let_with_invalid_name_fails() {
 
 #[test]
 fn assign_updates_through_multiple_scopes() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Create global
     // Outer function
@@ -252,7 +252,7 @@ fn assign_updates_through_multiple_scopes() {
 
 #[test]
 fn block_shares_parent_scope() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Variable declared in block is visible outside (blocks share parent scope)
     let program = Program {
@@ -272,7 +272,7 @@ fn block_shares_parent_scope() {
 
 #[test]
 fn inner_scope_can_access_outer_variables() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Inner block can read variable from outer scope
     let program = Program {
@@ -282,7 +282,14 @@ fn inner_scope_can_access_outer_variables() {
                 Some(Expr::Literal(Literal::Int(42))),
                 None,
             )]),
-            Stmt::Block(vec![Stmt::Expr(Expr::Var("x".into()))]),
+            // Block accesses outer variable (proves no error) and assigns to `result`
+            Stmt::Block(vec![Stmt::Let(vec![(
+                "result".into(),
+                Some(Expr::Var("x".into())),
+                None,
+            )])]),
+            // Read the value that was captured from the inner block
+            Stmt::Expr(Expr::Var("result".into())),
         ],
     };
 
@@ -292,7 +299,7 @@ fn inner_scope_can_access_outer_variables() {
 
 #[test]
 fn block_let_overwrites_outer_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Block let overwrites outer variable (blocks share parent scope)
     let program = Program {
@@ -318,7 +325,7 @@ fn block_let_overwrites_outer_variable() {
 
 #[test]
 fn block_let_modifies_same_scope() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Block let modifies same scope (no isolation)
     let program = Program {
@@ -344,7 +351,7 @@ fn block_let_modifies_same_scope() {
 
 #[test]
 fn assign_modifies_outer_scope_variable() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Assign (not let) in inner block modifies outer variable
     let program = Program {
@@ -369,7 +376,7 @@ fn assign_modifies_outer_scope_variable() {
 
 #[test]
 fn nested_blocks_scope_correctly() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Multiple levels of nesting
     let program = Program {
@@ -391,17 +398,24 @@ fn nested_blocks_scope_correctly() {
                         Some(Expr::Literal(Literal::Int(3))),
                         None,
                     )]),
-                    Stmt::Expr(Expr::Binary(
-                        Operation::Add,
-                        Box::new(Expr::Binary(
+                    // Store the result in a variable accessible from outer scope
+                    Stmt::Let(vec![(
+                        "result".into(),
+                        Some(Expr::Binary(
                             Operation::Add,
-                            Box::new(Expr::Var("a".into())),
-                            Box::new(Expr::Var("b".into())),
+                            Box::new(Expr::Binary(
+                                Operation::Add,
+                                Box::new(Expr::Var("a".into())),
+                                Box::new(Expr::Var("b".into())),
+                            )),
+                            Box::new(Expr::Var("c".into())),
                         )),
-                        Box::new(Expr::Var("c".into())),
-                    )),
+                        None,
+                    )]),
                 ]),
             ]),
+            // Read the result computed in the innermost block
+            Stmt::Expr(Expr::Var("result".into())),
         ],
     };
 
@@ -412,7 +426,7 @@ fn nested_blocks_scope_correctly() {
 
 #[test]
 fn function_has_own_scope() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Function parameters are in function's scope
     let program = Program {
@@ -425,7 +439,9 @@ fn function_has_own_scope() {
             Stmt::Function(
                 "get_param".into(),
                 vec!["x".into()],
-                Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Var("x".into()))])),
+                Box::new(Stmt::Block(vec![Stmt::Return(Box::new(Expr::Var(
+                    "x".into(),
+                )))])),
             ),
             Stmt::Expr(Expr::Call(
                 "get_param".into(),
@@ -441,7 +457,7 @@ fn function_has_own_scope() {
 
 #[test]
 fn function_scope_does_not_leak() {
-    let axe = Axe::new();
+    let mut axe = Axe::new();
 
     // Variable declared inside function is not visible outside
     let program = Program {

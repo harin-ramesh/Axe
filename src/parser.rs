@@ -67,6 +67,10 @@ impl<'src> Parser<'src> {
     //  | LetStatement
     //  | IfStatement
     //  | ForStatement
+    //  | WhileStatement
+    //  | FunctionDeclaration
+    //  | ClassDeclaration
+    //  | ReturnStatement
     fn parse_statement(&mut self) -> Result<Stmt, &'static str> {
         let expr = match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
@@ -76,11 +80,39 @@ impl<'src> Parser<'src> {
             Some(TokenKind::For) => self.parse_for_statement()?,
             Some(TokenKind::Fn) => self.parse_function_declaration()?,
             Some(TokenKind::Class) => self.parse_class_declaration()?,
+            Some(TokenKind::Return) => self.parse_return_statement()?,
+            Some(TokenKind::Break) => {
+                self.eat(TokenKind::Break)?;
+                self.eat(TokenKind::Delimeter)?;
+                Stmt::Break
+            }
+            Some(TokenKind::Continue) => {
+                self.eat(TokenKind::Continue)?;
+                self.eat(TokenKind::Delimeter)?;
+                Stmt::Continue
+            }
             _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
     }
 
+    // ReturnStatement
+    //  : 'return' ';'
+    //  | 'return' Expression ';'
+    fn parse_return_statement(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::Return)?;
+        // Handle bare `return;` with no expression
+        let return_expr = if self.lookahead.map(|t| t.kind) == Some(TokenKind::Delimeter) {
+            Expr::Literal(Literal::Null)
+        } else {
+            self.parse_logical_or_expression()?
+        };
+        self.eat(TokenKind::Delimeter)?;
+        Ok(Stmt::Return(Box::new(return_expr)))
+    }
+
+    // ClassDeclaration
+    //  : 'class' Identifier (':' Identifier)? '{' Statements '}'
     fn parse_class_declaration(&mut self) -> Result<Stmt, &'static str> {
         self.eat(TokenKind::Class)?;
         let name_token = self.eat(TokenKind::Identifier)?;
@@ -550,7 +582,7 @@ impl<'src> Parser<'src> {
             Some(TokenKind::Identifier) => {
                 let expr = self.parse_identifier()?;
                 self.parse_static_access(expr)?
-            },
+            }
             Some(TokenKind::LBracket) => self.parse_list_literal()?,
             Some(TokenKind::LParen) => {
                 self.eat(TokenKind::LParen)?;
@@ -603,7 +635,7 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_static_access(&mut self, mut expr: Expr) -> Result<Expr, &'static str> {
-        if self.lookahead.map(|t| t.kind) == Some(TokenKind::StaticAccess) {            
+        if self.lookahead.map(|t| t.kind) == Some(TokenKind::StaticAccess) {
             self.eat(TokenKind::StaticAccess)?;
             let property_token = self.eat(TokenKind::Identifier)?;
             let property_name = property_token.lexeme.to_string();
