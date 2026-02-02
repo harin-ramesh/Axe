@@ -1021,6 +1021,230 @@ fn parse_function_call_multiline_args() {
 }
 
 // =============================================================================
+// Return Statement Tests
+// =============================================================================
+
+#[test]
+fn parse_return_literal() {
+    let mut parser = Parser::new("fn f() { return 42; }");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_return_expression() {
+    let mut parser = Parser::new("fn f(x) { return x + 1; }");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_return_in_if() {
+    let code = r#"
+        fn abs(x) {
+            if (x < 0) {
+                return -x;
+            } else {
+                return x;
+            }
+        }
+    "#;
+    let mut parser = Parser::new(code);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_return_string() {
+    let mut parser = Parser::new(r#"fn f() { return "hello"; }"#);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_return_null() {
+    let mut parser = Parser::new("fn f() { return null; }");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_return_boolean() {
+    let mut parser = Parser::new("fn f() { return true; }");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_return_function_call() {
+    let mut parser = Parser::new("fn f(x) { return g(x); }");
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn eval_return_simple() {
+    let code = r#"
+        fn five() { return 5; }
+        five();
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+    let mut axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(5))));
+}
+
+#[test]
+fn eval_return_early() {
+    let code = r#"
+        fn first() {
+            return 1;
+            return 2;
+        }
+        first();
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+    let mut axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(1))));
+}
+
+// =============================================================================
+// Break Statement Tests
+// =============================================================================
+
+#[test]
+fn parse_break_in_while() {
+    let code = r#"
+        let i = 0;
+        while (true) {
+            if (i >= 5) { break; }
+            i = i + 1;
+        }
+    "#;
+    let mut parser = Parser::new(code);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_break_in_for() {
+    let code = r#"
+        for i in range(100) {
+            if (i > 10) { break; }
+        }
+    "#;
+    let mut parser = Parser::new(code);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn eval_break_while() {
+    let code = r#"
+        let x = 0;
+        while (true) {
+            x = x + 1;
+            if (x == 3) { break; }
+        }
+        x;
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+    let mut axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(3))));
+}
+
+#[test]
+fn eval_break_for() {
+    let code = r#"
+        let sum = 0;
+        for i in range(100) {
+            if (i >= 5) { break; }
+            sum = sum + i;
+        }
+        sum;
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+    let mut axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    // 0+1+2+3+4 = 10
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(10))));
+}
+
+// =============================================================================
+// Continue Statement Tests
+// =============================================================================
+
+#[test]
+fn parse_continue_in_while() {
+    let code = r#"
+        let i = 0;
+        while (i < 10) {
+            i = i + 1;
+            if (i % 2 == 0) { continue; }
+        }
+    "#;
+    let mut parser = Parser::new(code);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parse_continue_in_for() {
+    let code = r#"
+        for i in range(10) {
+            if (i % 2 == 0) { continue; }
+        }
+    "#;
+    let mut parser = Parser::new(code);
+    let result = parser.parse();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn eval_continue_for() {
+    let code = r#"
+        let sum = 0;
+        for i in range(1, 6) {
+            if (i == 3) { continue; }
+            sum = sum + i;
+        }
+        sum;
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+    let mut axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    // 1+2+4+5 = 12
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(12))));
+}
+
+#[test]
+fn eval_continue_while() {
+    let code = r#"
+        let sum = 0;
+        let i = 0;
+        while (i < 5) {
+            i = i + 1;
+            if (i == 3) { continue; }
+            sum = sum + i;
+        }
+        sum;
+    "#;
+    let mut parser = Parser::new(code);
+    let program = parser.parse().unwrap();
+    let mut axe = Axe::new();
+    let result = axe.run(program).unwrap();
+    // 1+2+4+5 = 12
+    assert!(matches!(result, axe::Value::Literal(axe::Literal::Int(12))));
+}
+
+// =============================================================================
 // Method Call Tests
 // =============================================================================
 

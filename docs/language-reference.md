@@ -226,6 +226,60 @@ for i in range(3) {
 }
 ```
 
+### Break
+
+The `break` statement exits the innermost enclosing `while` or `for` loop immediately:
+
+```javascript
+// Find first multiple of 7 greater than 50
+let n = 1;
+while (true) {
+    if (n * 7 > 50) {
+        break;
+    }
+    n = n + 1;
+}
+// n is 8 (8 * 7 = 56)
+
+// Break in a for loop
+let result = 0;
+for i in range(100) {
+    if (i > 10) {
+        break;
+    }
+    result = result + i;
+}
+// result is 55 (0+1+2+...+10)
+```
+
+### Continue
+
+The `continue` statement skips the rest of the current iteration and moves to the next one:
+
+```javascript
+// Sum only odd numbers from 1 to 10
+let sum = 0;
+for i in range(1, 11) {
+    if (i % 2 == 0) {
+        continue;  // skip even numbers
+    }
+    sum = sum + i;
+}
+// sum is 25 (1+3+5+7+9)
+
+// Continue in a while loop
+let i = 0;
+let count = 0;
+while (i < 10) {
+    i = i + 1;
+    if (i % 3 == 0) {
+        continue;  // skip multiples of 3
+    }
+    count = count + 1;
+}
+// count is 7
+```
+
 ## Functions
 
 ### Function Definition
@@ -235,7 +289,7 @@ Define functions using the `fn` keyword:
 ```javascript
 fn functionName(param1, param2) {
     // function body
-    // last expression is the return value
+    return result;
 }
 ```
 
@@ -247,22 +301,50 @@ fn greet() {
     print("Hello!");
 }
 
-// Single parameter
+// Single parameter with return
 fn square(x) {
-    x * x;
+    return x * x;
 }
 
 // Multiple parameters
 fn add(a, b) {
-    a + b;
+    return a + b;
 }
 
 // With local variables
 fn calculateArea(width, height) {
     let area = width * height;
-    area;
+    return area;
 }
 ```
+
+### Return Statement
+
+Use `return` to explicitly return a value from a function:
+
+```javascript
+fn abs(x) {
+    if (x < 0) {
+        return -x;
+    } else {
+        return x;
+    }
+}
+
+// Early return
+fn findFirst(list, target) {
+    let i = 0;
+    while (i < list.len()) {
+        if (list.get(i) == target) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+```
+
+If a function completes without hitting a `return` statement, it returns `null`.
 
 ### Function Calls
 
@@ -293,17 +375,17 @@ Functions can call themselves:
 ```javascript
 fn factorial(n) {
     if (n <= 1) {
-        1;
+        return 1;
     } else {
-        n * factorial(n - 1);
+        return n * factorial(n - 1);
     }
 }
 
 fn fibonacci(n) {
     if (n <= 1) {
-        n;
+        return n;
     } else {
-        fibonacci(n - 1) + fibonacci(n - 2);
+        return fibonacci(n - 1) + fibonacci(n - 2);
     }
 }
 

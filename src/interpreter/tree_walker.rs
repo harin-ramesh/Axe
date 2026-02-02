@@ -237,14 +237,12 @@ impl TreeWalker {
             }
 
             match body.as_ref() {
-                Stmt::Block(stmts) => {
-                    match self.eval_block(stmts.clone(), env.clone()) {
-                        Ok(_) => (),
-                        Err(EvalSignal::Break) => break,
-                        Err(EvalSignal::Continue) => continue,
-                        Err(e) => return Err(e),
-                    }
-                }
+                Stmt::Block(stmts) => match self.eval_block(stmts.clone(), env.clone()) {
+                    Ok(_) => (),
+                    Err(EvalSignal::Break) => break,
+                    Err(EvalSignal::Continue) => continue,
+                    Err(e) => return Err(e),
+                },
                 _ => return Err("Invalid while body".into()),
             };
         }
@@ -282,14 +280,31 @@ impl TreeWalker {
         body: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        // For is syntactic sugar for while - transform then evaluate in a child scope
-        // so that internal loop variables (__iter_N, __idx_N, __len_N) and the
-        // loop variable don't leak into the outer scope.
-        let transformed = self
-            .transformer
-            .transform_stmt(Stmt::For(var, iterable, body));
-        let for_scope = Environment::extend(env);
-        self.eval_stmt(transformed, Some(for_scope))
+        // Evaluate the iterable expression to get the list
+        let for_scope = Environment::extend(env.clone());
+        let iter_value = self.eval_expr(iterable, Some(for_scope.clone()))?;
+
+        let items = match iter_value {
+            Value::List(items) => items,
+            _ => return Err("for-in requires a list".into()),
+        };
+
+        // Iterate over each item, executing the body in a child scope
+        for item in items {
+            for_scope.borrow_mut().set(var.clone(), item);
+
+            match body.as_ref() {
+                Stmt::Block(stmts) => match self.eval_block(stmts.clone(), for_scope.clone()) {
+                    Ok(_) => (),
+                    Err(EvalSignal::Break) => break,
+                    Err(EvalSignal::Continue) => continue,
+                    Err(e) => return Err(e),
+                },
+                _ => return Err("Invalid for body".into()),
+            };
+        }
+
+        Ok(Value::Literal(Literal::Null))
     }
 
     fn eval_class(

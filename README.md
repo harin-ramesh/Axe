@@ -21,8 +21,9 @@ cargo run --release
 - **Data types**: integers (i64), floats (f64), strings, booleans, null, lists
 - **Variables** with block scoping and shadowing
 - **Control flow**: if/else statements, while loops, for loops
-- **Functions** with recursion and closures
+- **Functions** with `return`, recursion, and closures
 - **Classes** with inheritance, instance methods (`.`), and static access (`::`)
+- **Control flow**: `break` and `continue` in loops, `return` in functions
 - **Built-in functions**: `print`, `type`, `range`
 - **Methods** on strings and lists (`.len()`, `.concat()`, `.push()`, `.get()`)
 - **Operators**: arithmetic, comparison, logical, and bitwise
@@ -47,12 +48,12 @@ let a = 1, b = 2, c = 3;
 
 ### Functions
 ```javascript
-// Define a function
+// Define a function with explicit return
 fn factorial(n) {
     if (n <= 1) {
-        1;
+        return 1;
     } else {
-        n * factorial(n - 1);
+        return n * factorial(n - 1);
     }
 }
 
@@ -64,7 +65,7 @@ fn sumOfSquares(limit) {
     for i in range(1, limit + 1) {
         total = total + i * i;
     }
-    total;
+    return total;
 }
 
 print(sumOfSquares(5));  // 55
@@ -79,20 +80,22 @@ if (x > 0) {
     print("non-positive");
 }
 
-// While loop
+// While loop with break
 let i = 0;
-while (i < 5) {
+while (true) {
+    if (i >= 5) {
+        break;
+    }
     print(i);
     i = i + 1;
 }
 
-// For loop
-for i in range(5) {
-    print(i);  // 0, 1, 2, 3, 4
-}
-
-for i in range(1, 6) {
-    print(i);  // 1, 2, 3, 4, 5
+// For loop with continue
+for i in range(10) {
+    if (i % 2 == 0) {
+        continue;  // skip even numbers
+    }
+    print(i);  // 1, 3, 5, 7, 9
 }
 ```
 
@@ -275,12 +278,12 @@ axe/
 
 ## Roadmap
 
-- [ ] Return statement
-- [ ] Break/continue for loops
+- [x] Return statement
+- [x] Break/continue for loops
 - [ ] Better error messages with line numbers
 - [ ] Standard library with common utilities
 - [ ] Module system with imports
-- [ ] Array and map literals
+- [ ] Map literals
 - [ ] Lambda expressions
 - [ ] Pattern matching
 - [ ] Garbage collection
