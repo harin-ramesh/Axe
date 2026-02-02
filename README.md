@@ -15,6 +15,52 @@ cargo run --release examples/hello.ax
 cargo run --release
 ```
 
+## Local Setup
+
+### Prerequisites
+
+- **Rust** (1.85+ recommended) - Install via [rustup](https://rustup.rs/):
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+
+### Installation
+
+```bash
+# Clone the repository
+git clone git@github.com:harin-ramesh/Axe.git axe
+cd axe
+
+# Build the project
+cargo build --release
+```
+
+### Usage
+
+```bash
+# Run a script file
+cargo run --release examples/hello.ax
+
+# Or use the compiled binary directly
+./target/release/axe examples/hello.ax
+
+# Start the interactive REPL
+cargo run --release
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run interpreter tests only
+cargo test --test ast
+
+# Run parser tests only
+cargo test --test parser
+```
+
 ## Features
 
 - **C-like syntax** with semicolons and braces
