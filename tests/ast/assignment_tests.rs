@@ -6,7 +6,11 @@ fn assign_to_existing_global_variable() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(10))),
+                None,
+            )]),
             Stmt::Assign("x".into(), Expr::Literal(Literal::Int(20))),
         ],
     };
@@ -53,7 +57,11 @@ fn assign_using_expression() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(5))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(5))),
+                None,
+            )]),
             Stmt::Assign(
                 "x".into(),
                 Expr::Binary(
@@ -75,7 +83,11 @@ fn let_in_block_updates_variable() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(10))),
+                None,
+            )]),
             Stmt::Block(vec![
                 Stmt::Assign("x".into(), Expr::Literal(Literal::Int(100))),
                 Stmt::Expr(Expr::Var("x".into())),
@@ -93,7 +105,11 @@ fn let_in_nested_block_updates() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(10))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(10))),
+                None,
+            )]),
             Stmt::Block(vec![Stmt::Assign(
                 "x".into(),
                 Expr::Literal(Literal::Int(20)),
@@ -112,7 +128,11 @@ fn let_in_same_scope_updates() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(1))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(1))),
+                None,
+            )]),
             Stmt::Assign("x".into(), Expr::Literal(Literal::Int(100))),
         ],
     };
@@ -127,7 +147,11 @@ fn let_updates_through_blocks() {
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(1))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(1))),
+                None,
+            )]),
             Stmt::Block(vec![
                 Stmt::Assign("x".into(), Expr::Literal(Literal::Int(10))),
                 Stmt::Block(vec![Stmt::Assign(

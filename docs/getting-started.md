@@ -67,22 +67,22 @@ for n in range(1, 11) {
 Create `functions.ax`:
 
 ```javascript
-// Define a function
+// Define a function with return
 fn square(x) {
-    x * x;
+    return x * x;
 }
 
 // Function with multiple parameters
 fn add(a, b) {
-    a + b;
+    return a + b;
 }
 
-// Recursive function
+// Recursive function with return
 fn factorial(n) {
     if (n <= 1) {
-        1;
+        return 1;
     } else {
-        n * factorial(n - 1);
+        return n * factorial(n - 1);
     }
 }
 
@@ -120,6 +120,9 @@ cargo run --release examples/fibonacci.ax
 | While | `while (cond) { }` |
 | For | `for i in range(10) { }` |
 | Function | `fn name(params) { }` |
+| Return | `return expr;` |
+| Break | `break;` |
+| Continue | `continue;` |
 | Call | `name(args);` |
 | Class | `class Name { }` |
 | Inheritance | `class Child : Parent { }` |

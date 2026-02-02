@@ -7,8 +7,16 @@ fn valid_variable_names() {
     // Valid names starting with letter
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Int(1))), None)]),
-            Stmt::Let(vec![("myVar".into(), Some(Expr::Literal(Literal::Int(2))), None)]),
+            Stmt::Let(vec![(
+                "x".into(),
+                Some(Expr::Literal(Literal::Int(1))),
+                None,
+            )]),
+            Stmt::Let(vec![(
+                "myVar".into(),
+                Some(Expr::Literal(Literal::Int(2))),
+                None,
+            )]),
             Stmt::Let(vec![(
                 "var123".into(),
                 Some(Expr::Literal(Literal::Int(3))),
@@ -20,8 +28,16 @@ fn valid_variable_names() {
                 Some(Expr::Literal(Literal::Int(4))),
                 None,
             )]),
-            Stmt::Let(vec![("_".into(), Some(Expr::Literal(Literal::Int(5))), None)]),
-            Stmt::Let(vec![("_123".into(), Some(Expr::Literal(Literal::Int(6))), None)]),
+            Stmt::Let(vec![(
+                "_".into(),
+                Some(Expr::Literal(Literal::Int(5))),
+                None,
+            )]),
+            Stmt::Let(vec![(
+                "_123".into(),
+                Some(Expr::Literal(Literal::Int(6))),
+                None,
+            )]),
             // Valid names with underscores
             Stmt::Let(vec![(
                 "my_var".into(),

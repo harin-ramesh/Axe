@@ -154,29 +154,37 @@ fn greet() {
     print("Hello!");
 }
 
-// Function with one parameter
+// Function with return
 fn square(x) {
-    x * x;
+    return x * x;
 }
 
 // Function with multiple parameters
 fn add(a, b) {
-    a + b;
+    return a + b;
 }
 
 // Function with local variables
 fn calculateArea(width, height) {
     let area = width * height;
-    area;
+    return area;
 }
 
-// Recursive function (fibonacci)
+// Recursive function (fibonacci) with return
 fn fib(n) {
     if (n <= 1) {
-        n;
+        return n;
     } else {
-        fib(n - 1) + fib(n - 2);
+        return fib(n - 1) + fib(n - 2);
     }
+}
+
+// Early return
+fn abs(x) {
+    if (x < 0) {
+        return -x;
+    }
+    return x;
 }
 
 // Calling defined functions
@@ -184,6 +192,7 @@ greet();
 let result = square(5);
 let sum = add(10, 20);
 let fibValue = fib(10);
+let positive = abs(-42);  // 42
 ```
 
 ## Function Calls
@@ -302,6 +311,85 @@ for i in range(1, 6) {
 // factorial is now 120
 ```
 
+## Break and Continue
+
+```javascript
+// Break: exit a loop early
+let n = 1;
+while (true) {
+    if (n * 7 > 50) {
+        break;
+    }
+    n = n + 1;
+}
+// n is 8 (8 * 7 = 56)
+
+// Break in a for loop
+let result = 0;
+for i in range(100) {
+    if (i > 10) {
+        break;
+    }
+    result = result + i;
+}
+// result is 55
+
+// Continue: skip to the next iteration
+let sum = 0;
+for i in range(1, 11) {
+    if (i % 2 == 0) {
+        continue;  // skip even numbers
+    }
+    sum = sum + i;
+}
+// sum is 25 (1+3+5+7+9)
+
+// Continue in a while loop
+let i = 0;
+let count = 0;
+while (i < 10) {
+    i = i + 1;
+    if (i % 3 == 0) {
+        continue;
+    }
+    count = count + 1;
+}
+// count is 7
+```
+
+## Return Statement
+
+```javascript
+// Early return from a function
+fn abs(x) {
+    if (x < 0) {
+        return -x;
+    }
+    return x;
+}
+
+// Return in a loop inside a function
+fn findFirst(list, target) {
+    let i = 0;
+    while (i < list.len()) {
+        if (list.get(i) == target) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+let idx = findFirst([10, 20, 30], 20);  // 1
+
+// Functions without return yield null
+fn doNothing() {
+    let x = 1;
+}
+
+let result = doNothing();  // null
+```
+
 ## Combined Examples
 
 ```javascript
@@ -316,24 +404,22 @@ fn fibonacci(n) {
         b = temp;
         i = i + 1;
     }
-    a;
+    return a;
 }
 
-// Prime check
+// Prime check with early return
 fn isPrime(n) {
     if (n < 2) {
-        false;
-    } else {
-        let i = 2;
-        let result = true;
-        while (i * i <= n) {
-            if (n % i == 0) {
-                result = false;
-            }
-            i = i + 1;
-        }
-        result;
+        return false;
     }
+    let i = 2;
+    while (i * i <= n) {
+        if (n % i == 0) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
 }
 
 // Find all primes up to n
@@ -352,7 +438,21 @@ fn gcd(a, b) {
         b = a % b;
         a = temp;
     }
-    a;
+    return a;
+}
+
+// Sum with break
+fn sumUntil(limit) {
+    let sum = 0;
+    let i = 1;
+    while (true) {
+        if (sum + i > limit) {
+            break;
+        }
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
 }
 
 // Using the functions
@@ -360,6 +460,7 @@ let fib10 = fibonacci(10);
 let prime = isPrime(17);
 printPrimes(20);
 let divisor = gcd(48, 18);  // 6
+let bounded = sumUntil(20);  // 15 (1+2+3+4+5)
 ```
 
 ## Classes

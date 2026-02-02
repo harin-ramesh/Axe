@@ -15,7 +15,8 @@ A lightweight programming language interpreter written in Rust, featuring C-like
 - Variables with `let` and assignment with `=`
 - Control flow with `if`/`else`
 - Loops: `while` and `for` with `range()`
-- Functions with `fn` keyword and recursion
+- Functions with `fn` keyword, `return`, recursion, and closures
+- Control flow: `break` and `continue` in loops, `return` in functions
 - Classes with inheritance (`:`) and constructors (`init`)
 - Instance access with `.` for properties and methods
 - Static access with `::` for class-level properties and methods
@@ -43,7 +44,7 @@ fn factorial(n) {
         result = result * i;
         i = i + 1;
     }
-    result;
+    return result;
 }
 
 // Using loops and functions
@@ -57,7 +58,7 @@ let fact5 = factorial(5);  // 120
 
 ## Roadmap
 
-- Return statement
-- Break/continue for loops
+- ~~Return statement~~ (done)
+- ~~Break/continue for loops~~ (done)
 - Module system with imports
 - Pattern matching
