@@ -4,14 +4,31 @@ A lightweight programming language interpreter written in Rust. Axe features a c
 
 ## Quick Start
 
+Create a file called `hello.ax`:
+
+```javascript
+print("Hello, World!");
+```
+
+Then build and run it:
+
 ```bash
 # Build the interpreter
 cargo build --release
 
-# Run a script
-cargo run --release examples/hello.ax
+# Run your program
+cargo run --release hello.ax
+```
 
-# Start the REPL (interactive mode)
+You should see:
+
+```
+Hello, World!
+```
+
+To start the interactive REPL instead:
+
+```bash
 cargo run --release
 ```
 
@@ -19,10 +36,7 @@ cargo run --release
 
 ### Prerequisites
 
-- **Rust** (1.85+ recommended) - Install via [rustup](https://rustup.rs/):
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
+**Rust** (1.85+ recommended) - Install via [rustup](https://rustup.rs/):
 
 ### Installation
 
