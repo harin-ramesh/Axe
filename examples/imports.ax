@@ -1,0 +1,19 @@
+// imports.ax - Demonstrates importing from another module
+//
+// Run from the examples directory:
+//   cd examples && cargo run --release -- imports.ax
+
+from math import add, multiply, square, factorial, PI;
+
+// Use imported functions
+print(add(10, 20));       // 30
+print(multiply(4, 5));    // 20
+print(square(7));         // 49
+print(factorial(5));      // 120
+
+// Use imported variable
+print(PI);                // 3
+
+// Combine imported functions in expressions
+let result = add(multiply(3, 4), square(2));
+print(result);            // 16  (12 + 4)

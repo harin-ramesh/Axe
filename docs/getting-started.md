@@ -105,6 +105,8 @@ The `examples/` directory contains sample programs:
 | `classes.ax` | Classes, methods, and `::` static access |
 | `lists.ax` | List creation and methods |
 | `scoping_explained.ax` | Block scoping guide |
+| `math.ax` | Utility module for import examples |
+| `imports.ax` | Importing from another module |
 
 ```bash
 cargo run --release examples/fibonacci.ax
@@ -129,6 +131,7 @@ cargo run --release examples/fibonacci.ax
 | Instance | `let obj = new Name(args);` |
 | Instance access | `obj.property`, `obj.method()` |
 | Static access | `Class::property`, `Class::method()` |
+| Import | `from module import name;` |
 
 ## Next Steps
 

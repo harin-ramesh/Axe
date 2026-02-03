@@ -425,6 +425,69 @@ let x = 10;
 // x is still 10
 ```
 
+## Imports
+
+### Importing from a Module
+
+Use `from ... import ...` to import functions, classes, or variables from another Axe file:
+
+```javascript
+from math import add, subtract;
+from utils import helper;
+```
+
+### Syntax
+
+```
+from module import name1, name2, ...;
+```
+
+- `module` is an identifier — the interpreter resolves it to `module.ax` in the current working directory
+- Each name in the import list must be a top-level binding (variable, function, or class) defined in the module
+- Imported names are added to the global scope of the importing program
+
+### How It Works
+
+When an import statement is executed:
+
+1. The module file is read and parsed
+2. The module is evaluated in its own isolated environment
+3. The requested names are looked up in the module's environment
+4. Those bindings are copied into the importing program's global scope
+
+### Example
+
+Given a module file `math.ax`:
+
+```javascript
+fn add(a, b) {
+    return a + b;
+}
+
+fn square(x) {
+    return x * x;
+}
+
+let PI = 3;
+```
+
+You can import from it:
+
+```javascript
+from math import add, PI;
+
+print(add(10, 20));  // 30
+print(PI);           // 3
+```
+
+Only the names listed in the import statement are brought into scope. In this example, `square` is not available in the importing file.
+
+### Notes
+
+- Module paths are relative to the current working directory
+- Each import evaluates the module independently; there is no shared module cache
+- Circular imports are not supported and will cause a stack overflow
+
 ## Classes
 
 ### Class Definition

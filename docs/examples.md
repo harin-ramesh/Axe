@@ -591,6 +591,63 @@ print(greeting.len());                    // 5
 print(greeting.concat(", World!"));       // "Hello, World!"
 ```
 
+## Imports
+
+```javascript
+// -- math.ax (the module) --
+
+fn add(a, b) {
+    return a + b;
+}
+
+fn multiply(a, b) {
+    return a * b;
+}
+
+let PI = 3;
+```
+
+```javascript
+// -- main.ax (imports from math.ax) --
+
+from math import add, multiply, PI;
+
+// Use imported functions
+let sum = add(10, 20);
+print(sum);  // 30
+
+let product = multiply(4, 5);
+print(product);  // 20
+
+// Use imported variable
+print(PI);  // 3
+
+// Combine imported functions
+let result = add(multiply(3, 4), 5);
+print(result);  // 17
+```
+
+```javascript
+// Importing a class from another module
+
+// -- shapes.ax --
+class Circle {
+    fn init(self, r) {
+        self.radius = r;
+    }
+
+    fn area(self) {
+        return self.radius * self.radius * 3;
+    }
+}
+
+// -- app.ax --
+from shapes import Circle;
+
+let c = new Circle(5);
+print(c.area());  // 75
+```
+
 ## Running Examples
 
 All examples are in the `examples/` folder:
@@ -601,4 +658,5 @@ cargo run --release examples/fibonacci.ax
 cargo run --release examples/builtins.ax
 cargo run --release examples/classes.ax
 cargo run --release examples/scoping_explained.ax
+cargo run --release examples/imports.ax
 ```
