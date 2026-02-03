@@ -71,6 +71,9 @@ impl<'src> Parser<'src> {
     //  | FunctionDeclaration
     //  | ClassDeclaration
     //  | ReturnStatement
+    //  | Break
+    //  | Continue
+    //  | From
     fn parse_statement(&mut self) -> Result<Stmt, &'static str> {
         let expr = match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
@@ -91,9 +94,30 @@ impl<'src> Parser<'src> {
                 self.eat(TokenKind::Delimeter)?;
                 Stmt::Continue
             }
+            Some(TokenKind::From) => self.parse_from_statement()?,
             _ => self.parse_expression_statemnt()?,
         };
         Ok(expr)
+    }
+
+    fn parse_from_statement(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::From)?;
+        let module_token = self.eat(TokenKind::Identifier)?;
+        let module_name = module_token.lexeme.to_string();
+        self.eat(TokenKind::Import)?;
+        let mut imports = Vec::new();
+        loop {
+            let import_token = self.eat(TokenKind::Identifier)?;
+            imports.push(import_token.lexeme.to_string());
+
+            if self.lookahead.map(|t| t.kind) == Some(TokenKind::Comma) {
+                self.eat(TokenKind::Comma)?;
+            } else {
+                break;
+            }
+        }
+        self.eat(TokenKind::Delimeter)?;
+        Ok(Stmt::Import(module_name, imports))
     }
 
     // ReturnStatement

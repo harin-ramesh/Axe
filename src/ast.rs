@@ -105,4 +105,6 @@ pub enum Stmt {
     Break,
     /// A continue statement: continue;
     Continue,
+    /// An import statement: import "module" [as alias1, alias2, ...];
+    Import(String, Vec<String>),
 }

@@ -57,6 +57,9 @@ pub enum TokenKind {
     // Unary operators
     Bang,  // !
     Tilde, // ~
+
+    From,
+    Import,
 }
 
 impl fmt::Display for TokenKind {
@@ -97,6 +100,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Return => "return",
             TokenKind::Break => "break",
             TokenKind::Continue => "continue",
+            TokenKind::From => "from",
+            TokenKind::Import => "import",
 
             // Comparisons
             TokenKind::Eq => "==",
@@ -183,6 +188,8 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Return, Regex::new(r"^return\b").unwrap()),
         (TokenKind::Break, Regex::new(r"^break\b").unwrap()),
         (TokenKind::Continue, Regex::new(r"^continue\b").unwrap()),
+        (TokenKind::From, Regex::new(r"^from\b").unwrap()),
+        (TokenKind::Import, Regex::new(r"^import\b").unwrap()),
         (TokenKind::Identifier, Regex::new(r"^[a-zA-Z_]\w*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
         (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),

@@ -1,0 +1,25 @@
+// math.ax - A utility module with math functions and constants
+//
+// Import from this module with:
+//   from math import add, multiply, square, factorial, PI;
+
+fn add(a, b) {
+    return a + b;
+}
+
+fn multiply(a, b) {
+    return a * b;
+}
+
+fn square(x) {
+    return x * x;
+}
+
+fn factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+let PI = 3;

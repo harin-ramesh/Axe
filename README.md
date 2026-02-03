@@ -84,6 +84,7 @@ cargo test --test parser
 - **Functions** with `return`, recursion, and closures
 - **Classes** with inheritance, instance methods (`.`), and static access (`::`)
 - **Control flow**: `break` and `continue` in loops, `return` in functions
+- **Imports**: `from module import name1, name2;`
 - **Built-in functions**: `print`, `type`, `range`
 - **Methods** on strings and lists (`.len()`, `.concat()`, `.push()`, `.get()`)
 - **Operators**: arithmetic, comparison, logical, and bitwise
@@ -230,6 +231,19 @@ print(greeting.len());                    // 5
 print(greeting.concat(", World!"));       // "Hello, World!"
 ```
 
+### Imports
+```javascript
+// math.ax
+fn add(a, b) { return a + b; }
+let PI = 3;
+```
+```javascript
+// main.ax
+from math import add, PI;
+print(add(10, 20));  // 30
+print(PI);           // 3
+```
+
 ## Documentation
 
 See the [docs](docs/index.md) folder for full documentation:
@@ -252,6 +266,8 @@ The `examples/` directory contains several example programs:
 | `classes.ax` | Object-oriented programming examples |
 | `builtins.ax` | Built-in operators and expressions |
 | `scoping_explained.ax` | Variable scoping demonstration |
+| `math.ax` | Utility module for import examples |
+| `imports.ax` | Importing from another module |
 
 Run any example with:
 ```bash
@@ -342,7 +358,7 @@ axe/
 - [x] Break/continue for loops
 - [ ] Better error messages with line numbers
 - [ ] Standard library with common utilities
-- [ ] Module system with imports
+- [x] Module system with imports
 - [ ] Map literals
 - [ ] Lambda expressions
 - [ ] Pattern matching

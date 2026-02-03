@@ -5,8 +5,6 @@
 
 use std::fmt;
 
-use regex::Regex;
-
 use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
 use crate::transformer::Transformer;
 
@@ -60,8 +58,12 @@ impl PartialEq<&str> for EvalSignal {
 }
 
 fn is_valid_var_name(name: &str) -> bool {
-    let re = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap();
-    re.is_match(name)
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Helper: run `eval_block` on a function body and catch `EvalSignal::Return`.
@@ -151,7 +153,39 @@ impl TreeWalker {
             }
             Stmt::Break => Err(EvalSignal::Break),
             Stmt::Continue => Err(EvalSignal::Continue),
+            Stmt::Import(module, imports) => self.eval_imports(module, imports, env),
         }
+    }
+
+    fn eval_imports(
+        &mut self,
+        module: String,
+        imports: Vec<String>,
+        _env: EnvRef,
+    ) -> Result<Value, EvalSignal> {
+        let path = format!("{}.ax", module);
+        let source = std::fs::read_to_string(&path)
+            .map_err(|_| EvalSignal::Error(format!("failed to open module file: {}", path)))?;
+
+        let mut parser = crate::Parser::new(&source);
+        let program = parser
+            .parse()
+            .map_err(|e| EvalSignal::Error(format!("parse error in module '{}': {}", module, e)))?;
+
+        let mut module_interpreter = TreeWalker::new();
+        module_interpreter.run(program)?;
+
+        for import in imports {
+            if let Some(value) = module_interpreter.globals.borrow().get(&import) {
+                self.globals.borrow_mut().set(import.clone(), value.clone());
+            } else {
+                return Err(EvalSignal::Error(format!(
+                    "import '{}' not found in module",
+                    import
+                )));
+            }
+        }
+        Ok(Value::Literal(Literal::Null))
     }
 
     fn eval_let(
@@ -161,9 +195,6 @@ impl TreeWalker {
     ) -> Result<Value, EvalSignal> {
         for decl in declarations {
             let (name, expr_opt, expr_obj) = decl;
-            if !is_valid_var_name(&name) {
-                return Err("invalid variable name".into());
-            }
             let value = if let Some(expr) = expr_opt {
                 self.eval_expr(expr, Some(env.clone()))?
             } else {
