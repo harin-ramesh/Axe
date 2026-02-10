@@ -195,6 +195,9 @@ impl TreeWalker {
     ) -> Result<Value, EvalSignal> {
         for decl in declarations {
             let (name, expr_opt, expr_obj) = decl;
+            if !is_valid_var_name(&name) {
+                return Err("invalid variable name".into());
+            }
             let value = if let Some(expr) = expr_opt {
                 self.eval_expr(expr, Some(env.clone()))?
             } else {
@@ -215,6 +218,9 @@ impl TreeWalker {
     }
 
     fn eval_assign(&mut self, name: String, expr: Expr, env: EnvRef) -> Result<Value, EvalSignal> {
+        if !is_valid_var_name(&name) {
+            return Err("invalid variable name".into());
+        }
         let value = self.eval_expr(expr, Some(env.clone()))?;
         env.borrow_mut()
             .update(name.clone(), value.clone())
