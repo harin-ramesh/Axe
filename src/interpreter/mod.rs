@@ -8,6 +8,8 @@ mod builtins;
 mod environment;
 mod tree_walker;
 mod value;
+mod instructions;
+mod vm;
 
 pub use environment::{EnvRef, Environment};
 pub use tree_walker::{EvalSignal, TreeWalker};
