@@ -5,12 +5,15 @@
 //! and backup for a future bytecode VM.
 
 mod builtins;
+mod compiler;
 mod environment;
+mod instructions;
 mod tree_walker;
 mod value;
-mod instructions;
 mod vm;
 
+pub use compiler::Compiler;
 pub use environment::{EnvRef, Environment};
 pub use tree_walker::{EvalSignal, TreeWalker};
 pub use value::Value;
+pub use vm::{AxeVM, Chunk, Value as VMValue};
