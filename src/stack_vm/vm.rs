@@ -1,4 +1,4 @@
-use crate::interpreter::instructions::Instruction;
+use super::instructions::Instruction;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

@@ -1,6 +1,7 @@
 use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
-use crate::interpreter::instructions::Instruction;
-use crate::interpreter::vm::{Chunk, Value};
+
+use super::instructions::Instruction;
+use super::vm::{Chunk, Value};
 
 /// Compiles AST to bytecode
 pub struct Compiler {
@@ -115,7 +116,7 @@ impl Default for Compiler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interpreter::vm::AxeVM;
+    use crate::stack_vm::AxeVM;
 
     fn compile_and_run(expr: Expr) -> Option<Value> {
         let compiler = Compiler::new();

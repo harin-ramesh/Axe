@@ -1,17 +1,21 @@
 pub mod ast;
-pub mod interpreter;
 mod parser;
+pub mod stack_vm;
 mod tokeniser;
 pub mod transformer;
+pub mod tree_walker;
 
 // Re-export AST types
 pub use ast::{Expr, Literal, Operation, Program, Stmt};
 
-// Re-export interpreter types
-pub use interpreter::{EnvRef, Environment, EvalSignal, TreeWalker, Value};
+// Re-export tree-walker interpreter types
+pub use tree_walker::{EnvRef, Environment, EvalSignal, TreeWalker, Value};
 
 // Re-export for backwards compatibility
-pub use interpreter::TreeWalker as Axe;
+pub use tree_walker::TreeWalker as Axe;
+
+// Re-export stack VM types
+pub use stack_vm::{AxeVM, Chunk, Compiler, Value as VMValue};
 
 pub use parser::Parser;
 pub use transformer::Transformer;
