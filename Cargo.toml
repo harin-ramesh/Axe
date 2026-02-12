@@ -9,3 +9,5 @@ path = "src/lib.rs"
 
 [dependencies]
 regex = "1.11"
+rustyline = "15"
+dirs = "6"

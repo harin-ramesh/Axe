@@ -2,7 +2,7 @@
 
 use crate::ast::Literal;
 
-use super::tree_walker::EvalSignal;
+use super::interpreter::EvalSignal;
 use super::value::Value;
 
 pub fn native_print(args: &[Value]) -> Result<Value, EvalSignal> {

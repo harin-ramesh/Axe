@@ -11,7 +11,7 @@ pub enum Value {
     Function(Vec<String>, Box<Stmt>, EnvRef),
     NativeFunction(
         String,
-        fn(&[Value]) -> Result<Value, super::tree_walker::EvalSignal>,
+        fn(&[Value]) -> Result<Value, super::interpreter::EvalSignal>,
     ),
     Object(EnvRef),
 }
