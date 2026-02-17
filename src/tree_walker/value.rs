@@ -46,7 +46,6 @@ impl std::fmt::Display for Value {
             }
             Value::Function(params, _, _) => {
                 write!(f, "<function({})>", params.join(", "))
-            }
             Value::NativeFunction(name, _) => {
                 write!(f, "<native-function {}>", name)
             }
