@@ -1,8 +1,10 @@
-use axe::{Axe, Expr, Literal, Operation, Program, Stmt, Value};
+use axe::{Axe, Context};
+use axe::{Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
 fn empty_block_returns_null() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Block(vec![])],
     };
@@ -12,7 +14,8 @@ fn empty_block_returns_null() {
 
 #[test]
 fn block_returns_last_expression() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     // Block with multiple expressions
     let program = Program {
@@ -29,25 +32,26 @@ fn block_returns_last_expression() {
 
 #[test]
 fn block_with_variables() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     // Block: let x = 10, let y = 20, return x + y
     let program = Program {
         stmts: vec![Stmt::Block(vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(10))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "y".into(),
+                ctx.intern("y"),
                 Some(Expr::Literal(Literal::Int(20))),
                 None,
             )]),
             Stmt::Expr(Expr::Binary(
                 Operation::Add,
-                Box::new(Expr::Var("x".into())),
-                Box::new(Expr::Var("y".into())),
+                Box::new(Expr::Var(ctx.intern("x"))),
+                Box::new(Expr::Var(ctx.intern("y"))),
             )),
         ])],
     };

@@ -1,9 +1,11 @@
-use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
+use axe::{Axe, Context};
+use axe::{Expr, Literal, Operation, Program, Stmt};
 
 // Greater than tests
 #[test]
 fn gt_int_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
@@ -16,7 +18,8 @@ fn gt_int_true() {
 
 #[test]
 fn gt_int_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
@@ -29,7 +32,8 @@ fn gt_int_false() {
 
 #[test]
 fn gt_float_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
@@ -43,7 +47,8 @@ fn gt_float_true() {
 // Less than tests
 #[test]
 fn lt_int_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lt,
@@ -56,7 +61,8 @@ fn lt_int_true() {
 
 #[test]
 fn lt_int_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lt,
@@ -70,7 +76,8 @@ fn lt_int_false() {
 // Greater than or equal tests
 #[test]
 fn gte_int_true_greater() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gte,
@@ -83,7 +90,8 @@ fn gte_int_true_greater() {
 
 #[test]
 fn gte_int_true_equal() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gte,
@@ -96,7 +104,8 @@ fn gte_int_true_equal() {
 
 #[test]
 fn gte_int_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gte,
@@ -110,7 +119,8 @@ fn gte_int_false() {
 // Less than or equal tests
 #[test]
 fn lte_int_true_less() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lte,
@@ -123,7 +133,8 @@ fn lte_int_true_less() {
 
 #[test]
 fn lte_int_true_equal() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lte,
@@ -136,7 +147,8 @@ fn lte_int_true_equal() {
 
 #[test]
 fn lte_int_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Lte,
@@ -150,7 +162,8 @@ fn lte_int_false() {
 // Equality tests
 #[test]
 fn eq_int_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -163,7 +176,8 @@ fn eq_int_true() {
 
 #[test]
 fn eq_int_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -176,7 +190,8 @@ fn eq_int_false() {
 
 #[test]
 fn eq_float_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -189,12 +204,13 @@ fn eq_float_true() {
 
 #[test]
 fn eq_string_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("hello")))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("hello")))),
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -202,12 +218,13 @@ fn eq_string_true() {
 
 #[test]
 fn eq_string_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            Box::new(Expr::Literal(Literal::Str("world".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("hello")))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("world")))),
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -215,7 +232,8 @@ fn eq_string_false() {
 
 #[test]
 fn eq_bool_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -228,7 +246,8 @@ fn eq_bool_true() {
 
 #[test]
 fn eq_null_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
@@ -242,7 +261,8 @@ fn eq_null_true() {
 // Not equal tests
 #[test]
 fn neq_int_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
@@ -255,7 +275,8 @@ fn neq_int_true() {
 
 #[test]
 fn neq_int_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
@@ -269,12 +290,13 @@ fn neq_int_false() {
 // Cross-type comparisons
 #[test]
 fn eq_cross_type_false() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
             Box::new(Expr::Literal(Literal::Int(10))),
-            Box::new(Expr::Literal(Literal::Str("10".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("10")))),
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -282,12 +304,13 @@ fn eq_cross_type_false() {
 
 #[test]
 fn neq_cross_type_true() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
             Box::new(Expr::Literal(Literal::Int(10))),
-            Box::new(Expr::Literal(Literal::Str("10".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("10")))),
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -296,23 +319,24 @@ fn neq_cross_type_true() {
 // Comparison with variables
 #[test]
 fn comparison_with_variables() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".to_string(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(10))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "y".to_string(),
+                ctx.intern("y"),
                 Some(Expr::Literal(Literal::Int(5))),
                 None,
             )]),
             Stmt::Expr(Expr::Binary(
                 Operation::Gt,
-                Box::new(Expr::Var("x".to_string())),
-                Box::new(Expr::Var("y".to_string())),
+                Box::new(Expr::Var(ctx.intern("x"))),
+                Box::new(Expr::Var(ctx.intern("y"))),
             )),
         ],
     };
@@ -322,7 +346,8 @@ fn comparison_with_variables() {
 // Comparison in if expressions
 #[test]
 fn comparison_in_if_condition() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     // if (10 > 5) { "yes" } else { "no" }
     let program = Program {
         stmts: vec![Stmt::If(
@@ -332,10 +357,10 @@ fn comparison_in_if_condition() {
                 Box::new(Expr::Literal(Literal::Int(5))),
             ),
             Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
-                "yes".to_string(),
+                ctx.intern("yes"),
             )))])),
             Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
-                "no".to_string(),
+                ctx.intern("no"),
             )))])),
         )],
     };
@@ -344,7 +369,8 @@ fn comparison_in_if_condition() {
 
 #[test]
 fn comparison_false_in_if_condition() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     // if (5 > 10) { "yes" } else { "no" }
     let program = Program {
         stmts: vec![Stmt::If(
@@ -354,10 +380,10 @@ fn comparison_false_in_if_condition() {
                 Box::new(Expr::Literal(Literal::Int(10))),
             ),
             Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
-                "yes".to_string(),
+                ctx.intern("yes"),
             )))])),
             Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
-                "no".to_string(),
+                ctx.intern("no"),
             )))])),
         )],
     };
@@ -367,7 +393,8 @@ fn comparison_false_in_if_condition() {
 // Boolean values in if expressions
 #[test]
 fn bool_true_in_if_condition() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Bool(true)),
@@ -384,7 +411,8 @@ fn bool_true_in_if_condition() {
 
 #[test]
 fn bool_false_in_if_condition() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
         stmts: vec![Stmt::If(
             Expr::Literal(Literal::Bool(false)),
@@ -402,7 +430,8 @@ fn bool_false_in_if_condition() {
 // Nested comparisons
 #[test]
 fn nested_comparison_expressions() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     // (10 > 5) == (3 < 7)  -> true == true -> true
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
@@ -424,13 +453,14 @@ fn nested_comparison_expressions() {
 
 #[test]
 fn comparison_type_error() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     // Can't use > on strings
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Gt,
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            Box::new(Expr::Literal(Literal::Str("world".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("hello")))),
+            Box::new(Expr::Literal(Literal::Str(ctx.intern("world")))),
         ))],
     };
     // This should fail with type error

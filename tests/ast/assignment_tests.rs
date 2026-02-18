@@ -1,17 +1,18 @@
-use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
+use axe::{Axe, Context, Expr, Literal, Operation, Program, Stmt};
 
 #[test]
 fn assign_to_existing_global_variable() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(10))),
                 None,
             )]),
-            Stmt::Assign("x".into(), Expr::Literal(Literal::Int(20))),
+            Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(20))),
         ],
     };
 
@@ -21,11 +22,12 @@ fn assign_to_existing_global_variable() {
 
 #[test]
 fn let_creates_variable_if_not_exists() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "x".into(),
+            ctx.intern("x"),
             Some(Expr::Literal(Literal::Int(10))),
             None,
         )])],
@@ -37,11 +39,12 @@ fn let_creates_variable_if_not_exists() {
 
 #[test]
 fn assign_with_invalid_name_fails() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "123invalid".into(),
+            ctx.intern("123invalid"),
             Some(Expr::Literal(Literal::Int(10))),
             None,
         )])],
@@ -53,20 +56,21 @@ fn assign_with_invalid_name_fails() {
 
 #[test]
 fn assign_using_expression() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(5))),
                 None,
             )]),
             Stmt::Assign(
-                "x".into(),
+                ctx.intern("x"),
                 Expr::Binary(
                     Operation::Mul,
-                    Box::new(Expr::Var("x".into())),
+                    Box::new(Expr::Var(ctx.intern("x"))),
                     Box::new(Expr::Literal(Literal::Int(2))),
                 ),
             ),
@@ -79,18 +83,19 @@ fn assign_using_expression() {
 
 #[test]
 fn let_in_block_updates_variable() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(10))),
                 None,
             )]),
             Stmt::Block(vec![
-                Stmt::Assign("x".into(), Expr::Literal(Literal::Int(100))),
-                Stmt::Expr(Expr::Var("x".into())),
+                Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(100))),
+                Stmt::Expr(Expr::Var(ctx.intern("x"))),
             ]),
         ],
     };
@@ -101,20 +106,21 @@ fn let_in_block_updates_variable() {
 
 #[test]
 fn let_in_nested_block_updates() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(10))),
                 None,
             )]),
             Stmt::Block(vec![Stmt::Assign(
-                "x".into(),
+                ctx.intern("x"),
                 Expr::Literal(Literal::Int(20)),
             )]),
-            Stmt::Expr(Expr::Var("x".into())),
+            Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
 
@@ -124,16 +130,17 @@ fn let_in_nested_block_updates() {
 
 #[test]
 fn let_in_same_scope_updates() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(1))),
                 None,
             )]),
-            Stmt::Assign("x".into(), Expr::Literal(Literal::Int(100))),
+            Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(100))),
         ],
     };
 
@@ -143,19 +150,20 @@ fn let_in_same_scope_updates() {
 
 #[test]
 fn let_updates_through_blocks() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(1))),
                 None,
             )]),
             Stmt::Block(vec![
-                Stmt::Assign("x".into(), Expr::Literal(Literal::Int(10))),
+                Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(10))),
                 Stmt::Block(vec![Stmt::Assign(
-                    "x".into(),
+                    ctx.intern("x"),
                     Expr::Literal(Literal::Int(20)),
                 )]),
             ]),

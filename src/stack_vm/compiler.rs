@@ -1,17 +1,20 @@
-use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::context::Context;
 
 use super::instructions::Instruction;
 use super::vm::{Chunk, Value};
 
 /// Compiles AST to bytecode
-pub struct Compiler {
+pub struct Compiler<'ctx> {
     chunk: Chunk,
+    ctx: &'ctx Context,
 }
 
-impl Compiler {
-    pub fn new() -> Self {
+impl<'ctx> Compiler<'ctx> {
+    pub fn new(ctx: &'ctx Context) -> Self {
         Compiler {
             chunk: Chunk::new(),
+            ctx,
         }
     }
 
@@ -49,10 +52,10 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Literal(lit) => self.compile_literal(lit),
-            Expr::Binary(op, lhs, rhs) => self.compile_binary(op, lhs, rhs),
-            Expr::Unary(op, operand) => self.compile_unary(op, operand),
+        match &expr.kind {
+            ExprKind::Literal(lit) => self.compile_literal(lit),
+            ExprKind::Binary(op, lhs, rhs) => self.compile_binary(op, lhs, rhs),
+            ExprKind::Unary(op, operand) => self.compile_unary(op, operand),
             // TODO: Implement other expressions
             _ => todo!("Expression not yet implemented: {:?}", expr),
         }
@@ -65,7 +68,10 @@ impl Compiler {
             Literal::Bool(false) => self.chunk.emit(Instruction::FALSE),
             Literal::Int(n) => self.chunk.emit_constant(Value::Int(*n)),
             Literal::Float(n) => self.chunk.emit_constant(Value::Float(*n)),
-            Literal::Str(s) => self.chunk.emit_constant(Value::Str(s.clone())),
+            Literal::Str(s) => {
+                let string = self.ctx.resolve(*s);
+                self.chunk.emit_constant(Value::Str(string))
+            }
         }
     }
 
@@ -107,19 +113,14 @@ impl Compiler {
     }
 }
 
-impl Default for Compiler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::Context;
     use crate::stack_vm::AxeVM;
 
-    fn compile_and_run(expr: Expr) -> Option<Value> {
-        let compiler = Compiler::new();
+    fn compile_and_run(ctx: &Context, expr: Expr) -> Option<Value> {
+        let compiler = Compiler::new(ctx);
         let chunk = compiler.compile_expr_only(&expr);
         let mut vm = AxeVM::new(&chunk);
         vm.exec()
@@ -127,46 +128,51 @@ mod tests {
 
     #[test]
     fn test_compile_literals() {
+        let ctx = Context::new();
+
         // Null
         assert_eq!(
-            compile_and_run(Expr::Literal(Literal::Null)),
+            compile_and_run(&ctx, Expr::Literal(Literal::Null)),
             Some(Value::Null)
         );
 
         // Bool
         assert_eq!(
-            compile_and_run(Expr::Literal(Literal::Bool(true))),
+            compile_and_run(&ctx, Expr::Literal(Literal::Bool(true))),
             Some(Value::Bool(true))
         );
 
         // Int
         assert_eq!(
-            compile_and_run(Expr::Literal(Literal::Int(42))),
+            compile_and_run(&ctx, Expr::Literal(Literal::Int(42))),
             Some(Value::Int(42))
         );
 
         // Float
         assert_eq!(
-            compile_and_run(Expr::Literal(Literal::Float(3.14))),
+            compile_and_run(&ctx, Expr::Literal(Literal::Float(3.14))),
             Some(Value::Float(3.14))
         );
 
         // String
+        let hello_sym = ctx.intern("hello");
         assert_eq!(
-            compile_and_run(Expr::Literal(Literal::Str("hello".to_string()))),
+            compile_and_run(&ctx, Expr::Literal(Literal::Str(hello_sym))),
             Some(Value::Str("hello".to_string()))
         );
     }
 
     #[test]
     fn test_compile_binary_arithmetic() {
+        let ctx = Context::new();
+
         // 10 + 20
         let expr = Expr::Binary(
             Operation::Add,
             Box::new(Expr::Literal(Literal::Int(10))),
             Box::new(Expr::Literal(Literal::Int(20))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Int(30)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(30)));
 
         // 50 - 20
         let expr = Expr::Binary(
@@ -174,7 +180,7 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(50))),
             Box::new(Expr::Literal(Literal::Int(20))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Int(30)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(30)));
 
         // 6 * 7
         let expr = Expr::Binary(
@@ -182,7 +188,7 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(6))),
             Box::new(Expr::Literal(Literal::Int(7))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Int(42)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(42)));
 
         // 100 / 4
         let expr = Expr::Binary(
@@ -190,7 +196,7 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(100))),
             Box::new(Expr::Literal(Literal::Int(4))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Int(25)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(25)));
 
         // 17 % 5
         let expr = Expr::Binary(
@@ -198,18 +204,20 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(17))),
             Box::new(Expr::Literal(Literal::Int(5))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Int(2)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(2)));
     }
 
     #[test]
     fn test_compile_binary_comparison() {
+        let ctx = Context::new();
+
         // 5 > 3
         let expr = Expr::Binary(
             Operation::Gt,
             Box::new(Expr::Literal(Literal::Int(5))),
             Box::new(Expr::Literal(Literal::Int(3))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Bool(true)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Bool(true)));
 
         // 5 < 3
         let expr = Expr::Binary(
@@ -217,7 +225,7 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(5))),
             Box::new(Expr::Literal(Literal::Int(3))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Bool(false)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Bool(false)));
 
         // 5 == 5
         let expr = Expr::Binary(
@@ -225,7 +233,7 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(5))),
             Box::new(Expr::Literal(Literal::Int(5))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Bool(true)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Bool(true)));
 
         // 5 != 3
         let expr = Expr::Binary(
@@ -233,22 +241,26 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(5))),
             Box::new(Expr::Literal(Literal::Int(3))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Bool(true)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Bool(true)));
     }
 
     #[test]
     fn test_compile_unary() {
+        let ctx = Context::new();
+
         // -42
         let expr = Expr::Unary(UnaryOp::Neg, Box::new(Expr::Literal(Literal::Int(42))));
-        assert_eq!(compile_and_run(expr), Some(Value::Int(-42)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(-42)));
 
         // !true
         let expr = Expr::Unary(UnaryOp::Not, Box::new(Expr::Literal(Literal::Bool(true))));
-        assert_eq!(compile_and_run(expr), Some(Value::Bool(false)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Bool(false)));
     }
 
     #[test]
     fn test_compile_complex_expression() {
+        let ctx = Context::new();
+
         // (10 + 20) * 2 - 5 = 55
         let expr = Expr::Binary(
             Operation::Sub,
@@ -263,19 +275,23 @@ mod tests {
             )),
             Box::new(Expr::Literal(Literal::Int(5))),
         );
-        assert_eq!(compile_and_run(expr), Some(Value::Int(55)));
+        assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(55)));
     }
 
     #[test]
     fn test_compile_string_concat() {
+        let ctx = Context::new();
+
         // "Hello, " + "World!"
+        let hello_sym = ctx.intern("Hello, ");
+        let world_sym = ctx.intern("World!");
         let expr = Expr::Binary(
             Operation::Add,
-            Box::new(Expr::Literal(Literal::Str("Hello, ".to_string()))),
-            Box::new(Expr::Literal(Literal::Str("World!".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(hello_sym))),
+            Box::new(Expr::Literal(Literal::Str(world_sym))),
         );
         assert_eq!(
-            compile_and_run(expr),
+            compile_and_run(&ctx, expr),
             Some(Value::Str("Hello, World!".to_string()))
         );
     }

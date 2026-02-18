@@ -1,5 +1,5 @@
 use axe::ast::{Expr, Literal, Program, Stmt};
-use axe::Axe;
+use axe::{Axe, Context, Value};
 
 // ============================================================================
 // String Method Tests
@@ -7,11 +7,12 @@ use axe::Axe;
 
 #[test]
 fn string_len_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            "len".to_string(),
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -23,11 +24,12 @@ fn string_len_method() {
 
 #[test]
 fn string_len_empty() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("".to_string()))),
-            "len".to_string(),
+            Box::new(Expr::Literal(Literal::Str(context.intern("")))),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -38,44 +40,51 @@ fn string_len_empty() {
 
 #[test]
 fn string_concat_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            "concat".to_string(),
-            vec![Expr::Literal(Literal::Str(" world".to_string()))],
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            context.intern("concat"),
+            vec![Expr::Literal(Literal::Str(context.intern(" world")))],
         ))],
     };
-    let result = axe.run(program);
-    assert!(result.is_ok());
-    assert_eq!(format!("{}", result.unwrap()), "\"hello world\"");
+    let result = axe.run(program).unwrap();
+    match result {
+        Value::Literal(Literal::Str(s)) => assert_eq!(context.resolve(s), "hello world"),
+        _ => panic!("Expected string, got {:?}", result),
+    }
 }
 
 #[test]
 fn string_concat_multiple() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("a".to_string()))),
-            "concat".to_string(),
+            Box::new(Expr::Literal(Literal::Str(context.intern("a")))),
+            context.intern("concat"),
             vec![
-                Expr::Literal(Literal::Str("b".to_string())),
-                Expr::Literal(Literal::Str("c".to_string())),
+                Expr::Literal(Literal::Str(context.intern("b"))),
+                Expr::Literal(Literal::Str(context.intern("c"))),
             ],
         ))],
     };
-    let result = axe.run(program);
-    assert!(result.is_ok());
-    assert_eq!(format!("{}", result.unwrap()), "\"abc\"");
+    let result = axe.run(program).unwrap();
+    match result {
+        Value::Literal(Literal::Str(s)) => assert_eq!(context.resolve(s), "abc"),
+        _ => panic!("Expected string, got {:?}", result),
+    }
 }
 
 #[test]
 fn string_unknown_method_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            "unknown".to_string(),
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            context.intern("unknown"),
             vec![],
         ))],
     };
@@ -89,7 +98,8 @@ fn string_unknown_method_fails() {
 
 #[test]
 fn list_len_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![
@@ -97,7 +107,7 @@ fn list_len_method() {
                 Expr::Literal(Literal::Int(2)),
                 Expr::Literal(Literal::Int(3)),
             ])),
-            "len".to_string(),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -108,11 +118,12 @@ fn list_len_method() {
 
 #[test]
 fn list_len_empty() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![])),
-            "len".to_string(),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -123,11 +134,12 @@ fn list_len_empty() {
 
 #[test]
 fn list_push_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-            "push".to_string(),
+            context.intern("push"),
             vec![Expr::Literal(Literal::Int(2))],
         ))],
     };
@@ -138,7 +150,8 @@ fn list_push_method() {
 
 #[test]
 fn list_get_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![
@@ -146,7 +159,7 @@ fn list_get_method() {
                 Expr::Literal(Literal::Int(20)),
                 Expr::Literal(Literal::Int(30)),
             ])),
-            "get".to_string(),
+            context.intern("get"),
             vec![Expr::Literal(Literal::Int(1))],
         ))],
     };
@@ -157,7 +170,8 @@ fn list_get_method() {
 
 #[test]
 fn list_get_negative_index() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![
@@ -165,7 +179,7 @@ fn list_get_negative_index() {
                 Expr::Literal(Literal::Int(20)),
                 Expr::Literal(Literal::Int(30)),
             ])),
-            "get".to_string(),
+            context.intern("get"),
             vec![Expr::Literal(Literal::Int(-1))],
         ))],
     };
@@ -176,11 +190,12 @@ fn list_get_negative_index() {
 
 #[test]
 fn list_get_out_of_bounds_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-            "get".to_string(),
+            context.intern("get"),
             vec![Expr::Literal(Literal::Int(5))],
         ))],
     };
@@ -190,11 +205,12 @@ fn list_get_out_of_bounds_fails() {
 
 #[test]
 fn list_concat_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-            "concat".to_string(),
+            context.intern("concat"),
             vec![Expr::List(vec![Expr::Literal(Literal::Int(2))])],
         ))],
     };
@@ -205,11 +221,12 @@ fn list_concat_method() {
 
 #[test]
 fn list_concat_multiple() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-            "concat".to_string(),
+            context.intern("concat"),
             vec![
                 Expr::List(vec![Expr::Literal(Literal::Int(2))]),
                 Expr::List(vec![Expr::Literal(Literal::Int(3))]),
@@ -223,11 +240,12 @@ fn list_concat_multiple() {
 
 #[test]
 fn list_unknown_method_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![])),
-            "unknown".to_string(),
+            context.intern("unknown"),
             vec![],
         ))],
     };
@@ -241,16 +259,17 @@ fn list_unknown_method_fails() {
 
 #[test]
 fn list_chained_push() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // [1].push(2).push(3)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::MethodCall(
                 Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-                "push".to_string(),
+                context.intern("push"),
                 vec![Expr::Literal(Literal::Int(2))],
             )),
-            "push".to_string(),
+            context.intern("push"),
             vec![Expr::Literal(Literal::Int(3))],
         ))],
     };
@@ -261,16 +280,17 @@ fn list_chained_push() {
 
 #[test]
 fn list_push_then_len() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // [1].push(2).len()
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::MethodCall(
                 Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-                "push".to_string(),
+                context.intern("push"),
                 vec![Expr::Literal(Literal::Int(2))],
             )),
-            "len".to_string(),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -285,18 +305,19 @@ fn list_push_then_len() {
 
 #[test]
 fn method_call_on_variable() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // let x = "hello"; x.len()
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".to_string(),
-                Some(Expr::Literal(Literal::Str("hello".to_string()))),
+                context.intern("x"),
+                Some(Expr::Literal(Literal::Str(context.intern("hello")))),
                 None,
             )]),
             Stmt::Expr(Expr::MethodCall(
-                Box::new(Expr::Var("x".to_string())),
-                "len".to_string(),
+                Box::new(Expr::Var(context.intern("x"))),
+                context.intern("len"),
                 vec![],
             )),
         ],
@@ -312,11 +333,12 @@ fn method_call_on_variable() {
 
 #[test]
 fn method_call_on_int_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::Literal(Literal::Int(42))),
-            "len".to_string(),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -326,11 +348,12 @@ fn method_call_on_int_fails() {
 
 #[test]
 fn string_len_with_args_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            "len".to_string(),
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            context.intern("len"),
             vec![Expr::Literal(Literal::Int(1))],
         ))],
     };
@@ -340,11 +363,12 @@ fn string_len_with_args_fails() {
 
 #[test]
 fn list_push_wrong_args_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![])),
-            "push".to_string(),
+            context.intern("push"),
             vec![], // push requires 1 argument
         ))],
     };

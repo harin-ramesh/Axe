@@ -1,51 +1,52 @@
-use axe::{Axe, Expr, Literal, Program, Stmt};
+use axe::{Axe, Context, Expr, Literal, Program, Stmt};
 
 #[test]
 fn valid_variable_names() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     // Valid names starting with letter
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                context.intern("x"),
                 Some(Expr::Literal(Literal::Int(1))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "myVar".into(),
+                context.intern("myVar"),
                 Some(Expr::Literal(Literal::Int(2))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "var123".into(),
+                context.intern("var123"),
                 Some(Expr::Literal(Literal::Int(3))),
                 None,
             )]),
             // Valid names starting with underscore
             Stmt::Let(vec![(
-                "_private".into(),
+                context.intern("_private"),
                 Some(Expr::Literal(Literal::Int(4))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "_".into(),
+                context.intern("_"),
                 Some(Expr::Literal(Literal::Int(5))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "_123".into(),
+                context.intern("_123"),
                 Some(Expr::Literal(Literal::Int(6))),
                 None,
             )]),
             // Valid names with underscores
             Stmt::Let(vec![(
-                "my_var".into(),
+                context.intern("my_var"),
                 Some(Expr::Literal(Literal::Int(7))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "CONSTANT_VALUE".into(),
+                context.intern("CONSTANT_VALUE"),
                 Some(Expr::Literal(Literal::Int(8))),
                 None,
             )]),
@@ -58,10 +59,11 @@ fn valid_variable_names() {
 
 #[test]
 fn invalid_variable_name_starting_with_number() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "123var".into(),
+            context.intern("123var"),
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],
@@ -72,11 +74,12 @@ fn invalid_variable_name_starting_with_number() {
 
 #[test]
 fn invalid_variable_name_with_special_chars() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "my-var".into(),
+            context.intern("my-var"),
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],
@@ -86,7 +89,7 @@ fn invalid_variable_name_with_special_chars() {
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "my.var".into(),
+            context.intern("my.var"),
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],
@@ -96,7 +99,7 @@ fn invalid_variable_name_with_special_chars() {
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "my var".into(),
+            context.intern("my var"),
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],
@@ -106,7 +109,7 @@ fn invalid_variable_name_with_special_chars() {
 
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "my@var".into(),
+            context.intern("my@var"),
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],
@@ -117,10 +120,11 @@ fn invalid_variable_name_with_special_chars() {
 
 #[test]
 fn invalid_variable_name_empty() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "".into(),
+            context.intern(""),
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],

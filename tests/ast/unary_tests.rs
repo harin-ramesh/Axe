@@ -1,9 +1,10 @@
-use axe::{Axe, Literal, Parser, Value};
+use axe::{Axe, Context, Literal, Parser, Value};
 
 fn eval(input: &str) -> Value {
-    let mut parser = Parser::new(input);
+    let context = Context::new();
+    let mut parser = Parser::new(input, &context);
     let program = parser.parse().expect("parse failed");
-    let mut axe = Axe::new();
+    let mut axe = Axe::new(&context);
     axe.run(program).expect("eval failed")
 }
 

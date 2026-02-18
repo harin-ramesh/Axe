@@ -1,4 +1,4 @@
-use axe::{Axe, Literal, Parser, Value};
+use axe::{Axe, Context, Literal, Parser, Value};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter};
@@ -33,15 +33,16 @@ fn run_file(filename: &str) {
         }
     };
 
-    let mut axe = Axe::new();
-
     let trimmed_content = content.trim();
     if trimmed_content.is_empty() {
         return; // Empty file is ok
     }
 
-    // Parse the entire file as a program
-    let mut parser = Parser::new(&content);
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
+
+    // Parse the entire file as a program using the interpreter's context
+    let mut parser = Parser::new(&content, axe.context());
     match parser.parse() {
         Ok(program) => match axe.run(program) {
             Ok(_) => {}
@@ -247,7 +248,8 @@ fn run_repl() {
         let _ = rl.load_history(&history_path);
     }
 
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let mut accumulated_input = String::new();
 
     loop {
@@ -279,7 +281,9 @@ fn run_repl() {
                             continue;
                         }
                         "reset" => {
-                            axe = Axe::new();
+                            // Note: reset now creates a new interpreter but reuses the same context
+                            // This preserves interned strings across resets
+                            axe = Axe::new(&ctx);
                             println!("\x1b[1;32mInterpreter state reset.\x1b[0m");
                             continue;
                         }
@@ -296,8 +300,8 @@ fn run_repl() {
 
                 // Check if input is complete (braces balanced and ends with semicolon or closing brace)
                 if is_complete(&accumulated_input) {
-                    // Parse and evaluate
-                    let mut parser = Parser::new(&accumulated_input);
+                    // Parse and evaluate using the interpreter's context
+                    let mut parser = Parser::new(&accumulated_input, axe.context());
                     match parser.parse() {
                         Ok(program) => match axe.run(program) {
                             Ok(value) => {
