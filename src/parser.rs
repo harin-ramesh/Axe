@@ -1,17 +1,24 @@
-use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::context::Context;
+use crate::interner::Symbol;
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
 
-pub struct Parser<'src> {
+/// A variable declaration: (name, initializer, target_object)
+type Declaration = (Symbol, Option<Expr>, Option<Expr>);
+
+pub struct Parser<'src, 'ctx> {
     tokeniser: Tokeniser<'src>,
     lookahead: Option<Token<'src>>,
+    ctx: &'ctx Context,
 }
 
-impl<'src> Parser<'src> {
-    pub fn new(input: &'src str) -> Self {
+impl<'src, 'ctx> Parser<'src, 'ctx> {
+    pub fn new(input: &'src str, ctx: &'ctx Context) -> Self {
         let tokeniser = Tokeniser::new(input);
         Self {
             tokeniser,
             lookahead: None,
+            ctx,
         }
     }
 
@@ -19,6 +26,12 @@ impl<'src> Parser<'src> {
         self.lookahead = Some(self.tokeniser.get_next_token()?);
         let expr = self.parse_program()?;
         Ok(expr)
+    }
+
+    /// Intern a string using the context's interner.
+    #[inline]
+    fn intern(&self, s: &str) -> Symbol {
+        self.ctx.intern(s)
     }
 
     fn eat(&mut self, expected_token: TokenKind) -> Result<Token<'src>, &'static str> {
@@ -103,12 +116,12 @@ impl<'src> Parser<'src> {
     fn parse_from_statement(&mut self) -> Result<Stmt, &'static str> {
         self.eat(TokenKind::From)?;
         let module_token = self.eat(TokenKind::Identifier)?;
-        let module_name = module_token.lexeme.to_string();
+        let module_name = self.intern(module_token.lexeme);
         self.eat(TokenKind::Import)?;
         let mut imports = Vec::new();
         loop {
             let import_token = self.eat(TokenKind::Identifier)?;
-            imports.push(import_token.lexeme.to_string());
+            imports.push(self.intern(import_token.lexeme));
 
             if self.lookahead.map(|t| t.kind) == Some(TokenKind::Comma) {
                 self.eat(TokenKind::Comma)?;
@@ -140,11 +153,11 @@ impl<'src> Parser<'src> {
     fn parse_class_declaration(&mut self) -> Result<Stmt, &'static str> {
         self.eat(TokenKind::Class)?;
         let name_token = self.eat(TokenKind::Identifier)?;
-        let name = name_token.lexeme.to_string();
+        let name = self.intern(name_token.lexeme);
         let parent = if self.lookahead.map(|t| t.kind) == Some(TokenKind::Colon) {
             self.eat(TokenKind::Colon)?;
             let parent_token = self.eat(TokenKind::Identifier)?;
-            Some(parent_token.lexeme.to_string())
+            Some(self.intern(parent_token.lexeme))
         } else {
             None
         };
@@ -160,7 +173,7 @@ impl<'src> Parser<'src> {
         self.eat(TokenKind::Fn)?;
 
         let name_token = self.eat(TokenKind::Identifier)?;
-        let name = name_token.lexeme.to_string();
+        let name = self.intern(name_token.lexeme);
 
         self.eat(TokenKind::LParen)?;
         let params = self.parse_parameter_list()?;
@@ -176,19 +189,19 @@ impl<'src> Parser<'src> {
     // ParameterList
     //  : Identifier (',' Identifier)*
     //  | ε
-    fn parse_parameter_list(&mut self) -> Result<Vec<String>, &'static str> {
+    fn parse_parameter_list(&mut self) -> Result<Vec<Symbol>, &'static str> {
         let mut params = Vec::new();
 
         // Parse first parameter if present
         if self.lookahead.map(|t| t.kind) == Some(TokenKind::Identifier) {
             let token = self.eat(TokenKind::Identifier)?;
-            params.push(token.lexeme.to_string());
+            params.push(self.intern(token.lexeme));
 
             // Parse remaining parameters
             while self.lookahead.map(|t| t.kind) == Some(TokenKind::Comma) {
                 self.eat(TokenKind::Comma)?;
                 let token = self.eat(TokenKind::Identifier)?;
-                params.push(token.lexeme.to_string());
+                params.push(self.intern(token.lexeme));
             }
         }
 
@@ -218,7 +231,7 @@ impl<'src> Parser<'src> {
 
         // Parse loop variable name
         let var_token = self.eat(TokenKind::Identifier)?;
-        let var_name = var_token.lexeme.to_string();
+        let var_name = self.intern(var_token.lexeme);
 
         self.eat(TokenKind::In)?;
 
@@ -244,9 +257,7 @@ impl<'src> Parser<'src> {
     // DeclarationList
     //  : Declaration
     //  | DeclarationList ',' Declaration
-    fn parse_declarations(
-        &mut self,
-    ) -> Result<Vec<(String, Option<Expr>, Option<Expr>)>, &'static str> {
+    fn parse_declarations(&mut self) -> Result<Vec<Declaration>, &'static str> {
         let mut decls = vec![self.parse_declaration()?];
 
         while let Some(token) = &self.lookahead {
@@ -263,9 +274,9 @@ impl<'src> Parser<'src> {
     // Declaration
     //  : Identifier
     //  | Identifier '=' Expression
-    fn parse_declaration(&mut self) -> Result<(String, Option<Expr>, Option<Expr>), &'static str> {
+    fn parse_declaration(&mut self) -> Result<Declaration, &'static str> {
         let name_token = self.eat(TokenKind::Identifier)?;
-        let name = name_token.lexeme.to_string();
+        let name = self.intern(name_token.lexeme);
         let value = match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::Comma) => Expr::Literal(Literal::Null),
             Some(TokenKind::Delimeter) => Expr::Literal(Literal::Null),
@@ -354,23 +365,27 @@ impl<'src> Parser<'src> {
     fn parse_assignment_expression(&mut self) -> Result<Stmt, &'static str> {
         let left = self.parse_logical_or_expression()?;
 
-        if let Some(token) = &self.lookahead {
-            if token.kind == TokenKind::SimpleAssign {
-                self.eat(TokenKind::SimpleAssign)?;
+        if let Some(token) = &self.lookahead
+            && token.kind == TokenKind::SimpleAssign
+        {
+            self.eat(TokenKind::SimpleAssign)?;
 
-                // Validate left-hand side is an identifier
-                match left {
-                    Expr::Var(name) => {
-                        let right = self.parse_logical_or_expression()?;
-                        return Ok(Stmt::Assign(name, right));
-                    }
-                    Expr::Property(obj_expr, prop_name) => {
-                        let right = self.parse_logical_or_expression()?;
-                        return Ok(Stmt::Let(vec![(prop_name, Some(right), Some(*obj_expr))]));
-                    }
-                    _ => return Err("Invalid left-hand side in assignment"),
-                };
-            }
+            // Validate left-hand side is an identifier
+            match &left.kind {
+                ExprKind::Var(name) => {
+                    let right = self.parse_logical_or_expression()?;
+                    return Ok(Stmt::Assign(name.clone(), right));
+                }
+                ExprKind::Property(obj_expr, prop_name) => {
+                    let right = self.parse_logical_or_expression()?;
+                    return Ok(Stmt::Let(vec![(
+                        prop_name.clone(),
+                        Some(right),
+                        Some(obj_expr.as_ref().clone()),
+                    )]));
+                }
+                _ => return Err("Invalid left-hand side in assignment"),
+            };
         }
 
         Ok(Stmt::Expr(left))
@@ -625,7 +640,7 @@ impl<'src> Parser<'src> {
         self.eat(TokenKind::New)?;
 
         let class_token = self.eat(TokenKind::Identifier)?;
-        let class_name = class_token.lexeme.to_string();
+        let class_name = self.intern(class_token.lexeme);
 
         self.eat(TokenKind::LParen)?;
         let args = self.parse_argument_list()?;
@@ -662,7 +677,7 @@ impl<'src> Parser<'src> {
         if self.lookahead.map(|t| t.kind) == Some(TokenKind::StaticAccess) {
             self.eat(TokenKind::StaticAccess)?;
             let property_token = self.eat(TokenKind::Identifier)?;
-            let property_name = property_token.lexeme.to_string();
+            let property_name = self.intern(property_token.lexeme);
             if self.lookahead.map(|t| t.kind) == Some(TokenKind::LParen) {
                 self.eat(TokenKind::LParen)?;
                 let args = self.parse_argument_list()?;
@@ -680,7 +695,7 @@ impl<'src> Parser<'src> {
         while self.lookahead.map(|t| t.kind) == Some(TokenKind::MemberAccess) {
             self.eat(TokenKind::MemberAccess)?;
             let property_token = self.eat(TokenKind::Identifier)?;
-            let property_name = property_token.lexeme.to_string();
+            let property_name = self.intern(property_token.lexeme);
 
             // Check if this is a method call: .method(args)
             if self.lookahead.map(|t| t.kind) == Some(TokenKind::LParen) {
@@ -700,7 +715,7 @@ impl<'src> Parser<'src> {
     //  | IDENTIFIER '(' ArgumentList? ')'
     fn parse_identifier(&mut self) -> Result<Expr, &'static str> {
         let token = self.eat(TokenKind::Identifier)?;
-        let name = token.lexeme.to_string();
+        let name = self.intern(token.lexeme);
 
         // Check if this is a function call
         if self.lookahead.map(|t| t.kind) == Some(TokenKind::LParen) {
@@ -755,6 +770,6 @@ impl<'src> Parser<'src> {
     //  : STRING
     fn parse_string_literal(&mut self) -> Result<Expr, &'static str> {
         let token = self.eat(TokenKind::String)?;
-        Ok(Expr::Literal(Literal::Str(token.lexeme.to_string())))
+        Ok(Expr::Literal(Literal::Str(self.intern(token.lexeme))))
     }
 }

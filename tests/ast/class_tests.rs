@@ -1,28 +1,32 @@
-use axe::{Axe, EvalSignal, Literal, Parser, Value};
+use axe::{Axe, Context, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
-fn eval(code: &str) -> Result<Value, EvalSignal> {
-    let mut parser = Parser::new(code);
+fn eval(code: &str) -> Result<(Value, Context), EvalSignal> {
+    let context = Context::new();
+    let mut parser = Parser::new(code, &context);
     let program = parser
         .parse()
         .map_err(|e| EvalSignal::Error(e.to_string()))?;
-    let mut axe = Axe::new();
-    axe.run(program)
+    let mut axe = Axe::new(&context);
+    let value = axe.run(program)?;
+    Ok((value, context))
 }
 
 // Helper to get int value from evaluation
 fn eval_int(code: &str) -> i64 {
     match eval(code) {
-        Ok(Value::Literal(Literal::Int(n))) => n,
-        other => panic!("Expected Int, got {:?}", other),
+        Ok((Value::Literal(Literal::Int(n)), _)) => n,
+        Ok((other, _)) => panic!("Expected Int, got {:?}", other),
+        Err(e) => panic!("Eval failed: {:?}", e),
     }
 }
 
 // Helper to get string value from evaluation
 fn eval_str(code: &str) -> String {
     match eval(code) {
-        Ok(Value::Literal(Literal::Str(s))) => s,
-        other => panic!("Expected Str, got {:?}", other),
+        Ok((Value::Literal(Literal::Str(s)), ctx)) => ctx.resolve(s),
+        Ok((other, _)) => panic!("Expected Str, got {:?}", other),
+        Err(e) => panic!("Eval failed: {:?}", e),
     }
 }
 
@@ -342,7 +346,7 @@ fn class_with_conditional_method() {
         n.isPositive();
     "#;
     match eval(code) {
-        Ok(Value::Literal(Literal::Bool(b))) => assert!(b),
+        Ok((Value::Literal(Literal::Bool(b)), _)) => assert!(b),
         other => panic!("Expected Bool(true), got {:?}", other),
     }
 }

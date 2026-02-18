@@ -1,20 +1,23 @@
-use axe::{Axe, EvalSignal, Literal, Parser, Value};
+use axe::{Axe, Context, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
-fn eval(code: &str) -> Result<Value, EvalSignal> {
-    let mut parser = Parser::new(code);
+fn eval(code: &str) -> Result<(Value, Context), EvalSignal> {
+    let context = Context::new();
+    let mut parser = Parser::new(code, &context);
     let program = parser
         .parse()
         .map_err(|e| EvalSignal::Error(e.to_string()))?;
-    let mut axe = Axe::new();
-    axe.run(program)
+    let mut axe = Axe::new(&context);
+    let value = axe.run(program)?;
+    Ok((value, context))
 }
 
 // Helper to get int value from evaluation
 fn eval_int(code: &str) -> i64 {
     match eval(code) {
-        Ok(Value::Literal(Literal::Int(n))) => n,
-        other => panic!("Expected Int, got {:?}", other),
+        Ok((Value::Literal(Literal::Int(n)), _)) => n,
+        Ok((other, _)) => panic!("Expected Int, got {:?}", other),
+        Err(e) => panic!("Eval failed: {:?}", e),
     }
 }
 
@@ -337,8 +340,9 @@ fn for_loop_string_concatenation() {
         result;
     "#;
     match eval(code) {
-        Ok(Value::Literal(Literal::Str(s))) => assert_eq!(s, "aaa"),
-        other => panic!("Expected Str, got {:?}", other),
+        Ok((Value::Literal(Literal::Str(s)), ctx)) => assert_eq!(ctx.resolve(s), "aaa"),
+        Ok((other, _)) => panic!("Expected Str, got {:?}", other),
+        Err(e) => panic!("Eval failed: {:?}", e),
     }
 }
 

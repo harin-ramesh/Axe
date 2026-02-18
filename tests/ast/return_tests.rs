@@ -1,19 +1,21 @@
-use axe::{Axe, EvalSignal, Literal, Parser, Value};
+use axe::{Axe, Context, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
-fn eval(code: &str) -> Result<Value, EvalSignal> {
-    let mut parser = Parser::new(code);
+fn eval(code: &str) -> Result<(Value, Context), EvalSignal> {
+    let context = Context::new();
+    let mut parser = Parser::new(code, &context);
     let program = parser
         .parse()
         .map_err(|e| EvalSignal::Error(e.to_string()))?;
-    let mut axe = Axe::new();
-    axe.run(program)
+    let mut axe = Axe::new(&context);
+    let value = axe.run(program)?;
+    Ok((value, context))
 }
 
 // Helper to get int value from evaluation
 fn eval_int(code: &str) -> i64 {
     match eval(code) {
-        Ok(Value::Literal(Literal::Int(n))) => n,
+        Ok((Value::Literal(Literal::Int(n)), _)) => n,
         other => panic!("Expected Int, got {:?}", other),
     }
 }
@@ -21,7 +23,7 @@ fn eval_int(code: &str) -> i64 {
 // Helper to get bool value from evaluation
 fn eval_bool(code: &str) -> bool {
     match eval(code) {
-        Ok(Value::Literal(Literal::Bool(b))) => b,
+        Ok((Value::Literal(Literal::Bool(b)), _)) => b,
         other => panic!("Expected Bool, got {:?}", other),
     }
 }
@@ -61,7 +63,7 @@ fn return_string() {
         greet();
     "#;
     match eval(code) {
-        Ok(Value::Literal(Literal::Str(s))) => assert_eq!(s, "hello"),
+        Ok((Value::Literal(Literal::Str(s)), ctx)) => assert_eq!(ctx.resolve(s), "hello"),
         other => panic!("Expected Str, got {:?}", other),
     }
 }
@@ -86,7 +88,7 @@ fn return_null() {
         nothing();
     "#;
     match eval(code) {
-        Ok(Value::Literal(Literal::Null)) => {}
+        Ok((Value::Literal(Literal::Null), _)) => {}
         other => panic!("Expected Null, got {:?}", other),
     }
 }
@@ -285,7 +287,7 @@ fn function_without_return_yields_null() {
         doNothing();
     "#;
     match eval(code) {
-        Ok(Value::Literal(Literal::Null)) => {}
+        Ok((Value::Literal(Literal::Null), _)) => {}
         other => panic!("Expected Null, got {:?}", other),
     }
 }

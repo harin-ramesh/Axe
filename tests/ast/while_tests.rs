@@ -1,23 +1,24 @@
-use axe::{Axe, Expr, Literal, Operation, Program, Stmt, Value};
+use axe::{Axe, Context, Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
 fn while_basic_countdown() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "counter".to_string(),
+                context.intern("counter"),
                 Some(Expr::Literal(Literal::Int(5))),
                 None,
             )]),
             Stmt::While(
-                Expr::Var("counter".to_string()),
+                Expr::Var(context.intern("counter")),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "counter".to_string(),
+                    context.intern("counter"),
                     Expr::Binary(
                         Operation::Sub,
-                        Box::new(Expr::Var("counter".to_string())),
+                        Box::new(Expr::Var(context.intern("counter"))),
                         Box::new(Expr::Literal(Literal::Int(1))),
                     ),
                 )])),
@@ -31,40 +32,41 @@ fn while_basic_countdown() {
 
 #[test]
 fn while_with_comparison_condition() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "i".to_string(),
+                context.intern("i"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "sum".to_string(),
+                context.intern("sum"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
-                    Box::new(Expr::Var("i".to_string())),
+                    Box::new(Expr::Var(context.intern("i"))),
                     Box::new(Expr::Literal(Literal::Int(5))),
                 ),
                 Box::new(Stmt::Block(vec![
                     Stmt::Assign(
-                        "sum".to_string(),
+                        context.intern("sum"),
                         Expr::Binary(
                             Operation::Add,
-                            Box::new(Expr::Var("sum".to_string())),
-                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Var(context.intern("sum"))),
+                            Box::new(Expr::Var(context.intern("i"))),
                         ),
                     ),
                     Stmt::Assign(
-                        "i".to_string(),
+                        context.intern("i"),
                         Expr::Binary(
                             Operation::Add,
-                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Var(context.intern("i"))),
                             Box::new(Expr::Literal(Literal::Int(1))),
                         ),
                     ),
@@ -79,19 +81,20 @@ fn while_with_comparison_condition() {
 
 #[test]
 fn while_never_executes() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".to_string(),
+                context.intern("x"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Literal(Literal::Int(0)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "x".to_string(),
+                    context.intern("x"),
                     Expr::Literal(Literal::Int(10)),
                 )])),
             ),
@@ -104,22 +107,23 @@ fn while_never_executes() {
 
 #[test]
 fn while_with_false_condition() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "count".to_string(),
+                context.intern("count"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Literal(Literal::Bool(false)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "count".to_string(),
+                    context.intern("count"),
                     Expr::Binary(
                         Operation::Add,
-                        Box::new(Expr::Var("count".to_string())),
+                        Box::new(Expr::Var(context.intern("count"))),
                         Box::new(Expr::Literal(Literal::Int(1))),
                     ),
                 )])),
@@ -133,51 +137,52 @@ fn while_with_false_condition() {
 
 #[test]
 fn while_with_nested_blocks() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "n".to_string(),
+                context.intern("n"),
                 Some(Expr::Literal(Literal::Int(3))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "total".to_string(),
+                context.intern("total"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Gt,
-                    Box::new(Expr::Var("n".to_string())),
+                    Box::new(Expr::Var(context.intern("n"))),
                     Box::new(Expr::Literal(Literal::Int(0))),
                 ),
                 Box::new(Stmt::Block(vec![
                     Stmt::Block(vec![
                         Stmt::Let(vec![(
-                            "temp".to_string(),
+                            context.intern("temp"),
                             Some(Expr::Binary(
                                 Operation::Mul,
-                                Box::new(Expr::Var("n".to_string())),
+                                Box::new(Expr::Var(context.intern("n"))),
                                 Box::new(Expr::Literal(Literal::Int(2))),
                             )),
                             None,
                         )]),
                         Stmt::Assign(
-                            "total".to_string(),
+                            context.intern("total"),
                             Expr::Binary(
                                 Operation::Add,
-                                Box::new(Expr::Var("total".to_string())),
-                                Box::new(Expr::Var("temp".to_string())),
+                                Box::new(Expr::Var(context.intern("total"))),
+                                Box::new(Expr::Var(context.intern("temp"))),
                             ),
                         ),
                     ]),
                     Stmt::Assign(
-                        "n".to_string(),
+                        context.intern("n"),
                         Expr::Binary(
                             Operation::Sub,
-                            Box::new(Expr::Var("n".to_string())),
+                            Box::new(Expr::Var(context.intern("n"))),
                             Box::new(Expr::Literal(Literal::Int(1))),
                         ),
                     ),
@@ -192,42 +197,43 @@ fn while_with_nested_blocks() {
 
 #[test]
 fn while_count_1_to_10_sum_is_correct() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     // Count from 1 to 10 and sum the values
     // Expected sum: 1+2+3+4+5+6+7+8+9+10 = 55
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "i".to_string(),
+                context.intern("i"),
                 Some(Expr::Literal(Literal::Int(1))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "sum".to_string(),
+                context.intern("sum"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lte,
-                    Box::new(Expr::Var("i".to_string())),
+                    Box::new(Expr::Var(context.intern("i"))),
                     Box::new(Expr::Literal(Literal::Int(10))),
                 ),
                 Box::new(Stmt::Block(vec![
                     Stmt::Assign(
-                        "sum".to_string(),
+                        context.intern("sum"),
                         Expr::Binary(
                             Operation::Add,
-                            Box::new(Expr::Var("sum".to_string())),
-                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Var(context.intern("sum"))),
+                            Box::new(Expr::Var(context.intern("i"))),
                         ),
                     ),
                     Stmt::Assign(
-                        "i".to_string(),
+                        context.intern("i"),
                         Expr::Binary(
                             Operation::Add,
-                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Var(context.intern("i"))),
                             Box::new(Expr::Literal(Literal::Int(1))),
                         ),
                     ),
@@ -236,7 +242,7 @@ fn while_count_1_to_10_sum_is_correct() {
             // Verify sum equals 55
             Stmt::Expr(Expr::Binary(
                 Operation::Eq,
-                Box::new(Expr::Var("sum".to_string())),
+                Box::new(Expr::Var(context.intern("sum"))),
                 Box::new(Expr::Literal(Literal::Int(55))),
             )),
         ],
@@ -249,7 +255,8 @@ fn while_count_1_to_10_sum_is_correct() {
 
 #[test]
 fn while_empty_body_returns_null() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![Stmt::While(
@@ -264,26 +271,27 @@ fn while_empty_body_returns_null() {
 
 #[test]
 fn while_with_variable_modification() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".to_string(),
+                context.intern("x"),
                 Some(Expr::Literal(Literal::Int(1))),
                 None,
             )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
-                    Box::new(Expr::Var("x".to_string())),
+                    Box::new(Expr::Var(context.intern("x"))),
                     Box::new(Expr::Literal(Literal::Int(100))),
                 ),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "x".to_string(),
+                    context.intern("x"),
                     Expr::Binary(
                         Operation::Mul,
-                        Box::new(Expr::Var("x".to_string())),
+                        Box::new(Expr::Var(context.intern("x"))),
                         Box::new(Expr::Literal(Literal::Int(2))),
                     ),
                 )])),
@@ -297,63 +305,64 @@ fn while_with_variable_modification() {
 
 #[test]
 fn nested_while_loops() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "i".to_string(),
+                context.intern("i"),
                 Some(Expr::Literal(Literal::Int(2))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "j".to_string(),
+                context.intern("j"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "total".to_string(),
+                context.intern("total"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Gt,
-                    Box::new(Expr::Var("i".to_string())),
+                    Box::new(Expr::Var(context.intern("i"))),
                     Box::new(Expr::Literal(Literal::Int(0))),
                 ),
                 Box::new(Stmt::Block(vec![
-                    Stmt::Assign("j".to_string(), Expr::Literal(Literal::Int(2))),
+                    Stmt::Assign(context.intern("j"), Expr::Literal(Literal::Int(2))),
                     Stmt::While(
                         Expr::Binary(
                             Operation::Gt,
-                            Box::new(Expr::Var("j".to_string())),
+                            Box::new(Expr::Var(context.intern("j"))),
                             Box::new(Expr::Literal(Literal::Int(0))),
                         ),
                         Box::new(Stmt::Block(vec![
                             Stmt::Assign(
-                                "total".to_string(),
+                                context.intern("total"),
                                 Expr::Binary(
                                     Operation::Add,
-                                    Box::new(Expr::Var("total".to_string())),
+                                    Box::new(Expr::Var(context.intern("total"))),
                                     Box::new(Expr::Literal(Literal::Int(1))),
                                 ),
                             ),
                             Stmt::Assign(
-                                "j".to_string(),
+                                context.intern("j"),
                                 Expr::Binary(
                                     Operation::Sub,
-                                    Box::new(Expr::Var("j".to_string())),
+                                    Box::new(Expr::Var(context.intern("j"))),
                                     Box::new(Expr::Literal(Literal::Int(1))),
                                 ),
                             ),
                         ])),
                     ),
                     Stmt::Assign(
-                        "i".to_string(),
+                        context.intern("i"),
                         Expr::Binary(
                             Operation::Sub,
-                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Var(context.intern("i"))),
                             Box::new(Expr::Literal(Literal::Int(1))),
                         ),
                     ),
@@ -368,29 +377,30 @@ fn nested_while_loops() {
 
 #[test]
 fn while_with_if_inside() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "i".to_string(),
+                context.intern("i"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "evens".to_string(),
+                context.intern("evens"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::Let(vec![(
-                "odds".to_string(),
+                context.intern("odds"),
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
-                    Box::new(Expr::Var("i".to_string())),
+                    Box::new(Expr::Var(context.intern("i"))),
                     Box::new(Expr::Literal(Literal::Int(5))),
                 ),
                 Box::new(Stmt::Block(vec![
@@ -399,33 +409,33 @@ fn while_with_if_inside() {
                             Operation::Eq,
                             Box::new(Expr::Binary(
                                 Operation::Mod,
-                                Box::new(Expr::Var("i".to_string())),
+                                Box::new(Expr::Var(context.intern("i"))),
                                 Box::new(Expr::Literal(Literal::Int(2))),
                             )),
                             Box::new(Expr::Literal(Literal::Int(0))),
                         ),
                         Box::new(Stmt::Block(vec![Stmt::Assign(
-                            "evens".to_string(),
+                            context.intern("evens"),
                             Expr::Binary(
                                 Operation::Add,
-                                Box::new(Expr::Var("evens".to_string())),
+                                Box::new(Expr::Var(context.intern("evens"))),
                                 Box::new(Expr::Literal(Literal::Int(1))),
                             ),
                         )])),
                         Box::new(Stmt::Block(vec![Stmt::Assign(
-                            "odds".to_string(),
+                            context.intern("odds"),
                             Expr::Binary(
                                 Operation::Add,
-                                Box::new(Expr::Var("odds".to_string())),
+                                Box::new(Expr::Var(context.intern("odds"))),
                                 Box::new(Expr::Literal(Literal::Int(1))),
                             ),
                         )])),
                     ),
                     Stmt::Assign(
-                        "i".to_string(),
+                        context.intern("i"),
                         Expr::Binary(
                             Operation::Add,
-                            Box::new(Expr::Var("i".to_string())),
+                            Box::new(Expr::Var(context.intern("i"))),
                             Box::new(Expr::Literal(Literal::Int(1))),
                         ),
                     ),

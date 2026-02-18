@@ -1,4 +1,4 @@
-use axe::{Axe, Environment, Expr, Literal, Operation, Program, Stmt, Value};
+use axe::{Axe, Context, Environment, Expr, Literal, Operation, Program, Stmt, Value};
 
 // ============================================================================
 // Environment Tests
@@ -6,17 +6,19 @@ use axe::{Axe, Environment, Expr, Literal, Operation, Program, Stmt, Value};
 
 #[test]
 fn environment_new_creates_empty_env() {
+    let context = Context::new();
     let env = Environment::new();
-    assert!(env.borrow().get("x").is_none());
+    assert!(env.borrow().get(context.intern("x")).is_none());
 }
 
 #[test]
 fn environment_set_and_get() {
+    let context = Context::new();
     let env = Environment::new();
-    env.borrow_mut()
-        .set("x".to_string(), Value::Literal(Literal::Int(42)));
+    let x = context.intern("x");
+    env.borrow_mut().set(x, Value::Literal(Literal::Int(42)));
 
-    let value = env.borrow().get("x").unwrap();
+    let value = env.borrow().get(x).unwrap();
     match value {
         Value::Literal(Literal::Int(n)) => assert_eq!(n, 42),
         _ => panic!("Expected Int(42)"),
@@ -25,14 +27,14 @@ fn environment_set_and_get() {
 
 #[test]
 fn environment_extend_inherits_parent() {
+    let context = Context::new();
     let parent = Environment::new();
-    parent
-        .borrow_mut()
-        .set("x".to_string(), Value::Literal(Literal::Int(10)));
+    let x = context.intern("x");
+    parent.borrow_mut().set(x, Value::Literal(Literal::Int(10)));
 
     let child = Environment::extend(parent);
 
-    let value = child.borrow().get("x").unwrap();
+    let value = child.borrow().get(x).unwrap();
     match value {
         Value::Literal(Literal::Int(n)) => assert_eq!(n, 10),
         _ => panic!("Expected Int(10)"),
@@ -41,24 +43,22 @@ fn environment_extend_inherits_parent() {
 
 #[test]
 fn environment_child_shadows_parent() {
+    let context = Context::new();
     let parent = Environment::new();
-    parent
-        .borrow_mut()
-        .set("x".to_string(), Value::Literal(Literal::Int(10)));
+    let x = context.intern("x");
+    parent.borrow_mut().set(x, Value::Literal(Literal::Int(10)));
 
     let child = Environment::extend(parent.clone());
-    child
-        .borrow_mut()
-        .set("x".to_string(), Value::Literal(Literal::Int(20)));
+    child.borrow_mut().set(x, Value::Literal(Literal::Int(20)));
 
     // Child should see shadowed value
-    match child.borrow().get("x").unwrap() {
+    match child.borrow().get(x).unwrap() {
         Value::Literal(Literal::Int(n)) => assert_eq!(n, 20),
         _ => panic!("Expected Int(20)"),
     }
 
     // Parent should still have original value
-    match parent.borrow().get("x").unwrap() {
+    match parent.borrow().get(x).unwrap() {
         Value::Literal(Literal::Int(n)) => assert_eq!(n, 10),
         _ => panic!("Expected Int(10)"),
     }
@@ -66,14 +66,15 @@ fn environment_child_shadows_parent() {
 
 #[test]
 fn environment_update_modifies_existing() {
+    let context = Context::new();
     let env = Environment::new();
+    let x = context.intern("x");
+    env.borrow_mut().set(x, Value::Literal(Literal::Int(10)));
     env.borrow_mut()
-        .set("x".to_string(), Value::Literal(Literal::Int(10)));
-    env.borrow_mut()
-        .update("x".to_string(), Value::Literal(Literal::Int(20)))
+        .update(x, Value::Literal(Literal::Int(20)))
         .unwrap();
 
-    match env.borrow().get("x").unwrap() {
+    match env.borrow().get(x).unwrap() {
         Value::Literal(Literal::Int(n)) => assert_eq!(n, 20),
         _ => panic!("Expected Int(20)"),
     }
@@ -81,29 +82,29 @@ fn environment_update_modifies_existing() {
 
 #[test]
 fn environment_update_undefined_fails() {
+    let context = Context::new();
     let env = Environment::new();
-    let result = env
-        .borrow_mut()
-        .update("x".to_string(), Value::Literal(Literal::Int(10)));
+    let x = context.intern("x");
+    let result = env.borrow_mut().update(x, Value::Literal(Literal::Int(10)));
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "undefined variable");
 }
 
 #[test]
 fn environment_update_parent_variable() {
+    let context = Context::new();
     let parent = Environment::new();
-    parent
-        .borrow_mut()
-        .set("x".to_string(), Value::Literal(Literal::Int(10)));
+    let x = context.intern("x");
+    parent.borrow_mut().set(x, Value::Literal(Literal::Int(10)));
 
     let child = Environment::extend(parent.clone());
     child
         .borrow_mut()
-        .update("x".to_string(), Value::Literal(Literal::Int(20)))
+        .update(x, Value::Literal(Literal::Int(20)))
         .unwrap();
 
     // Parent should be updated
-    match parent.borrow().get("x").unwrap() {
+    match parent.borrow().get(x).unwrap() {
         Value::Literal(Literal::Int(n)) => assert_eq!(n, 20),
         _ => panic!("Expected Int(20)"),
     }
@@ -115,7 +116,8 @@ fn environment_update_parent_variable() {
 
 #[test]
 fn eval_int_literal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Int(42)))],
     };
@@ -125,7 +127,8 @@ fn eval_int_literal() {
 
 #[test]
 fn eval_float_literal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Float(3.14)))],
     };
@@ -135,9 +138,12 @@ fn eval_float_literal() {
 
 #[test]
 fn eval_string_literal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Literal(Literal::Str("hello".to_string())))],
+        stmts: vec![Stmt::Expr(Expr::Literal(Literal::Str(
+            context.intern("hello"),
+        )))],
     };
     let result = axe.run(program);
     assert!(result.is_ok());
@@ -145,7 +151,8 @@ fn eval_string_literal() {
 
 #[test]
 fn eval_bool_literal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Bool(true)))],
     };
@@ -155,7 +162,8 @@ fn eval_bool_literal() {
 
 #[test]
 fn eval_null_literal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Literal(Literal::Null))],
     };
@@ -179,7 +187,8 @@ fn make_int_binary(op: Operation, a: i64, b: i64) -> Program {
 
 #[test]
 fn eval_int_addition() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Add, 10, 5);
     let result = axe.run(program).unwrap();
     match result {
@@ -190,35 +199,40 @@ fn eval_int_addition() {
 
 #[test]
 fn eval_int_subtraction() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Sub, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_multiplication() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Mul, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_division() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Div, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_modulo() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Mod, 10, 3);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_division_by_zero_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Div, 10, 0);
     let result = axe.run(program);
     assert!(result.is_err());
@@ -227,42 +241,48 @@ fn eval_division_by_zero_fails() {
 
 #[test]
 fn eval_int_greater_than() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Gt, 10, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_less_than() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Lt, 5, 10);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_equal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Eq, 5, 5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_not_equal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::Neq, 5, 10);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_bitwise_and() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::BitwiseAnd, 0b1010, 0b1100);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_int_bitwise_or() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_int_binary(Operation::BitwiseOr, 0b1010, 0b1100);
     assert!(axe.run(program).is_ok());
 }
@@ -283,35 +303,40 @@ fn make_float_binary(op: Operation, a: f64, b: f64) -> Program {
 
 #[test]
 fn eval_float_addition() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_float_binary(Operation::Add, 2.5, 1.5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_subtraction() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_float_binary(Operation::Sub, 5.0, 2.5);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_multiplication() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_float_binary(Operation::Mul, 2.0, 3.0);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_division() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_float_binary(Operation::Div, 10.0, 2.0);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_float_division_by_zero_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_float_binary(Operation::Div, 10.0, 0.0);
     let result = axe.run(program);
     assert!(result.is_err());
@@ -334,35 +359,40 @@ fn make_bool_binary(op: Operation, a: bool, b: bool) -> Program {
 
 #[test]
 fn eval_bool_and_true_true() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_bool_binary(Operation::And, true, true);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_and_true_false() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_bool_binary(Operation::And, true, false);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_or_false_false() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_bool_binary(Operation::Or, false, false);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_or_true_false() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_bool_binary(Operation::Or, true, false);
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_bool_equality() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = make_bool_binary(Operation::Eq, true, true);
     assert!(axe.run(program).is_ok());
 }
@@ -371,27 +401,31 @@ fn eval_bool_equality() {
 // Binary Operation Tests - Strings
 // ============================================================================
 
-fn make_str_binary(op: Operation, a: &str, b: &str) -> Program {
-    Program {
-        stmts: vec![Stmt::Expr(Expr::Binary(
-            op,
-            Box::new(Expr::Literal(Literal::Str(a.to_string()))),
-            Box::new(Expr::Literal(Literal::Str(b.to_string()))),
-        ))],
-    }
-}
-
 #[test]
 fn eval_string_equality() {
-    let mut axe = Axe::new();
-    let program = make_str_binary(Operation::Eq, "hello", "hello");
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let program = Program {
+        stmts: vec![Stmt::Expr(Expr::Binary(
+            Operation::Eq,
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+        ))],
+    };
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_string_inequality() {
-    let mut axe = Axe::new();
-    let program = make_str_binary(Operation::Neq, "hello", "world");
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let program = Program {
+        stmts: vec![Stmt::Expr(Expr::Binary(
+            Operation::Neq,
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            Box::new(Expr::Literal(Literal::Str(context.intern("world")))),
+        ))],
+    };
     assert!(axe.run(program).is_ok());
 }
 
@@ -401,15 +435,13 @@ fn eval_string_inequality() {
 
 #[test]
 fn eval_let_with_value() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let x = context.intern("x");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(
-                "x".to_string(),
-                Some(Expr::Literal(Literal::Int(42))),
-                None,
-            )]),
-            Stmt::Expr(Expr::Var("x".to_string())),
+            Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(42))), None)]),
+            Stmt::Expr(Expr::Var(x)),
         ],
     };
     assert!(axe.run(program).is_ok());
@@ -417,29 +449,31 @@ fn eval_let_with_value() {
 
 #[test]
 fn eval_let_without_value_is_null() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let x = context.intern("x");
     let program = Program {
-        stmts: vec![
-            Stmt::Let(vec![("x".to_string(), None, None)]),
-            Stmt::Expr(Expr::Var("x".to_string())),
-        ],
+        stmts: vec![Stmt::Let(vec![(x, None, None)]), Stmt::Expr(Expr::Var(x))],
     };
     assert!(axe.run(program).is_ok());
 }
 
 #[test]
 fn eval_let_multiple_declarations() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let x = context.intern("x");
+    let y = context.intern("y");
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![
-                ("x".to_string(), Some(Expr::Literal(Literal::Int(1))), None),
-                ("y".to_string(), Some(Expr::Literal(Literal::Int(2))), None),
+                (x, Some(Expr::Literal(Literal::Int(1))), None),
+                (y, Some(Expr::Literal(Literal::Int(2))), None),
             ]),
             Stmt::Expr(Expr::Binary(
                 Operation::Add,
-                Box::new(Expr::Var("x".to_string())),
-                Box::new(Expr::Var("y".to_string())),
+                Box::new(Expr::Var(x)),
+                Box::new(Expr::Var(y)),
             )),
         ],
     };
@@ -448,10 +482,12 @@ fn eval_let_multiple_declarations() {
 
 #[test]
 fn eval_let_invalid_name_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let name = context.intern("123invalid");
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
-            "123invalid".to_string(),
+            name,
             Some(Expr::Literal(Literal::Int(1))),
             None,
         )])],
@@ -467,16 +503,14 @@ fn eval_let_invalid_name_fails() {
 
 #[test]
 fn eval_assign_existing_variable() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let x = context.intern("x");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(
-                "x".to_string(),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
-            Stmt::Assign("x".to_string(), Expr::Literal(Literal::Int(20))),
-            Stmt::Expr(Expr::Var("x".to_string())),
+            Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(10))), None)]),
+            Stmt::Assign(x, Expr::Literal(Literal::Int(20))),
+            Stmt::Expr(Expr::Var(x)),
         ],
     };
     assert!(axe.run(program).is_ok());
@@ -484,12 +518,11 @@ fn eval_assign_existing_variable() {
 
 #[test]
 fn eval_assign_undefined_variable_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let x = context.intern("x");
     let program = Program {
-        stmts: vec![Stmt::Assign(
-            "x".to_string(),
-            Expr::Literal(Literal::Int(10)),
-        )],
+        stmts: vec![Stmt::Assign(x, Expr::Literal(Literal::Int(10)))],
     };
     let result = axe.run(program);
     assert!(result.is_err());
@@ -502,7 +535,8 @@ fn eval_assign_undefined_variable_fails() {
 
 #[test]
 fn eval_empty_block() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Block(vec![])],
     };
@@ -511,7 +545,8 @@ fn eval_empty_block() {
 
 #[test]
 fn eval_block_returns_last_value() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Block(vec![
             Stmt::Expr(Expr::Literal(Literal::Int(1))),
@@ -528,22 +563,24 @@ fn eval_block_returns_last_value() {
 
 #[test]
 fn eval_if_true_branch() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let result_sym = context.intern("result");
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "result".to_string(),
+                result_sym,
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(true)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "result".to_string(),
+                    result_sym,
                     Expr::Literal(Literal::Int(1)),
                 )])),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "result".to_string(),
+                    result_sym,
                     Expr::Literal(Literal::Int(2)),
                 )])),
             ),
@@ -554,22 +591,24 @@ fn eval_if_true_branch() {
 
 #[test]
 fn eval_if_false_branch() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let result_sym = context.intern("result");
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "result".to_string(),
+                result_sym,
                 Some(Expr::Literal(Literal::Int(0))),
                 None,
             )]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(false)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "result".to_string(),
+                    result_sym,
                     Expr::Literal(Literal::Int(1)),
                 )])),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "result".to_string(),
+                    result_sym,
                     Expr::Literal(Literal::Int(2)),
                 )])),
             ),
@@ -580,7 +619,8 @@ fn eval_if_false_branch() {
 
 #[test]
 fn eval_if_truthy_int() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Non-zero int is truthy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -598,7 +638,8 @@ fn eval_if_truthy_int() {
 
 #[test]
 fn eval_if_falsy_zero() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Zero is falsy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -616,7 +657,8 @@ fn eval_if_falsy_zero() {
 
 #[test]
 fn eval_if_falsy_null() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Null is falsy
     let program = Program {
         stmts: vec![Stmt::If(
@@ -638,25 +680,23 @@ fn eval_if_falsy_null() {
 
 #[test]
 fn eval_while_loop() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let i = context.intern("i");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(
-                "i".to_string(),
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+            Stmt::Let(vec![(i, Some(Expr::Literal(Literal::Int(0))), None)]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
-                    Box::new(Expr::Var("i".to_string())),
+                    Box::new(Expr::Var(i)),
                     Box::new(Expr::Literal(Literal::Int(3))),
                 ),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
-                    "i".to_string(),
+                    i,
                     Expr::Binary(
                         Operation::Add,
-                        Box::new(Expr::Var("i".to_string())),
+                        Box::new(Expr::Var(i)),
                         Box::new(Expr::Literal(Literal::Int(1))),
                     ),
                 )])),
@@ -668,7 +708,8 @@ fn eval_while_loop() {
 
 #[test]
 fn eval_while_false_condition_never_executes() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::While(
             Expr::Literal(Literal::Bool(false)),
@@ -686,15 +727,18 @@ fn eval_while_false_condition_never_executes() {
 
 #[test]
 fn eval_function_definition() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let a = context.intern("a");
+    let b = context.intern("b");
     let program = Program {
         stmts: vec![Stmt::Function(
-            "add".to_string(),
-            vec!["a".to_string(), "b".to_string()],
+            context.intern("add"),
+            vec![a, b],
             Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Binary(
                 Operation::Add,
-                Box::new(Expr::Var("a".to_string())),
-                Box::new(Expr::Var("b".to_string())),
+                Box::new(Expr::Var(a)),
+                Box::new(Expr::Var(b)),
             ))])),
         )],
     };
@@ -703,20 +747,22 @@ fn eval_function_definition() {
 
 #[test]
 fn eval_function_call() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let x = context.intern("x");
     let program = Program {
         stmts: vec![
             Stmt::Function(
-                "double".to_string(),
-                vec!["x".to_string()],
+                context.intern("double"),
+                vec![x],
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Binary(
                     Operation::Mul,
-                    Box::new(Expr::Var("x".to_string())),
+                    Box::new(Expr::Var(x)),
                     Box::new(Expr::Literal(Literal::Int(2))),
                 ))])),
             ),
             Stmt::Expr(Expr::Call(
-                "double".to_string(),
+                context.intern("double"),
                 vec![Expr::Literal(Literal::Int(5))],
             )),
         ],
@@ -726,32 +772,39 @@ fn eval_function_call() {
 
 #[test]
 fn eval_function_call_wrong_arg_count_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let a = context.intern("a");
+    let b = context.intern("b");
     let program = Program {
         stmts: vec![
             Stmt::Function(
-                "add".to_string(),
-                vec!["a".to_string(), "b".to_string()],
+                context.intern("add"),
+                vec![a, b],
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Int(
                     0,
                 )))])),
             ),
             Stmt::Expr(Expr::Call(
-                "add".to_string(),
+                context.intern("add"),
                 vec![Expr::Literal(Literal::Int(1))],
             )),
         ],
     };
     let result = axe.run(program);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "argument count mismatch");
+    assert_eq!(result.unwrap_err(), "wrong number of arguments");
 }
 
 #[test]
 fn eval_undefined_function_fails() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Call("nonexistent".to_string(), vec![]))],
+        stmts: vec![Stmt::Expr(Expr::Call(
+            context.intern("nonexistent"),
+            vec![],
+        ))],
     };
     let result = axe.run(program);
     assert!(result.is_err());
@@ -764,7 +817,8 @@ fn eval_undefined_function_fails() {
 
 #[test]
 fn eval_list_literal() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::List(vec![
             Expr::Literal(Literal::Int(1)),
@@ -777,7 +831,8 @@ fn eval_list_literal() {
 
 #[test]
 fn eval_empty_list() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::List(vec![]))],
     };
@@ -790,7 +845,8 @@ fn eval_empty_list() {
 
 #[test]
 fn eval_native_len_list() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: [1, 2, 3].len()
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -799,7 +855,7 @@ fn eval_native_len_list() {
                 Expr::Literal(Literal::Int(2)),
                 Expr::Literal(Literal::Int(3)),
             ])),
-            "len".to_string(),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -808,12 +864,13 @@ fn eval_native_len_list() {
 
 #[test]
 fn eval_native_len_string() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: "hello".len()
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            "len".to_string(),
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            context.intern("len"),
             vec![],
         ))],
     };
@@ -822,10 +879,11 @@ fn eval_native_len_string() {
 
 #[test]
 fn eval_native_type() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
-            "type".to_string(),
+            context.intern("type"),
             vec![Expr::Literal(Literal::Int(42))],
         ))],
     };
@@ -834,10 +892,11 @@ fn eval_native_type() {
 
 #[test]
 fn eval_native_range_single_arg() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
-            "range".to_string(),
+            context.intern("range"),
             vec![Expr::Literal(Literal::Int(5))],
         ))],
     };
@@ -846,10 +905,11 @@ fn eval_native_range_single_arg() {
 
 #[test]
 fn eval_native_range_two_args() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
-            "range".to_string(),
+            context.intern("range"),
             vec![
                 Expr::Literal(Literal::Int(1)),
                 Expr::Literal(Literal::Int(5)),
@@ -861,10 +921,11 @@ fn eval_native_range_two_args() {
 
 #[test]
 fn eval_native_range_three_args() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Call(
-            "range".to_string(),
+            context.intern("range"),
             vec![
                 Expr::Literal(Literal::Int(0)),
                 Expr::Literal(Literal::Int(10)),
@@ -877,13 +938,14 @@ fn eval_native_range_three_args() {
 
 #[test]
 fn eval_native_concat_strings() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: "hello".concat(" world")
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
-            Box::new(Expr::Literal(Literal::Str("hello".to_string()))),
-            "concat".to_string(),
-            vec![Expr::Literal(Literal::Str(" world".to_string()))],
+            Box::new(Expr::Literal(Literal::Str(context.intern("hello")))),
+            context.intern("concat"),
+            vec![Expr::Literal(Literal::Str(context.intern(" world")))],
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -891,12 +953,13 @@ fn eval_native_concat_strings() {
 
 #[test]
 fn eval_native_concat_lists() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: [1].concat([2])
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-            "concat".to_string(),
+            context.intern("concat"),
             vec![Expr::List(vec![Expr::Literal(Literal::Int(2))])],
         ))],
     };
@@ -905,12 +968,13 @@ fn eval_native_concat_lists() {
 
 #[test]
 fn eval_native_push() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: [1].push(2)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
             Box::new(Expr::List(vec![Expr::Literal(Literal::Int(1))])),
-            "push".to_string(),
+            context.intern("push"),
             vec![Expr::Literal(Literal::Int(2))],
         ))],
     };
@@ -919,7 +983,8 @@ fn eval_native_push() {
 
 #[test]
 fn eval_native_get() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: [10, 20, 30].get(1)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -928,7 +993,7 @@ fn eval_native_get() {
                 Expr::Literal(Literal::Int(20)),
                 Expr::Literal(Literal::Int(30)),
             ])),
-            "get".to_string(),
+            context.intern("get"),
             vec![Expr::Literal(Literal::Int(1))],
         ))],
     };
@@ -937,7 +1002,8 @@ fn eval_native_get() {
 
 #[test]
 fn eval_native_get_negative_index() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Using method syntax: [10, 20, 30].get(-1)
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::MethodCall(
@@ -946,7 +1012,7 @@ fn eval_native_get_negative_index() {
                 Expr::Literal(Literal::Int(20)),
                 Expr::Literal(Literal::Int(30)),
             ])),
-            "get".to_string(),
+            context.intern("get"),
             vec![Expr::Literal(Literal::Int(-1))], // Should get last element
         ))],
     };
@@ -959,22 +1025,18 @@ fn eval_native_get_negative_index() {
 
 #[test]
 fn eval_class_definition() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let point = context.intern("Point");
+    let x = context.intern("x");
+    let y = context.intern("y");
     let program = Program {
         stmts: vec![Stmt::Class(
-            "Point".to_string(),
+            point,
             None,
             vec![
-                Stmt::Let(vec![(
-                    "x".to_string(),
-                    Some(Expr::Literal(Literal::Int(0))),
-                    None,
-                )]),
-                Stmt::Let(vec![(
-                    "y".to_string(),
-                    Some(Expr::Literal(Literal::Int(0))),
-                    None,
-                )]),
+                Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(0))), None)]),
+                Stmt::Let(vec![(y, Some(Expr::Literal(Literal::Int(0))), None)]),
             ],
         )],
     };
@@ -983,20 +1045,21 @@ fn eval_class_definition() {
 
 #[test]
 fn eval_class_with_method() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
+    let counter = context.intern("Counter");
+    let count = context.intern("count");
+    let increment = context.intern("increment");
+    let self_sym = context.intern("self");
     let program = Program {
         stmts: vec![Stmt::Class(
-            "Counter".to_string(),
+            counter,
             None,
             vec![
-                Stmt::Let(vec![(
-                    "count".to_string(),
-                    Some(Expr::Literal(Literal::Int(0))),
-                    None,
-                )]),
+                Stmt::Let(vec![(count, Some(Expr::Literal(Literal::Int(0))), None)]),
                 Stmt::Function(
-                    "increment".to_string(),
-                    vec!["self".to_string()],
+                    increment,
+                    vec![self_sym],
                     Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Null))])),
                 ),
             ],
@@ -1011,13 +1074,14 @@ fn eval_class_with_method() {
 
 #[test]
 fn eval_cross_type_equality_is_false() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Int == String should be false
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Eq,
             Box::new(Expr::Literal(Literal::Int(1))),
-            Box::new(Expr::Literal(Literal::Str("1".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(context.intern("1")))),
         ))],
     };
     assert!(axe.run(program).is_ok());
@@ -1025,13 +1089,14 @@ fn eval_cross_type_equality_is_false() {
 
 #[test]
 fn eval_cross_type_inequality_is_true() {
-    let mut axe = Axe::new();
+    let context = Context::new();
+    let mut axe = Axe::new(&context);
     // Int != String should be true
     let program = Program {
         stmts: vec![Stmt::Expr(Expr::Binary(
             Operation::Neq,
             Box::new(Expr::Literal(Literal::Int(1))),
-            Box::new(Expr::Literal(Literal::Str("1".to_string()))),
+            Box::new(Expr::Literal(Literal::Str(context.intern("1")))),
         ))],
     };
     assert!(axe.run(program).is_ok());

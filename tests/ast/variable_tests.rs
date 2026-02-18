@@ -1,17 +1,19 @@
-use axe::{Axe, Expr, Literal, Operation, Program, Stmt};
+use axe::{Axe, Context};
+use axe::{Expr, Literal, Operation, Program, Stmt};
 
 #[test]
 fn set_and_get_variable() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(42))),
                 None,
             )]),
-            Stmt::Expr(Expr::Var("x".into())),
+            Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
 
@@ -21,12 +23,13 @@ fn set_and_get_variable() {
 
 #[test]
 fn nested_expression_with_variable() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![(
-                "x".into(),
+                ctx.intern("x"),
                 Some(Expr::Literal(Literal::Int(3))),
                 None,
             )]),
@@ -34,7 +37,7 @@ fn nested_expression_with_variable() {
                 Operation::Mul,
                 Box::new(Expr::Binary(
                     Operation::Add,
-                    Box::new(Expr::Var("x".into())),
+                    Box::new(Expr::Var(ctx.intern("x"))),
                     Box::new(Expr::Literal(Literal::Int(2))),
                 )),
                 Box::new(Expr::Literal(Literal::Int(4))),
@@ -48,9 +51,10 @@ fn nested_expression_with_variable() {
 
 #[test]
 fn undefined_variable_fails() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
     let program = Program {
-        stmts: vec![Stmt::Expr(Expr::Var("y".into()))],
+        stmts: vec![Stmt::Expr(Expr::Var(ctx.intern("y")))],
     };
     let err = axe.run(program).unwrap_err();
     assert_eq!(err, "undefined variable");
@@ -58,12 +62,17 @@ fn undefined_variable_fails() {
 
 #[test]
 fn null_can_be_stored_in_variable() {
-    let mut axe = Axe::new();
+    let ctx = Context::new();
+    let mut axe = Axe::new(&ctx);
 
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![("x".into(), Some(Expr::Literal(Literal::Null)), None)]),
-            Stmt::Expr(Expr::Var("x".into())),
+            Stmt::Let(vec![(
+                ctx.intern("x"),
+                Some(Expr::Literal(Literal::Null)),
+                None,
+            )]),
+            Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
 

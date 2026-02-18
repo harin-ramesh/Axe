@@ -5,11 +5,14 @@
 
 use std::fmt;
 
-use crate::ast::{Expr, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::ast::{Expr, ExprId, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::context::Context;
+use crate::interner::Symbol;
 use crate::transformer::Transformer;
 
 use super::builtins::*;
 use super::environment::{EnvRef, Environment};
+use super::resolver::{Locals, Resolver};
 use super::value::Value;
 
 /// Signals that can arise during evaluation.
@@ -66,6 +69,10 @@ fn is_valid_var_name(name: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+fn is_valid_symbol_name(ctx: &Context, sym: Symbol) -> bool {
+    is_valid_var_name(&ctx.resolve(sym))
+}
+
 /// Helper: run `eval_block` on a function body and catch `EvalSignal::Return`.
 ///
 /// - If the block completes normally, return `Null` (no implicit return).
@@ -84,37 +91,64 @@ fn catch_return(result: Result<Value, EvalSignal>) -> Result<Value, EvalSignal> 
 /// This interpreter directly evaluates the AST by recursively traversing
 /// the tree structure. It's simpler than a bytecode VM but less efficient
 /// for repeated execution of the same code.
-pub struct TreeWalker {
+pub struct TreeWalker<'ctx> {
     globals: EnvRef,
     transformer: Transformer,
+    /// Resolved variable locations (expression ID -> depth)
+    locals: Locals,
+    /// Context for string interning (borrowed)
+    ctx: &'ctx Context,
 }
 
-impl TreeWalker {
-    pub fn new() -> Self {
+impl<'ctx> TreeWalker<'ctx> {
+    pub fn new(ctx: &'ctx Context) -> Self {
         let globals = Environment::new();
 
-        // Add built-in functions
-        globals.borrow_mut().set(
-            "print".to_string(),
-            Value::NativeFunction("print".to_string(), native_print),
-        );
-        globals.borrow_mut().set(
-            "type".to_string(),
-            Value::NativeFunction("type".to_string(), native_type),
-        );
-        globals.borrow_mut().set(
-            "range".to_string(),
-            Value::NativeFunction("range".to_string(), native_range),
-        );
+        // Initialize built-in functions and classes
+        init_builtins(ctx, &globals);
 
         Self {
             globals,
             transformer: Transformer,
+            locals: Locals::new(),
+            ctx,
         }
     }
 
+    /// Get a reference to the context.
+    pub fn context(&self) -> &Context {
+        self.ctx
+    }
+
+    /// Set the resolved variable locations.
+    pub fn set_locals(&mut self, locals: Locals) {
+        self.locals = locals;
+    }
+
     pub fn run(&mut self, program: Program) -> Result<Value, EvalSignal> {
+        // Transform the program first (desugar fn -> lambda, for -> while, etc.)
+        let program = self.transformer.transform_program(program);
+
+        // Auto-resolve variable scopes for O(1) lookups
+        let resolver = Resolver::new();
+        if let Ok(locals) = resolver.resolve(&program) {
+            self.locals = locals;
+        }
+        // If resolution fails, we fall back to dynamic lookup (locals stays empty)
+
         self.eval_program(program, None)
+    }
+
+    /// Look up a variable, using resolved location if available.
+    fn lookup_variable(&self, expr_id: ExprId, name: Symbol, env: &EnvRef) -> Option<Value> {
+        if let Some(location) = self.locals.get(&expr_id) {
+            // Use resolved depth for O(depth) lookup instead of O(n) hash lookup
+            env.borrow().get_at(location.depth, name)
+        } else {
+            // Fall back to full scope chain lookup for unresolved variables
+            // This handles globals and cases where the resolver wasn't run
+            env.borrow().get(name)
+        }
     }
 
     fn eval_program(&mut self, program: Program, env: Option<EnvRef>) -> Result<Value, EvalSignal> {
@@ -159,29 +193,31 @@ impl TreeWalker {
 
     fn eval_imports(
         &mut self,
-        module: String,
-        imports: Vec<String>,
+        module: Symbol,
+        imports: Vec<Symbol>,
         _env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        let path = format!("{}.ax", module);
+        let module_name = self.ctx.resolve(module);
+        let path = format!("{}.ax", module_name);
         let source = std::fs::read_to_string(&path)
             .map_err(|_| EvalSignal::Error(format!("failed to open module file: {}", path)))?;
 
-        let mut parser = crate::Parser::new(&source);
-        let program = parser
-            .parse()
-            .map_err(|e| EvalSignal::Error(format!("parse error in module '{}': {}", module, e)))?;
+        let mut parser = crate::Parser::new(&source, self.ctx);
+        let program = parser.parse().map_err(|e| {
+            EvalSignal::Error(format!("parse error in module '{}': {}", module_name, e))
+        })?;
 
-        let mut module_interpreter = TreeWalker::new();
+        // Create module interpreter sharing the same context (no clone needed!)
+        let mut module_interpreter = TreeWalker::new(self.ctx);
         module_interpreter.run(program)?;
 
         for import in imports {
-            if let Some(value) = module_interpreter.globals.borrow().get(&import) {
-                self.globals.borrow_mut().set(import.clone(), value.clone());
+            if let Some(value) = module_interpreter.globals.borrow().get(import) {
+                self.globals.borrow_mut().set(import, value.clone());
             } else {
                 return Err(EvalSignal::Error(format!(
                     "import '{}' not found in module",
-                    import
+                    self.ctx.resolve(import)
                 )));
             }
         }
@@ -190,40 +226,49 @@ impl TreeWalker {
 
     fn eval_let(
         &mut self,
-        declarations: Vec<(String, Option<Expr>, Option<Expr>)>,
+        declarations: Vec<(Symbol, Option<Expr>, Option<Expr>)>,
         env: EnvRef,
     ) -> Result<Value, EvalSignal> {
         for decl in declarations {
             let (name, expr_opt, expr_obj) = decl;
-            if !is_valid_var_name(&name) {
+
+            if !is_valid_symbol_name(self.ctx, name) {
                 return Err("invalid variable name".into());
             }
-            let value = if let Some(expr) = expr_opt {
-                self.eval_expr(expr, Some(env.clone()))?
-            } else {
-                Value::Literal(Literal::Null)
-            };
-            if let Some(expr) = expr_obj {
-                let obj = self.eval_expr(expr, Some(env.clone()))?;
+
+            // If there's a target object (like obj.prop = value), handle property assignment
+            if let Some(obj_expr) = expr_obj {
+                let obj = self.eval_expr(obj_expr, Some(env.clone()))?;
                 if let Value::Object(obj_env) = obj {
-                    obj_env.borrow_mut().set(name.clone(), value);
+                    let value = if let Some(expr) = expr_opt {
+                        self.eval_expr(expr, Some(env.clone()))?
+                    } else {
+                        Value::Literal(Literal::Null)
+                    };
+                    obj_env.borrow_mut().set(name, value);
                 } else {
-                    return Err("expected object for let ... in ...".into());
+                    return Err("Cannot assign property to non-object".into());
                 }
             } else {
-                env.borrow_mut().set(name.to_string(), value);
+                // Normal variable declaration
+                let value = if let Some(expr) = expr_opt {
+                    self.eval_expr(expr, Some(env.clone()))?
+                } else {
+                    Value::Literal(Literal::Null)
+                };
+                env.borrow_mut().set(name, value);
             }
         }
         Ok(Value::Literal(Literal::Null))
     }
 
-    fn eval_assign(&mut self, name: String, expr: Expr, env: EnvRef) -> Result<Value, EvalSignal> {
-        if !is_valid_var_name(&name) {
+    fn eval_assign(&mut self, name: Symbol, expr: Expr, env: EnvRef) -> Result<Value, EvalSignal> {
+        if !is_valid_symbol_name(self.ctx, name) {
             return Err("invalid variable name".into());
         }
         let value = self.eval_expr(expr, Some(env.clone()))?;
         env.borrow_mut()
-            .update(name.clone(), value.clone())
+            .update(name, value.clone())
             .map_err(EvalSignal::from)?;
         Ok(value)
     }
@@ -241,7 +286,7 @@ impl TreeWalker {
             Value::Literal(Literal::Null) => false,
             Value::Literal(Literal::Bool(b)) => b,
             Value::Literal(Literal::Int(0)) => false,
-            Value::Literal(Literal::Float(f)) if f == 0.0 => false,
+            Value::Literal(Literal::Float(0.0)) => false,
             _ => true,
         };
 
@@ -265,7 +310,7 @@ impl TreeWalker {
                 Value::Literal(Literal::Null) => false,
                 Value::Literal(Literal::Bool(b)) => b,
                 Value::Literal(Literal::Int(0)) => false,
-                Value::Literal(Literal::Float(f)) if f == 0.0 => false,
+                Value::Literal(Literal::Float(f)) => f != 0.0,
                 _ => true,
             };
 
@@ -275,462 +320,410 @@ impl TreeWalker {
 
             match body.as_ref() {
                 Stmt::Block(stmts) => match self.eval_block(stmts.clone(), env.clone()) {
-                    Ok(_) => (),
+                    Ok(_) => {}
                     Err(EvalSignal::Break) => break,
                     Err(EvalSignal::Continue) => continue,
                     Err(e) => return Err(e),
                 },
                 _ => return Err("Invalid while body".into()),
-            };
+            }
         }
-
         Ok(Value::Literal(Literal::Null))
     }
 
-    fn eval_block(&mut self, stmts: Vec<Stmt>, env: EnvRef) -> Result<Value, EvalSignal> {
+    fn eval_block(&mut self, stmts: Vec<Stmt>, parent_env: EnvRef) -> Result<Value, EvalSignal> {
+        let block_env = Environment::extend(parent_env);
+
+        let mut last_value = Value::Literal(Literal::Null);
         for stmt in stmts {
-            // If a return signal occurs, the `?` propagates it as
-            // Err(EvalSignal::Return(val)) up the call stack.
-            self.eval_stmt(stmt, Some(env.clone()))?;
+            last_value = self.eval_stmt(stmt, Some(block_env.clone()))?;
         }
-        Ok(Value::Literal(Literal::Null))
-    }
-
-    fn eval_function(
-        &mut self,
-        name: String,
-        params: Vec<String>,
-        body: Box<Stmt>,
-        env: EnvRef,
-    ) -> Result<Value, EvalSignal> {
-        // Transform fn to let + lambda, then evaluate as let statement
-        let transformed = self
-            .transformer
-            .transform_stmt(Stmt::Function(name, params, body));
-        self.eval_stmt(transformed, Some(env))
+        Ok(last_value)
     }
 
     fn eval_for(
         &mut self,
-        var: String,
+        var: Symbol,
         iterable: Expr,
         body: Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        // Evaluate the iterable expression to get the list
+        // Create a scope for the loop variable
         let for_scope = Environment::extend(env.clone());
         let iter_value = self.eval_expr(iterable, Some(for_scope.clone()))?;
 
         let items = match iter_value {
             Value::List(items) => items,
-            _ => return Err("for-in requires a list".into()),
+            _ => return Err("for loop requires an iterable (list)".into()),
         };
 
-        // Iterate over each item, executing the body in a child scope
         for item in items {
-            for_scope.borrow_mut().set(var.clone(), item);
+            for_scope.borrow_mut().set(var, item);
 
             match body.as_ref() {
                 Stmt::Block(stmts) => match self.eval_block(stmts.clone(), for_scope.clone()) {
-                    Ok(_) => (),
+                    Ok(_) => {}
                     Err(EvalSignal::Break) => break,
                     Err(EvalSignal::Continue) => continue,
                     Err(e) => return Err(e),
                 },
                 _ => return Err("Invalid for body".into()),
-            };
+            }
         }
-
         Ok(Value::Literal(Literal::Null))
     }
 
     fn eval_class(
         &mut self,
-        name: String,
-        parent: Option<String>,
+        name: Symbol,
+        parent: Option<Symbol>,
         body: Vec<Stmt>,
         env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        let class_env = if let Some(p) = parent {
-            if let Some(Value::Object(p_env)) = self.globals.borrow().get(&p) {
-                Environment::extend(p_env.clone())
+        // If there's a parent class, look it up and use its environment as base
+        let class_env = if let Some(parent_name) = parent {
+            let p_env = if let Some(Value::Object(penv)) = env.borrow().get(parent_name) {
+                penv
             } else {
                 return Err("Parent class not found".into());
-            }
+            };
+            Environment::extend(p_env.clone())
         } else {
             Environment::extend(env.clone())
         };
-        self.globals
-            .borrow_mut()
-            .set(name, Value::Object(class_env.clone()));
 
+        // Store the class environment before processing methods (for self reference)
+        env.borrow_mut().set(name, Value::Object(class_env.clone()));
+
+        let self_sym = self.ctx.intern("self");
         let self_env = Environment::extend(class_env.clone());
-        class_env
+        self_env
             .borrow_mut()
-            .set("self".to_string(), Value::Object(self_env.clone()));
+            .set(self_sym, Value::Object(self_env.clone()));
 
-        for expr in body {
-            match expr {
+        for stmt in body {
+            match stmt {
                 Stmt::Let(decls) => {
                     self.eval_let(decls, class_env.clone())?;
                 }
-                Stmt::Function(name, params, body) => {
-                    if params.first().map(|s| s.as_str()) == Some("self") {
-                        self.eval_function(name, params, body, self_env.clone())?;
+                Stmt::Function(fn_name, params, fn_body) => {
+                    if params.first().is_some_and(|p| *p == self_sym) {
+                        self.eval_function(fn_name, params, fn_body, self_env.clone())?;
                     } else {
-                        self.eval_function(name, params, body, class_env.clone())?;
+                        self.eval_function(fn_name, params, fn_body, class_env.clone())?;
                     }
                 }
-                _ => return Err("Invalid class definition".into()),
+                _ => {}
             }
         }
 
         Ok(Value::Literal(Literal::Null))
     }
 
+    fn eval_function(
+        &mut self,
+        name: Symbol,
+        params: Vec<Symbol>,
+        body: Box<Stmt>,
+        env: EnvRef,
+    ) -> Result<Value, EvalSignal> {
+        let func_value = Value::Function(params, body, env.clone());
+        env.borrow_mut().set(name, func_value);
+        Ok(Value::Literal(Literal::Null))
+    }
+
     fn eval_expr(&mut self, expr: Expr, env: Option<EnvRef>) -> Result<Value, EvalSignal> {
         let env = env.unwrap_or_else(|| self.globals.clone());
-        match expr {
-            Expr::Literal(lit) => Ok(Self::eval_literal(lit)),
-            Expr::List(elements) => {
-                // Evaluate each element and create a list
-                let mut values = Vec::new();
+
+        match expr.kind {
+            ExprKind::Literal(lit) => Ok(Value::Literal(lit)),
+            ExprKind::List(elements) => {
+                let mut values = Vec::with_capacity(elements.len());
                 for elem in elements {
                     values.push(self.eval_expr(elem, Some(env.clone()))?);
                 }
                 Ok(Value::List(values))
             }
-            Expr::Var(name) => env
-                .borrow()
-                .get(&name)
-                .ok_or_else(|| EvalSignal::Error("undefined variable".to_string())),
-            Expr::Binary(op, lhs, rhs) => {
+            ExprKind::Var(name) => {
+                let value = self.lookup_variable(expr.id, name, &env);
+                match value {
+                    Some(val) => Ok(val),
+                    None => Err("undefined variable".into()),
+                }
+            }
+            ExprKind::Binary(op, lhs, rhs) => {
                 let left = self.eval_expr(*lhs, Some(env.clone()))?;
                 let right = self.eval_expr(*rhs, Some(env))?;
-                Self::eval_binary(op, left, right)
+                self.eval_binary(op, left, right)
             }
-            Expr::Unary(op, operand) => {
+            ExprKind::Unary(op, operand) => {
                 let value = self.eval_expr(*operand, Some(env.clone()))?;
-                Self::eval_unary(op, value)
+                self.eval_unary(op, value)
             }
-            Expr::Lambda(params, body) => {
-                // Validate parameter names
-                for param in &params {
-                    if !is_valid_var_name(param) {
-                        return Err("invalid parameter name".into());
-                    }
-                }
-
-                // Create a closure capturing the current environment
+            ExprKind::Lambda(params, body) => {
                 let func_value = Value::Function(params.clone(), body.clone(), env.clone());
-
                 Ok(func_value)
             }
-            Expr::Call(name, args) => {
-                // Get the function from the environment
-                let func = env
-                    .borrow()
-                    .get(&name)
-                    .ok_or_else(|| EvalSignal::Error("undefined function".to_string()))?;
+            ExprKind::Call(name, args) => {
+                // Look up the function by name, respecting resolved scope depth
+                let func = self.lookup_variable(expr.id, name, &env);
+
                 match func {
-                    Value::Function(params, body, closure_env) => {
-                        // Check argument count
-                        if params.len() != args.len() {
-                            return Err("argument count mismatch".into());
+                    Some(Value::Function(params, body, closure_env)) => {
+                        if args.len() != params.len() {
+                            return Err("wrong number of arguments".into());
                         }
 
-                        // Evaluate arguments in the caller's environment
-                        let mut arg_values = Vec::new();
+                        let mut arg_values = Vec::with_capacity(args.len());
                         for arg in args {
                             arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                         }
 
-                        // Create a new environment extending the closure environment
                         let func_env = Environment::extend(closure_env);
-
-                        // Bind parameters to argument values
-                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                        for (param, value) in params.iter().zip(arg_values) {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
 
-                        // Evaluate function body and catch return signals
-                        catch_return(self.eval_block(
-                            match *body {
-                                Stmt::Block(stmts) => stmts,
-                                _ => return Err("function body must be a block".into()),
-                            },
-                            func_env,
-                        ))
+                        match *body {
+                            Stmt::Block(stmts) => catch_return(self.eval_block(stmts, func_env)),
+                            _ => self.eval_stmt(*body, Some(func_env)),
+                        }
                     }
-                    Value::NativeFunction(_, native_fn) => {
-                        // Evaluate arguments in the caller's environment
-                        let mut arg_values = Vec::new();
+                    Some(Value::NativeFunction(_, native_fn)) => {
+                        let mut arg_values = Vec::with_capacity(args.len());
                         for arg in args {
                             arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                         }
-
-                        // Call the native function
-                        native_fn(&arg_values)
+                        native_fn(self.ctx, &arg_values)
                     }
-                    _ => Err("not a function".into()),
+                    Some(_) => Err("not a function".into()),
+                    None => Err("undefined function".into()),
                 }
             }
-            Expr::New(class, args) => {
-                let Some(Value::Object(class_env)) = self.globals.borrow().get(&class) else {
-                    return Err("Class not found".into());
-                };
+            ExprKind::New(class_name, args) => {
+                let class = self.lookup_variable(expr.id, class_name, &env);
 
-                let Some(Value::Object(instance_env)) = class_env.borrow().get("self") else {
-                    return Err("Class not found".into());
-                };
+                match class {
+                    Some(Value::Object(class_env)) => {
+                        let self_sym = self.ctx.intern("self");
 
-                let func = instance_env
-                    .borrow()
-                    .get("init")
-                    .ok_or_else(|| EvalSignal::Error("undefined constructor".to_string()))?;
+                        // Create a new instance environment that inherits from the class
+                        let instance_env = Environment::extend(class_env.clone());
+                        let instance = Value::Object(Environment::extend(instance_env.clone()));
 
-                let instance = Value::Object(Environment::extend(instance_env.clone()));
+                        // Look for init method
+                        let init_sym = self.ctx.intern("init");
+                        if let Some(Value::Function(params, body, closure)) =
+                            class_env.borrow().get(init_sym)
+                        {
+                            let mut arg_values = Vec::with_capacity(args.len());
+                            for arg in args {
+                                arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
+                            }
+                            arg_values.insert(0, instance.clone());
 
-                if let Value::Function(params, body, closure_env) = func {
-                    if params.len() != (args.len() + 1) {
-                        return Err("Argument count mismatch".into());
+                            let func_env = Environment::extend(closure);
+                            for (param, value) in params.iter().zip(arg_values) {
+                                func_env.borrow_mut().set(*param, value.clone());
+                            }
+                            func_env.borrow_mut().set(self_sym, instance.clone());
+
+                            if let Stmt::Block(stmts) = *body {
+                                catch_return(self.eval_block(stmts, func_env))?;
+                            }
+                        }
+
+                        Ok(instance)
                     }
-
-                    let mut arg_values = Vec::new();
-                    for arg in args {
-                        arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
-                    }
-                    arg_values.insert(0, instance.clone());
-
-                    let func_env = Environment::extend(closure_env);
-                    for (param, value) in params.iter().zip(arg_values.iter()) {
-                        func_env.borrow_mut().set(param.clone(), value.clone());
-                    }
-                    func_env
-                        .borrow_mut()
-                        .set("self".to_string(), instance.clone());
-
-                    // Constructor: catch return but discard the value -- always return instance
-                    catch_return(self.eval_block(
-                        match *body {
-                            Stmt::Block(stmts) => stmts,
-                            _ => return Err("function body must be a block".into()),
-                        },
-                        func_env,
-                    ))?;
+                    Some(_) => Err("not a class".into()),
+                    None => Err("class not found".into()),
                 }
-
-                Ok(instance)
             }
-            Expr::Property(obj_expr, name) => {
+            ExprKind::Property(obj_expr, prop) => {
                 let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
-
-                let Value::Object(obj_env) = obj else {
-                    return Err("Cannot access property on non-object".into());
-                };
-
-                match obj_env.borrow().get(&name) {
-                    Some(value) => Ok(value.clone()),
-                    None => Err("Property not found".into()),
+                match obj {
+                    Value::Object(obj_env) => {
+                        let value = obj_env.borrow().get(prop);
+                        match value {
+                            Some(value) => Ok(value.clone()),
+                            None => Err("property not found".into()),
+                        }
+                    }
+                    _ => Err("cannot access property on non-object".into()),
                 }
             }
-            Expr::MethodCall(obj_expr, method, args) => {
+            ExprKind::MethodCall(obj_expr, method, args) => {
                 let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
-
-                // Evaluate arguments
-                let mut arg_values = Vec::new();
+                let mut arg_values = Vec::with_capacity(args.len());
                 for arg in args {
                     arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                 }
-
-                self.call_method(obj, &method, arg_values, env)
+                self.eval_method_call(obj, method, arg_values)
             }
-            Expr::StaticProperty(obj_expr, name) => {
+            ExprKind::StaticProperty(obj_expr, prop) => {
                 let obj = self.eval_expr(*obj_expr, Some(env.clone()))?;
-
-                let Value::Object(obj_env) = obj else {
-                    return Err("Cannot access property on non-object".into());
-                };
-
-                match obj_env.borrow().get(&name) {
-                    Some(value) => Ok(value.clone()),
-                    None => Err("Property not found".into()),
+                match obj {
+                    Value::Object(obj_env) => {
+                        let value = obj_env.borrow().get(prop);
+                        match value {
+                            Some(value) => Ok(value.clone()),
+                            None => Err("static property not found".into()),
+                        }
+                    }
+                    _ => Err("cannot access static property on non-class".into()),
                 }
             }
-            Expr::StaticMethodCall(obj_expr, method, args) => {
+            ExprKind::StaticMethodCall(obj_expr, method, args) => {
                 let Value::Object(class_env) = self.eval_expr(*obj_expr, Some(env.clone()))? else {
-                    return Err("Undefined class".into());
+                    return Err("cannot call static method on non-class".into());
                 };
 
-                let func = class_env
-                    .borrow()
-                    .get(&method)
-                    .ok_or_else(|| EvalSignal::Error("Method not found".to_string()))?;
-
+                let func = class_env.borrow().get(method);
                 match func {
-                    Value::Function(params, body, closure_env) => {
-                        if params.len() != args.len() {
-                            return Err("argument count mismatch".into());
+                    Some(Value::Function(params, body, closure)) => {
+                        // For static methods, don't pass self
+                        if args.len() != params.len() {
+                            return Err("wrong number of arguments".into());
                         }
 
-                        // Evaluate arguments in the caller's environment
-                        let mut arg_values = Vec::new();
+                        let mut arg_values = Vec::with_capacity(args.len());
                         for arg in args {
                             arg_values.push(self.eval_expr(arg, Some(env.clone()))?);
                         }
 
-                        let func_env = Environment::extend(closure_env);
-                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                        let func_env = Environment::extend(closure);
+                        for (param, value) in params.iter().zip(arg_values) {
                             func_env.borrow_mut().set(param.clone(), value.clone());
                         }
 
-                        // Catch return signals at function boundary
-                        catch_return(self.eval_block(
-                            match *body {
-                                Stmt::Block(stmts) => stmts,
-                                _ => return Err("function body must be a block".into()),
-                            },
-                            func_env,
-                        ))
+                        match *body {
+                            Stmt::Block(stmts) => catch_return(self.eval_block(stmts, func_env)),
+                            _ => self.eval_stmt(*body, Some(func_env)),
+                        }
                     }
-                    _ => Err("not a function".into()),
+                    Some(_) => Err("not a method".into()),
+                    None => Err("static method not found".into()),
                 }
             }
         }
     }
 
-    fn call_method(
+    fn eval_method_call(
         &mut self,
         obj: Value,
-        method: &str,
+        method: Symbol,
         args: Vec<Value>,
-        _env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        match obj {
-            // String methods
-            Value::Literal(Literal::Str(ref s)) => match method {
-                "len" => {
-                    if !args.is_empty() {
-                        return Err("len() takes no arguments".into());
-                    }
-                    Ok(Value::Literal(Literal::Int(s.len() as i64)))
-                }
-                "concat" => {
-                    let mut result = s.clone();
-                    for arg in args {
-                        match arg {
-                            Value::Literal(Literal::Str(other)) => result.push_str(&other),
-                            _ => return Err("concat() requires string arguments".into()),
-                        }
-                    }
-                    Ok(Value::Literal(Literal::Str(result)))
-                }
-                _ => Err("Unknown string method".into()),
-            },
-
-            // List methods
-            Value::List(ref items) => match method {
-                "len" => {
-                    if !args.is_empty() {
-                        return Err("len() takes no arguments".into());
-                    }
-                    Ok(Value::Literal(Literal::Int(items.len() as i64)))
-                }
-                "push" => {
-                    if args.len() != 1 {
-                        return Err("push() takes exactly 1 argument".into());
-                    }
-                    let mut new_list = items.clone();
-                    new_list.push(args.into_iter().next().unwrap());
-                    Ok(Value::List(new_list))
-                }
-                "get" => {
-                    if args.len() != 1 {
-                        return Err("get() takes exactly 1 argument".into());
-                    }
-                    match &args[0] {
-                        Value::Literal(Literal::Int(idx)) => {
-                            let index = if *idx < 0 {
-                                (items.len() as i64 + idx) as usize
-                            } else {
-                                *idx as usize
-                            };
-                            items
-                                .get(index)
-                                .cloned()
-                                .ok_or_else(|| EvalSignal::Error("index out of bounds".to_string()))
-                        }
-                        _ => Err("get() requires an integer argument".into()),
-                    }
-                }
-                "concat" => {
-                    let mut result = items.clone();
-                    for arg in args {
-                        match arg {
-                            Value::List(other) => result.extend(other),
-                            _ => return Err("concat() requires list arguments".into()),
-                        }
-                    }
-                    Ok(Value::List(result))
-                }
-                _ => Err("Unknown list method".into()),
-            },
-
-            // Object methods - look up method in object's environment
+        // Get the class for this value type
+        let class_sym = match &obj {
+            Value::Literal(Literal::Str(_)) => self.ctx.intern("String"),
+            Value::List(_) => self.ctx.intern("List"),
             Value::Object(obj_env) => {
-                let func = obj_env
-                    .borrow()
-                    .get(method)
-                    .ok_or_else(|| EvalSignal::Error("Method not found".to_string()))?;
+                // For objects, look up the method directly on the object
+                return self.eval_object_method_call(obj_env.clone(), method, args);
+            }
+            _ => return Err("cannot call method on this type".into()),
+        };
 
-                match func {
-                    Value::Function(params, body, closure_env) => {
-                        if params.len() != args.len() + 1 {
-                            return Err("argument count mismatch".into());
-                        }
+        // Look up the class in globals
+        let class = self.globals.borrow().get(class_sym);
+        let Some(Value::Object(class_env)) = class else {
+            return Err("internal error: built-in class not found".into());
+        };
 
-                        let func_env = Environment::extend(closure_env);
+        // Look up the method in the class
+        let func = class_env.borrow().get(method);
+        match func {
+            Some(Value::NativeFunction(_, native_fn)) => {
+                // Call native method with self as first argument
+                let mut all_args = Vec::with_capacity(args.len() + 1);
+                all_args.push(obj);
+                all_args.extend(args);
+                native_fn(self.ctx, &all_args)
+            }
+            Some(Value::Function(params, body, closure)) => {
+                // Call user-defined method with self as first argument
+                let self_sym = self.ctx.intern("self");
+                let has_self = params.first().is_some_and(|p| *p == self_sym);
 
-                        func_env
-                            .borrow_mut()
-                            .set(params[0].clone(), Value::Object(obj_env.clone()));
+                let expected_args = if has_self {
+                    params.len() - 1
+                } else {
+                    params.len()
+                };
+                if args.len() != expected_args {
+                    return Err("wrong number of arguments".into());
+                }
 
-                        for (param, value) in params.iter().skip(1).zip(args.iter()) {
-                            func_env.borrow_mut().set(param.clone(), value.clone());
-                        }
+                let func_env = Environment::extend(closure);
+                if has_self {
+                    func_env.borrow_mut().set(params[0], obj);
+                }
+                for (param, value) in params.iter().skip(if has_self { 1 } else { 0 }).zip(args) {
+                    func_env.borrow_mut().set(*param, value.clone());
+                }
 
-                        // Catch return signals at method boundary
-                        catch_return(self.eval_block(
-                            match *body {
-                                Stmt::Block(stmts) => stmts,
-                                _ => return Err("function body must be a block".into()),
-                            },
-                            func_env,
-                        ))
-                    }
-                    Value::NativeFunction(_, native_fn) => native_fn(&args),
-                    _ => Err("not a method".into()),
+                match *body {
+                    Stmt::Block(stmts) => catch_return(self.eval_block(stmts, func_env)),
+                    _ => self.eval_stmt(*body, Some(func_env)),
                 }
             }
-
-            _ => Err("Cannot call method on this type".into()),
+            Some(_) => Err("not a method".into()),
+            None => Err("method not found".into()),
         }
     }
 
-    fn eval_literal(lit: Literal) -> Value {
-        Value::Literal(lit)
+    fn eval_object_method_call(
+        &mut self,
+        obj_env: EnvRef,
+        method: Symbol,
+        args: Vec<Value>,
+    ) -> Result<Value, EvalSignal> {
+        let func = obj_env.borrow().get(method);
+        match func {
+            Some(Value::Function(params, body, closure)) => {
+                // For instance methods, prepend self
+                let self_sym = self.ctx.intern("self");
+                let has_self = params.first().is_some_and(|p| *p == self_sym);
+
+                let expected_args = if has_self {
+                    params.len() - 1
+                } else {
+                    params.len()
+                };
+                if args.len() != expected_args {
+                    return Err("wrong number of arguments".into());
+                }
+
+                let func_env = Environment::extend(closure);
+                if has_self {
+                    func_env
+                        .borrow_mut()
+                        .set(params[0], Value::Object(obj_env.clone()));
+                }
+                for (param, value) in params.iter().skip(if has_self { 1 } else { 0 }).zip(args) {
+                    func_env.borrow_mut().set(*param, value.clone());
+                }
+
+                match *body {
+                    Stmt::Block(stmts) => catch_return(self.eval_block(stmts, func_env)),
+                    _ => self.eval_stmt(*body, Some(func_env)),
+                }
+            }
+            Some(_) => Err("not a method".into()),
+            None => Err("method not found".into()),
+        }
     }
 
-    fn eval_binary(op: Operation, left: Value, right: Value) -> Result<Value, EvalSignal> {
+    fn eval_binary(&self, op: Operation, left: Value, right: Value) -> Result<Value, EvalSignal> {
         use Literal::*;
         use Operation::*;
 
         match (op, left, right) {
-            // Int
+            // Integer arithmetic
             (Add, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a + b))),
             (Sub, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a - b))),
             (Mul, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a * b))),
-            (Mod, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Int(a % b))),
             (Div, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
                 if b == 0 {
                     Err("division by zero".into())
@@ -738,20 +731,15 @@ impl TreeWalker {
                     Ok(Value::Literal(Int(a / b)))
                 }
             }
-            (And, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
-                Ok(Value::Literal(Bool(a != 0 && b != 0)))
-            }
-            (Or, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
-                Ok(Value::Literal(Bool(a != 0 || b != 0)))
-            }
-            (BitwiseAnd, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
-                Ok(Value::Literal(Int(a & b)))
-            }
-            (BitwiseOr, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
-                Ok(Value::Literal(Int(a | b)))
+            (Mod, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                if b == 0 {
+                    Err("division by zero".into())
+                } else {
+                    Ok(Value::Literal(Int(a % b)))
+                }
             }
 
-            // Float
+            // Float arithmetic
             (Add, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
                 Ok(Value::Literal(Float(a + b)))
             }
@@ -768,14 +756,8 @@ impl TreeWalker {
                     Ok(Value::Literal(Float(a / b)))
                 }
             }
-            (And, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
-                Ok(Value::Literal(Bool(a != 0.0 && b != 0.0)))
-            }
-            (Or, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
-                Ok(Value::Literal(Bool(a != 0.0 || b != 0.0)))
-            }
 
-            // Comparison operations for Int
+            // Integer comparison
             (Gt, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Bool(a > b))),
             (Lt, Value::Literal(Int(a)), Value::Literal(Int(b))) => Ok(Value::Literal(Bool(a < b))),
             (Gte, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
@@ -791,7 +773,7 @@ impl TreeWalker {
                 Ok(Value::Literal(Bool(a != b)))
             }
 
-            // Comparison operations for Float
+            // Float comparison
             (Gt, Value::Literal(Float(a)), Value::Literal(Float(b))) => {
                 Ok(Value::Literal(Bool(a > b)))
             }
@@ -811,30 +793,13 @@ impl TreeWalker {
                 Ok(Value::Literal(Bool(a != b)))
             }
 
-            // Equality operations for String
-            (Eq, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
-                Ok(Value::Literal(Bool(a == b)))
-            }
-            (Neq, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
-                Ok(Value::Literal(Bool(a != b)))
-            }
-
-            (And, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
-                Ok(Value::Literal(Bool(!a.is_empty() && !b.is_empty())))
-            }
-            (Or, Value::Literal(Str(ref a)), Value::Literal(Str(ref b))) => {
-                Ok(Value::Literal(Bool(!a.is_empty() || !b.is_empty())))
-            }
-
-            // Logical operations for Bool
+            // Boolean operations
             (And, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
                 Ok(Value::Literal(Bool(a && b)))
             }
             (Or, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
                 Ok(Value::Literal(Bool(a || b)))
             }
-
-            // Equality operations for Bool
             (Eq, Value::Literal(Bool(a)), Value::Literal(Bool(b))) => {
                 Ok(Value::Literal(Bool(a == b)))
             }
@@ -842,32 +807,63 @@ impl TreeWalker {
                 Ok(Value::Literal(Bool(a != b)))
             }
 
-            // Cross-type equality checks (always false for Eq, true for Neq)
+            // String operations
+            (Eq, Value::Literal(Str(a)), Value::Literal(Str(b))) => {
+                Ok(Value::Literal(Bool(a == b)))
+            }
+            (Neq, Value::Literal(Str(a)), Value::Literal(Str(b))) => {
+                Ok(Value::Literal(Bool(a != b)))
+            }
+
+            // Null operations
+            (Eq, Value::Literal(Null), Value::Literal(Null)) => Ok(Value::Literal(Bool(true))),
+            (Neq, Value::Literal(Null), Value::Literal(Null)) => Ok(Value::Literal(Bool(false))),
+            (Eq, Value::Literal(Null), _) | (Eq, _, Value::Literal(Null)) => {
+                Ok(Value::Literal(Bool(false)))
+            }
+            (Neq, Value::Literal(Null), _) | (Neq, _, Value::Literal(Null)) => {
+                Ok(Value::Literal(Bool(true)))
+            }
+
+            // Bitwise operations on integers
+            (BitwiseAnd, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Int(a & b)))
+            }
+            (BitwiseOr, Value::Literal(Int(a)), Value::Literal(Int(b))) => {
+                Ok(Value::Literal(Int(a | b)))
+            }
+
+            // Cross-type equality returns false
             (Eq, _, _) => Ok(Value::Literal(Bool(false))),
             (Neq, _, _) => Ok(Value::Literal(Bool(true))),
+
+            // Comparison between different types is an error
+            (Gt | Lt | Gte | Lte, _, _) => Err("comparison type mismatch".into()),
 
             _ => Err("Invalid operation".into()),
         }
     }
 
-    fn eval_unary(op: UnaryOp, operand: Value) -> Result<Value, EvalSignal> {
+    fn eval_unary(&self, op: UnaryOp, value: Value) -> Result<Value, EvalSignal> {
         use Literal::*;
         use UnaryOp::*;
 
-        match (op, operand) {
-            // Negation: -x
+        match (op, value) {
+            // Unary minus: -x
             (Neg, Value::Literal(Int(n))) => Ok(Value::Literal(Int(-n))),
             (Neg, Value::Literal(Float(f))) => Ok(Value::Literal(Float(-f))),
 
-            // Logical not: !x (truthy/falsy)
+            // Logical not: !x
             (Not, Value::Literal(Bool(b))) => Ok(Value::Literal(Bool(!b))),
             (Not, Value::Literal(Null)) => Ok(Value::Literal(Bool(true))),
             (Not, Value::Literal(Int(0))) => Ok(Value::Literal(Bool(true))),
             (Not, Value::Literal(Int(_))) => Ok(Value::Literal(Bool(false))),
             (Not, Value::Literal(Float(f))) if f == 0.0 => Ok(Value::Literal(Bool(true))),
             (Not, Value::Literal(Float(_))) => Ok(Value::Literal(Bool(false))),
-            (Not, Value::Literal(Str(ref s))) if s.is_empty() => Ok(Value::Literal(Bool(true))),
-            (Not, Value::Literal(Str(_))) => Ok(Value::Literal(Bool(false))),
+            (Not, Value::Literal(Str(s))) => {
+                let is_empty = self.ctx.resolve(s).is_empty();
+                Ok(Value::Literal(Bool(is_empty)))
+            }
             (Not, Value::List(ref items)) if items.is_empty() => Ok(Value::Literal(Bool(true))),
             (Not, Value::List(_)) => Ok(Value::Literal(Bool(false))),
             (Not, _) => Ok(Value::Literal(Bool(false))), // functions, objects are truthy
@@ -877,11 +873,5 @@ impl TreeWalker {
 
             _ => Err("Invalid unary operation".into()),
         }
-    }
-}
-
-impl Default for TreeWalker {
-    fn default() -> Self {
-        Self::new()
     }
 }

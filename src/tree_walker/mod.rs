@@ -7,8 +7,10 @@
 mod builtins;
 mod environment;
 mod interpreter;
+mod resolver;
 mod value;
 
 pub use environment::{EnvRef, Environment};
 pub use interpreter::{EvalSignal, TreeWalker};
+pub use resolver::{Locals, ResolvedLocation, Resolver};
 pub use value::Value;

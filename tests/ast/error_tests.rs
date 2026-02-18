@@ -1,12 +1,13 @@
-use axe::{Axe, EvalSignal, Literal, Parser, Value};
+use axe::{Axe, Context, EvalSignal, Literal, Parser, Value};
 
 // Helper function to parse and evaluate code
 fn eval(code: &str) -> Result<Value, EvalSignal> {
-    let mut parser = Parser::new(code);
+    let context = Context::new();
+    let mut parser = Parser::new(code, &context);
     let program = parser
         .parse()
         .map_err(|e| EvalSignal::Error(e.to_string()))?;
-    let mut axe = Axe::new();
+    let mut axe = Axe::new(&context);
     axe.run(program)
 }
 
@@ -126,7 +127,8 @@ fn error_no_arguments_when_required() {
 fn error_invalid_variable_name_starts_with_number() {
     let code = "let 123abc = 10;";
     // This should fail at parse time
-    let mut parser = Parser::new(code);
+    let context = Context::new();
+    let mut parser = Parser::new(code, &context);
     assert!(parser.parse().is_err());
 }
 
