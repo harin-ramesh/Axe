@@ -1350,3 +1350,26 @@ fn eval_chained_method_calls() {
     let result = run_code(code);
     assert!(result.is_ok());
 }
+
+#[test]
+fn parse_class_body_only_allows_fn_and_let() {
+    // Valid: function declaration
+    let result = parse("class Foo { fn bar() { 1; } }");
+    assert!(result.is_ok());
+
+    // Valid: field declaration
+    let result = parse("class Foo { let x = 1; }");
+    assert!(result.is_ok());
+
+    // Invalid: if statement in class body
+    let result = parse("class Foo { if true { 1; } }");
+    assert!(result.is_err());
+
+    // Invalid: while statement in class body
+    let result = parse("class Foo { while true { 1; } }");
+    assert!(result.is_err());
+
+    // Invalid: return statement in class body
+    let result = parse("class Foo { return 1; }");
+    assert!(result.is_err());
+}

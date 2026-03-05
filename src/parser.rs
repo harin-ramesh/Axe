@@ -149,7 +149,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     }
 
     // ClassDeclaration
-    //  : 'class' Identifier (':' Identifier)? '{' Statements '}'
+    //  : 'class' Identifier (':' Identifier)? '{' ClassBody '}'
     fn parse_class_declaration(&mut self) -> Result<Stmt, &'static str> {
         self.eat(TokenKind::Class)?;
         let name_token = self.eat(TokenKind::Identifier)?;
@@ -162,9 +162,74 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             None
         };
         self.eat(TokenKind::OpeningBrace)?;
-        let body = self.parse_statements(TokenKind::ClosingBrace)?;
+        let body = self.parse_class_body()?;
         self.eat(TokenKind::ClosingBrace)?;
         Ok(Stmt::Class(name, parent, body))
+    }
+
+    // ClassBody
+    //  : (FunctionDeclaration | FieldDeclaration)*
+    fn parse_class_body(&mut self) -> Result<Vec<Stmt>, &'static str> {
+        let mut statements = Vec::new();
+        while self.lookahead.map(|t| t.kind) != Some(TokenKind::ClosingBrace) {
+            match self.lookahead.map(|t| t.kind) {
+                Some(TokenKind::Fn) => statements.push(self.parse_function_declaration()?),
+                Some(TokenKind::Let) => statements.push(self.parse_field_declaration()?),
+                Some(TokenKind::Eof) | None => return Err("Unexpected end of input in class body"),
+                _ => return Err("Only method and field declarations are allowed in class body"),
+            }
+        }
+        Ok(statements)
+    }
+
+    // FieldDeclaration (class fields - only literals allowed)
+    //  : 'let' Identifier ('=' Literal)? ';'
+    fn parse_field_declaration(&mut self) -> Result<Stmt, &'static str> {
+        self.eat(TokenKind::Let)?;
+        let mut declarations = Vec::new();
+
+        loop {
+            let name_token = self.eat(TokenKind::Identifier)?;
+            let name = self.intern(name_token.lexeme);
+
+            let initializer = if self.lookahead.map(|t| t.kind) == Some(TokenKind::SimpleAssign) {
+                self.eat(TokenKind::SimpleAssign)?;
+                Some(self.parse_literal_only()?)
+            } else {
+                None
+            };
+
+            declarations.push((name, initializer, None));
+
+            if self.lookahead.map(|t| t.kind) != Some(TokenKind::Comma) {
+                break;
+            }
+            self.eat(TokenKind::Comma)?;
+        }
+
+        self.eat(TokenKind::Delimeter)?;
+        Ok(Stmt::Let(declarations))
+    }
+
+    // Parse only a literal (for class fields)
+    fn parse_literal_only(&mut self) -> Result<Expr, &'static str> {
+        match self.lookahead.map(|t| t.kind) {
+            Some(TokenKind::Number) => self.parse_numeric_literal(),
+            Some(TokenKind::String) => self.parse_string_literal(),
+            Some(TokenKind::True) => {
+                self.eat(TokenKind::True)?;
+                Ok(Expr::Literal(Literal::Bool(true)))
+            }
+            Some(TokenKind::False) => {
+                self.eat(TokenKind::False)?;
+                Ok(Expr::Literal(Literal::Bool(false)))
+            }
+            Some(TokenKind::Null) => {
+                self.eat(TokenKind::Null)?;
+                Ok(Expr::Literal(Literal::Null))
+            }
+            _ => Err("Class fields can only be initialized with literals"),
+        }
     }
 
     // FunctionDeclaration
