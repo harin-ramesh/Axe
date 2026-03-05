@@ -435,7 +435,9 @@ fn print_help() {
     println!("  x;              - Get variable value");
     println!();
     println!("\x1b[1mControl Flow:\x1b[0m");
-    println!("  \x1b[34mif\x1b[0m (x > 0) {{ \x1b[32m\"positive\"\x1b[0m; }} \x1b[34melse\x1b[0m {{ \x1b[32m\"not positive\"\x1b[0m; }}");
+    println!(
+        "  \x1b[34mif\x1b[0m (x > 0) {{ \x1b[32m\"positive\"\x1b[0m; }} \x1b[34melse\x1b[0m {{ \x1b[32m\"not positive\"\x1b[0m; }}"
+    );
     println!("  \x1b[34mwhile\x1b[0m (x > 0) {{ x = x - 1; }}");
     println!("  \x1b[34mfor\x1b[0m (\x1b[34mlet\x1b[0m i = 0; i < 10; i++) {{ ... }}");
     println!();
@@ -455,13 +457,17 @@ fn print_help() {
     println!("  i--;            - Decrement");
     println!();
     println!("\x1b[1mBuilt-in Functions:\x1b[0m");
-    println!("  \x1b[34mprint\x1b[0m(\x1b[32m\"Hello\"\x1b[0m, \x1b[32m\"World\"\x1b[0m, \x1b[33m42\x1b[0m);  - Prints arguments");
+    println!(
+        "  \x1b[34mprint\x1b[0m(\x1b[32m\"Hello\"\x1b[0m, \x1b[32m\"World\"\x1b[0m, \x1b[33m42\x1b[0m);  - Prints arguments"
+    );
     println!("  \x1b[34mlen\x1b[0m(list);      - Get list length");
     println!("  \x1b[34mget\x1b[0m(list, i);   - Get element at index");
     println!();
     println!("\x1b[1mExample:\x1b[0m");
     println!("  \x1b[34mlet\x1b[0m sum = \x1b[33m0\x1b[0m;");
-    println!("  \x1b[34mfor\x1b[0m (\x1b[34mlet\x1b[0m i = \x1b[33m1\x1b[0m; i <= \x1b[33m5\x1b[0m; i++) {{");
+    println!(
+        "  \x1b[34mfor\x1b[0m (\x1b[34mlet\x1b[0m i = \x1b[33m1\x1b[0m; i <= \x1b[33m5\x1b[0m; i++) {{"
+    );
     println!("    sum = sum + i;");
     println!("  }}");
     println!("  sum;            - Returns \x1b[33m15\x1b[0m");

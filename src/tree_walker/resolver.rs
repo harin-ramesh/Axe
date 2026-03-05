@@ -271,7 +271,10 @@ impl<'a> Resolver<'a> {
                         }
                         _ => {
                             // Parser should prevent this, but catch it here as a safety net
-                            return Err("Only method and field declarations are allowed in class body".to_string());
+                            return Err(
+                                "Only method and field declarations are allowed in class body"
+                                    .to_string(),
+                            );
                         }
                     }
                 }
@@ -400,9 +403,9 @@ impl<'a> Resolver<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Parser;
     use crate::context::Context;
     use crate::transformer::Transformer;
-    use crate::Parser;
 
     fn resolve_source(source: &str) -> Result<Locals, String> {
         let ctx = Context::new();
@@ -497,7 +500,11 @@ mod tests {
         let source = "return 42;";
         let result = resolve_source(source);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Can't return from top-level code"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Can't return from top-level code")
+        );
     }
 
     #[test]
@@ -533,7 +540,11 @@ mod tests {
         "#;
         let result = resolve_source(source);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Can't use 'self' parameter outside of a method"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Can't use 'self' parameter outside of a method")
+        );
     }
 
     #[test]
