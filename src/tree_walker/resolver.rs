@@ -8,6 +8,7 @@ use fxhash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::ast::{Expr, ExprId, ExprKind, Program, Stmt};
+use crate::context::Context;
 use crate::interner::Symbol;
 
 /// Resolved location of a variable.
@@ -109,21 +110,24 @@ enum FunctionType {
 }
 
 /// Variable resolver that performs static scope analysis.
-pub struct Resolver {
+pub struct Resolver<'a> {
     /// Stack of scopes, each scope maps variable names to their declaration status.
     scopes: Vec<Scope>,
     /// The resolved locations for each variable/assignment expression.
     locals: Locals,
     /// Current function type (for tracking method context).
     current_function: FunctionType,
+    /// Context for resolving symbols.
+    ctx: &'a Context,
 }
 
-impl Resolver {
-    pub fn new() -> Self {
+impl<'a> Resolver<'a> {
+    pub fn new(ctx: &'a Context) -> Self {
         Self {
             scopes: Vec::new(),
             locals: Locals::new(),
             current_function: FunctionType::None,
+            ctx,
         }
     }
 
@@ -228,6 +232,7 @@ impl Resolver {
             }
 
             Stmt::Function(name, params, body) => {
+                // Define eagerly (before resolving body) to allow recursion
                 self.declare(*name);
                 self.define(*name);
                 self.resolve_function(params, body, FunctionType::Function)?;
@@ -245,17 +250,37 @@ impl Resolver {
                     }
                 }
 
-                // Resolve methods within the class
+                // Resolve methods and fields within the class
                 for stmt in body {
-                    if let Stmt::Function(_, params, method_body) = stmt {
-                        self.resolve_function(params, method_body, FunctionType::Method)?;
-                    } else {
-                        self.resolve_stmt(stmt)?;
+                    match stmt {
+                        Stmt::Function(name, params, method_body) => {
+                            // Method declaration
+                            self.declare(*name);
+                            self.define(*name);
+                            self.resolve_function(params, method_body, FunctionType::Method)?;
+                        }
+                        Stmt::Let(decls) => {
+                            // Field declarations (parser ensures only literals)
+                            for (var_name, initializer, _) in decls {
+                                self.declare(*var_name);
+                                if let Some(expr) = initializer {
+                                    self.resolve_expr(expr)?;
+                                }
+                                self.define(*var_name);
+                            }
+                        }
+                        _ => {
+                            // Parser should prevent this, but catch it here as a safety net
+                            return Err("Only method and field declarations are allowed in class body".to_string());
+                        }
                     }
                 }
             }
 
             Stmt::Return(expr) => {
+                if self.current_function == FunctionType::None {
+                    return Err("Can't return from top-level code".to_string());
+                }
                 self.resolve_expr(expr)?;
             }
 
@@ -284,6 +309,10 @@ impl Resolver {
         self.begin_scope();
 
         for param in params {
+            // Check for 'self' parameter outside of methods
+            if self.ctx.resolve(*param) == "self" && function_type != FunctionType::Method {
+                return Err("Can't use 'self' parameter outside of a method".to_string());
+            }
             self.declare(*param);
             self.define(*param);
         }
@@ -368,12 +397,6 @@ impl Resolver {
     }
 }
 
-impl Default for Resolver {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,7 +411,7 @@ mod tests {
         // Transform before resolving (same as interpreter does)
         let transformer = Transformer;
         let program = transformer.transform_program(program);
-        let resolver = Resolver::new();
+        let resolver = Resolver::new(&ctx);
         resolver.resolve(&program)
     }
 
@@ -467,5 +490,111 @@ mod tests {
         if result.is_ok() {
             panic!("Expected error for class inheriting from itself");
         }
+    }
+
+    #[test]
+    fn test_return_outside_function() {
+        let source = "return 42;";
+        let result = resolve_source(source);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Can't return from top-level code"));
+    }
+
+    #[test]
+    fn test_return_inside_function() {
+        let source = r#"
+            fn test() {
+                return 42;
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_return_inside_method() {
+        let source = r#"
+            class Foo {
+                fn bar() {
+                    return 42;
+                }
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_self_outside_method() {
+        let source = r#"
+            fn foo(self) {
+                self;
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Can't use 'self' parameter outside of a method"));
+    }
+
+    #[test]
+    fn test_self_inside_method() {
+        let source = r#"
+            class Foo {
+                fn bar(self) {
+                    self;
+                }
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_self_in_static_function_in_class() {
+        // Static function (no self param) should not allow self
+        let source = r#"
+            class Foo {
+                fn helper(self) {
+                    self;
+                }
+            }
+        "#;
+        // This should work - it has self param so it's a method
+        let result = resolve_source(source);
+        assert!(result.is_ok());
+
+        // But a function without self param should not allow self
+        let source = r#"
+            class Foo {
+                fn staticHelper(x) {
+                    x;
+                }
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_class_field_only_literals() {
+        // Valid: literal initializers
+        let source = r#"
+            class Foo {
+                let x = 1;
+                let s = "hello";
+                let b = true;
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok());
+
+        // Invalid: expression as field value - caught at parse time
+        let source = r#"
+            class Foo {
+                let x = 1 + 2;
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_err()); // Parser rejects expressions in class fields
     }
 }

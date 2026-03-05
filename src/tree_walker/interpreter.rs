@@ -129,12 +129,11 @@ impl<'ctx> TreeWalker<'ctx> {
         // Transform the program first (desugar fn -> lambda, for -> while, etc.)
         let program = self.transformer.transform_program(program);
 
-        // Auto-resolve variable scopes for O(1) lookups
-        let resolver = Resolver::new();
-        if let Ok(locals) = resolver.resolve(&program) {
-            self.locals = locals;
-        }
-        // If resolution fails, we fall back to dynamic lookup (locals stays empty)
+        // Resolve variable scopes for O(1) lookups
+        let resolver = Resolver::new(self.ctx);
+        self.locals = resolver
+            .resolve(&program)
+            .map_err(|e| EvalSignal::Error(e))?;
 
         self.eval_program(program, None)
     }
@@ -350,6 +349,7 @@ impl<'ctx> TreeWalker<'ctx> {
     ) -> Result<Value, EvalSignal> {
         // Create a scope for the loop variable
         let for_scope = Environment::extend(env.clone());
+        // TODO: Add proper iterable trait support (currently only lists are iterable)
         let iter_value = self.eval_expr(iterable, Some(for_scope.clone()))?;
 
         let items = match iter_value {
@@ -395,23 +395,14 @@ impl<'ctx> TreeWalker<'ctx> {
         // Store the class environment before processing methods (for self reference)
         env.borrow_mut().set(name, Value::Object(class_env.clone()));
 
-        let self_sym = self.ctx.intern("self");
-        let self_env = Environment::extend(class_env.clone());
-        self_env
-            .borrow_mut()
-            .set(self_sym, Value::Object(self_env.clone()));
-
         for stmt in body {
             match stmt {
                 Stmt::Let(decls) => {
                     self.eval_let(decls, class_env.clone())?;
                 }
                 Stmt::Function(fn_name, params, fn_body) => {
-                    if params.first().is_some_and(|p| *p == self_sym) {
-                        self.eval_function(fn_name, params, fn_body, self_env.clone())?;
-                    } else {
-                        self.eval_function(fn_name, params, fn_body, class_env.clone())?;
-                    }
+                    // All methods stored in class_env
+                    self.eval_function(fn_name, params, fn_body, class_env.clone())?;
                 }
                 _ => {}
             }
