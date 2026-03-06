@@ -62,6 +62,29 @@ cargo run --release examples/hello.ax
 cargo run --release
 ```
 
+### Execution Backends
+
+Axe supports two execution backends that can be selected at runtime:
+
+```bash
+# Use tree-walking interpreter (default)
+axe examples/hello.ax
+axe --tree-walker examples/hello.ax
+
+# Use stack-based VM (experimental)
+axe --vm examples/hello.ax
+
+# REPL with specific backend
+axe --vm
+```
+
+| Backend | Flag | Description |
+|---------|------|-------------|
+| Tree-walker | `--tree-walker` | Default interpreter, full feature support |
+| Stack VM | `--vm` | Bytecode compiler + VM (experimental, limited features) |
+
+> **Note:** The stack VM currently only supports literals, arithmetic, and basic expressions. Variables, control flow, functions, and classes are not yet implemented.
+
 ### Running Tests
 
 ```bash
@@ -285,28 +308,6 @@ cargo test --test ast
 cargo test --test parser
 ```
 
-## Project Structure
-
-```
-axe/
-├── src/
-│   ├── main.rs           # CLI entry point
-│   ├── lib.rs            # Library exports
-│   ├── ast.rs            # Abstract syntax tree
-│   ├── parser.rs         # Recursive descent parser
-│   ├── tokeniser.rs      # Lexer/tokenizer
-│   ├── transformer.rs    # AST transformer
-│   └── interpreter/
-│       ├── mod.rs        # Module exports
-│       ├── tree_walker.rs # Interpreter implementation
-│       ├── environment.rs # Variable scopes
-│       ├── value.rs      # Runtime values
-│       └── builtins.rs   # Native functions
-├── tests/                # Integration tests
-├── examples/             # Example programs
-└── docs/                 # Documentation
-```
-
 ## Language Overview
 
 ### Data Types
@@ -352,19 +353,3 @@ axe/
 - `.push(value)` - Return new list with value appended
 - `.concat(other)` - Return new list with other list appended
 
-## Roadmap
-
-- [x] Return statement
-- [x] Break/continue for loops
-- [ ] Better error messages with line numbers
-- [ ] Standard library with common utilities
-- [x] Module system with imports
-- [ ] Map literals
-- [ ] Lambda expressions
-- [ ] Pattern matching
-- [ ] Garbage collection
-- [ ] VM bytecode compilation
-
-## License
-
-This project is open source. Feel free to use, modify, and distribute.

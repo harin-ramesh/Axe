@@ -1,5 +1,3 @@
-//! Environment for variable bindings.
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -8,6 +6,26 @@ use crate::interner::Symbol;
 
 use super::value::Value;
 
+/// Reference-counted environment with interior mutability.
+/// Environment for variable bindings.
+///
+/// Uses `Rc<RefCell<Environment>>` because:
+///
+/// 1. **Shared ownership (`Rc`)**: Multiple closures can capture the same environment.
+///    For example:
+///    ```text
+///    fn makeCounter() {
+///        let count = 0;
+///        fn increment() { count = count + 1; }
+///        fn getCount() { count; }
+///        return [increment, getCount];
+///    }
+///    ```
+///    Both `increment` and `getCount` hold an `Rc` to the same environment
+///    so they can access/modify the shared `count` variable.
+///
+/// 2. **Interior mutability (`RefCell`)**: We need to mutate (`set`/`update`)
+///    through shared references since `Rc` only provides `&T`, not `&mut T`.
 pub type EnvRef = Rc<RefCell<Environment>>;
 
 #[derive(Debug)]
