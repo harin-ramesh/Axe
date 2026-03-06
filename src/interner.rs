@@ -118,7 +118,26 @@ impl InternInner {
 /// Stores a mapping from strings to unique Symbol IDs, ensuring each
 /// unique string is stored only once. Uses `RefCell` for interior mutability,
 /// allowing `intern` to be called with `&self`.
+///
+/// # Why RefCell?
+///
+/// Multiple components (Parser, Resolver, TreeWalker) need to hold a reference
+/// to the interner simultaneously and call `intern()`. Without RefCell, `intern()`
+/// would require `&mut self`, which Rust's borrow checker would reject:
+///
+/// ```ignore
+/// // In TreeWalker::eval_imports:
+/// let mut parser = Parser::new(&source, self.ctx);  // ctx borrowed
+/// parser.parse()?;                                   // parser.intern() needs &mut ctx
+/// self.ctx.resolve(import);                          // ERROR: ctx already borrowed
+/// ```
+///
+/// With RefCell, all components hold `&Context` (shared reference), and mutation
+/// happens internally via `borrow_mut()` only for the brief moment needed.
 pub struct Interner {
+    // RefCell moves borrow checking from compile-time to runtime, allowing
+    // mutation through a shared reference. This is safe in single-threaded
+    // code since only one borrow can be active at a time (enforced at runtime).
     inner: RefCell<InternInner>,
 }
 

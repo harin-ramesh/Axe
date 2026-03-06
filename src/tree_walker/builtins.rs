@@ -23,9 +23,6 @@ pub fn init_builtins(ctx: &Context, globals: &EnvRef) {
     env.set(type_sym, Value::NativeFunction(type_sym, native_type));
     env.set(range_sym, Value::NativeFunction(range_sym, native_range));
 
-    // We need to drop the borrow before creating class environments
-    drop(env);
-
     // String class
     let string_class = Environment::new();
     {
@@ -36,9 +33,7 @@ pub fn init_builtins(ctx: &Context, globals: &EnvRef) {
         class_env.set(concat_sym, Value::NativeFunction(concat_sym, string_concat));
     }
     let string_sym = ctx.intern("String");
-    globals
-        .borrow_mut()
-        .set(string_sym, Value::Object(string_class));
+    env.set(string_sym, Value::Object(string_class));
 
     // List class
     let list_class = Environment::new();
@@ -54,9 +49,7 @@ pub fn init_builtins(ctx: &Context, globals: &EnvRef) {
         class_env.set(get_sym, Value::NativeFunction(get_sym, list_get));
     }
     let list_sym = ctx.intern("List");
-    globals
-        .borrow_mut()
-        .set(list_sym, Value::Object(list_class));
+    env.set(list_sym, Value::Object(list_class));
 }
 
 /// Native print function - prints values to stdout.
@@ -76,14 +69,12 @@ pub fn native_type(ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal> {
     if args.len() != 1 {
         return Err("type expects exactly 1 argument".into());
     }
-    let type_name = match &args[0] {
-        Value::Literal(lit) => match lit {
-            Literal::Null => "null",
-            Literal::Bool(_) => "bool",
-            Literal::Int(_) => "int",
-            Literal::Float(_) => "float",
-            Literal::Str(_) => "string",
-        },
+    let type_name = match args[0] {
+        Value::Literal(Literal::Null) => "null",
+        Value::Literal(Literal::Bool(_)) => "bool",
+        Value::Literal(Literal::Int(_)) => "int",
+        Value::Literal(Literal::Float(_)) => "float",
+        Value::Literal(Literal::Str(_)) => "string",
         Value::List(_) => "list",
         Value::Function(..) => "function",
         Value::NativeFunction(..) => "function",
@@ -95,14 +86,12 @@ pub fn native_type(ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal> {
 /// Native range function - creates a list of integers.
 pub fn native_range(_ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal> {
     match args.len() {
-        1 => match &args[0] {
-            Value::Literal(Literal::Int(n_val)) => {
-                if *n_val < 0 {
+        1 => match args[0] {
+            Value::Literal(Literal::Int(n)) => {
+                if n < 0 {
                     return Err("range expects non-negative integer".into());
                 }
-                let values: Vec<Value> = (0..*n_val)
-                    .map(|i| Value::Literal(Literal::Int(i)))
-                    .collect();
+                let values: Vec<Value> = (0..n).map(|i| Value::Literal(Literal::Int(i))).collect();
                 Ok(Value::List(values))
             }
             _ => Err("range expects integer argument".into()),
@@ -151,14 +140,14 @@ pub fn native_range(_ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal>
 // =============================================================================
 
 /// String.len() - returns the length of the string.
-pub fn string_len(_ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal> {
+pub fn string_len(ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal> {
     // args[0] is self (the string)
     if args.len() != 1 {
         return Err("len() takes no arguments".into());
     }
-    match &args[0] {
+    match args[0] {
         Value::Literal(Literal::Str(s)) => {
-            let str_val = _ctx.resolve(*s);
+            let str_val = ctx.resolve(s);
             Ok(Value::Literal(Literal::Int(str_val.len() as i64)))
         }
         _ => Err("len() called on non-string".into()),
@@ -171,11 +160,11 @@ pub fn string_concat(ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal>
     if args.is_empty() {
         return Err("concat() called without self".into());
     }
-    let Value::Literal(Literal::Str(s)) = &args[0] else {
+    let Value::Literal(Literal::Str(s)) = args[0] else {
         return Err("concat() called on non-string".into());
     };
-    let mut result = ctx.resolve(*s);
-    for arg in &args[1..] {
+    let mut result = ctx.resolve(s);
+    for arg in args[1..].iter() {
         match arg {
             Value::Literal(Literal::Str(other)) => {
                 result.push_str(&ctx.resolve(*other));
@@ -248,7 +237,7 @@ pub fn list_concat(_ctx: &Context, args: &[Value]) -> Result<Value, EvalSignal> 
         return Err("concat() called on non-list".into());
     };
     let mut result = items.clone();
-    for arg in &args[1..] {
+    for arg in args[1..].iter() {
         match arg {
             Value::List(other) => result.extend(other.clone()),
             _ => return Err("concat() requires list arguments".into()),
