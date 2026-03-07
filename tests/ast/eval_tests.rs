@@ -440,7 +440,7 @@ fn eval_let_with_value() {
     let x = context.intern("x");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(42))), None)]),
+            Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(42))))]),
             Stmt::Expr(Expr::Var(x)),
         ],
     };
@@ -453,7 +453,7 @@ fn eval_let_without_value_is_null() {
     let mut axe = Axe::new(&context);
     let x = context.intern("x");
     let program = Program {
-        stmts: vec![Stmt::Let(vec![(x, None, None)]), Stmt::Expr(Expr::Var(x))],
+        stmts: vec![Stmt::Let(vec![(x, None)]), Stmt::Expr(Expr::Var(x))],
     };
     assert!(axe.run(program).is_ok());
 }
@@ -467,8 +467,8 @@ fn eval_let_multiple_declarations() {
     let program = Program {
         stmts: vec![
             Stmt::Let(vec![
-                (x, Some(Expr::Literal(Literal::Int(1))), None),
-                (y, Some(Expr::Literal(Literal::Int(2))), None),
+                (x, Some(Expr::Literal(Literal::Int(1)))),
+                (y, Some(Expr::Literal(Literal::Int(2)))),
             ]),
             Stmt::Expr(Expr::Binary(
                 Operation::Add,
@@ -488,9 +488,7 @@ fn eval_let_invalid_name_fails() {
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             name,
-            Some(Expr::Literal(Literal::Int(1))),
-            None,
-        )])],
+            Some(Expr::Literal(Literal::Int(1))))])],
     };
     let result = axe.run(program);
     assert!(result.is_err());
@@ -508,7 +506,7 @@ fn eval_assign_existing_variable() {
     let x = context.intern("x");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(10))), None)]),
+            Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Assign(x, Expr::Literal(Literal::Int(20))),
             Stmt::Expr(Expr::Var(x)),
         ],
@@ -570,9 +568,7 @@ fn eval_if_true_branch() {
         stmts: vec![
             Stmt::Let(vec![(
                 result_sym,
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(true)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -598,9 +594,7 @@ fn eval_if_false_branch() {
         stmts: vec![
             Stmt::Let(vec![(
                 result_sym,
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(false)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -685,7 +679,7 @@ fn eval_while_loop() {
     let i = context.intern("i");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(i, Some(Expr::Literal(Literal::Int(0))), None)]),
+            Stmt::Let(vec![(i, Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
@@ -1035,8 +1029,8 @@ fn eval_class_definition() {
             point,
             None,
             vec![
-                Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(0))), None)]),
-                Stmt::Let(vec![(y, Some(Expr::Literal(Literal::Int(0))), None)]),
+                Stmt::Let(vec![(x, Some(Expr::Literal(Literal::Int(0))))]),
+                Stmt::Let(vec![(y, Some(Expr::Literal(Literal::Int(0))))]),
             ],
         )],
     };
@@ -1056,7 +1050,7 @@ fn eval_class_with_method() {
             counter,
             None,
             vec![
-                Stmt::Let(vec![(count, Some(Expr::Literal(Literal::Int(0))), None)]),
+                Stmt::Let(vec![(count, Some(Expr::Literal(Literal::Int(0))))]),
                 Stmt::Function(
                     increment,
                     vec![self_sym],

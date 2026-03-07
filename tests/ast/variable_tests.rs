@@ -10,9 +10,7 @@ fn set_and_get_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(42))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(42))))]),
             Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
@@ -30,9 +28,7 @@ fn nested_expression_with_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(3))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(3))))]),
             Stmt::Expr(Expr::Binary(
                 Operation::Mul,
                 Box::new(Expr::Binary(
@@ -69,9 +65,7 @@ fn null_can_be_stored_in_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Null)),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Null)))]),
             Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };

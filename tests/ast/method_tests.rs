@@ -312,9 +312,7 @@ fn method_call_on_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Str(context.intern("hello")))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Str(context.intern("hello")))))]),
             Stmt::Expr(Expr::MethodCall(
                 Box::new(Expr::Var(context.intern("x"))),
                 context.intern("len"),

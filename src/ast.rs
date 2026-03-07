@@ -206,9 +206,11 @@ pub enum Stmt {
     /// A block of statements: { stmt; stmt; ... }
     Block(Vec<Stmt>),
     /// Variable declaration: let name = expr, name2 = expr2;
-    Let(Vec<(Symbol, Option<Expr>, Option<Expr>)>),
+    Let(Vec<(Symbol, Option<Expr>)>),
     /// Variable assignment: name = expr;
     Assign(Symbol, Expr),
+    /// Property assignment: obj.prop = expr;
+    PropertyAssign(Expr, Symbol, Expr),
     /// Conditional: if (cond) { then } else { else }
     If(Expr, Box<Stmt>, Box<Stmt>),
     /// While loop: while (cond) { body }

@@ -64,7 +64,7 @@ fn if_with_block_branches() {
     let mut axe = Axe::new(&context);
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(context.intern("x"), None, None)]),
+            Stmt::Let(vec![(context.intern("x"), None)]),
             Stmt::If(
                 Expr::Literal(Literal::Int(1)),
                 Box::new(Stmt::Block(vec![
@@ -116,9 +116,7 @@ fn if_with_variable_condition() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Int(5))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(5))))]),
             Stmt::If(
                 Expr::Var(context.intern("x")),
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
@@ -239,9 +237,7 @@ fn if_with_bool_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Bool(true))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Bool(true))))]),
             Stmt::If(
                 Expr::Var(context.intern("x")),
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
@@ -264,9 +260,7 @@ fn if_with_false_bool_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Bool(false))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Bool(false))))]),
             Stmt::If(
                 Expr::Var(context.intern("x")),
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
