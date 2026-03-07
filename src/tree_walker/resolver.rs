@@ -151,6 +151,15 @@ impl<'a> Resolver<'a> {
     }
 
     /// Declare a variable in the current scope (but not yet defined).
+    ///
+    /// The declare/define pattern is used to detect self-referential initializers
+    /// like `let x = x;`. When we declare a variable, it exists in the scope but
+    /// is marked as "not defined". If the initializer tries to read the variable,
+    /// we detect this and report an error.
+    ///
+    /// Note: This flag does NOT affect depth calculation in `resolve_local` -
+    /// depth only depends on which scope contains the variable, not whether
+    /// it's defined.
     fn declare(&mut self, name: Symbol) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name, false);
@@ -158,6 +167,9 @@ impl<'a> Resolver<'a> {
     }
 
     /// Define a variable in the current scope (mark as ready to use).
+    ///
+    /// Called after the initializer has been resolved, so subsequent references
+    /// to the variable are allowed. See `declare` for more details.
     fn define(&mut self, name: Symbol) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name, true);
@@ -189,23 +201,32 @@ impl<'a> Resolver<'a> {
 
             Stmt::Let(declarations) => {
                 for (name, initializer, target_obj) in declarations {
+                    // 1. Declare: variable exists but is "not defined" yet
                     self.declare(*name);
                     if let Some(expr) = initializer {
+                        // 2. Resolve initializer: if it references this variable,
+                        //    we'll catch it (e.g., `let x = x;` is an error)
                         self.resolve_expr(expr)?;
+                        // 3. Define: variable is now ready to use
+                        self.define(*name);
                     }
                     if let Some(obj_expr) = target_obj {
                         self.resolve_expr(obj_expr)?;
                     }
-                    self.define(*name);
                 }
             }
 
             Stmt::Assign(_name, expr) => {
                 self.resolve_expr(expr)?;
-                // Note: Stmt::Assign doesn't have an ExprId, so we can't resolve
-                // the assignment target statically. The interpreter uses
-                // Environment::update which walks the scope chain at runtime.
-                // To optimize this, we'd need to add an ID to Stmt::Assign.
+                // Note: We don't call define() here. The `defined` flag only matters
+                // for detecting `let x = x;` (self-referential initializers). Since
+                // the transformer converts `let x;` to `let x = null;`, variables are
+                // always defined at declaration time, so there's no case where we need
+                // to define a variable on assignment.
+                //
+                // Stmt::Assign doesn't have an ExprId, so we can't resolve the
+                // assignment target statically. The interpreter uses Environment::update
+                // which walks the scope chain at runtime.
             }
 
             Stmt::If(condition, then_branch, else_branch) => {
@@ -479,6 +500,140 @@ mod tests {
         let result = resolve_source(source);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("own initializer"));
+    }
+
+    #[test]
+    fn test_declare_then_assign_then_use() {
+        // Variable declared without initializer, then assigned, then used
+        // Note: The transformer converts `let x;` to `let x = null;` so the
+        // variable is always defined after declaration.
+        let source = r#"
+            fn test() {
+                let x;
+                x = 5;
+                x;
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok(), "Should allow using variable after assignment");
+    }
+
+    #[test]
+    fn test_declare_without_initializer_then_use() {
+        // Variable declared without initializer, then used
+        // The transformer converts `let x;` to `let x = null;` so the variable
+        // is defined (with null value) and can be used immediately.
+        let source = r#"
+            fn test() {
+                let x;
+                x;
+            }
+        "#;
+        let result = resolve_source(source);
+        assert!(result.is_ok(), "Should allow using variable after declaration (initialized to null)");
+    }
+
+    #[test]
+    fn test_closure_assign_outer_variable() {
+        // Assignment to outer variable should resolve correctly.
+        // The variable x is declared in outer's scope, and inner assigns to it.
+        // This tests that we don't incorrectly add x to inner's scope.
+        let source = r#"
+            fn outer() {
+                let x = 1;
+                fn inner() {
+                    x = 5;
+                    x;
+                }
+            }
+        "#;
+        let locals = resolve_source(source).expect("Resolution should succeed");
+        // x in inner should be resolved at depth 2:
+        // inner's block scope (0) -> inner's param scope (1) -> outer's block scope (2)
+        let has_depth_2 = locals.values().any(|loc| loc.depth == 2);
+        assert!(has_depth_2, "Should resolve 'x' from closure at depth 2");
+    }
+
+    #[test]
+    fn test_nested_blocks_variable_depth() {
+        // Test that variables in nested blocks resolve to correct depths.
+        // Each block creates a new scope, so depth increases.
+        let source = r#"
+            fn test() {
+                let x = 1;
+                {
+                    x;
+                }
+            }
+        "#;
+        let locals = resolve_source(source).expect("Resolution should succeed");
+        // x is accessed from inner block:
+        // inner block scope (0) -> outer block scope (1) where x is defined
+        let has_depth_1 = locals.values().any(|loc| loc.depth == 1);
+        assert!(has_depth_1, "Should resolve 'x' at depth 1 from nested block");
+    }
+
+    #[test]
+    fn test_deeply_nested_blocks_variable_depth() {
+        // Test variable resolution through multiple nested blocks.
+        let source = r#"
+            fn test() {
+                let x = 1;
+                {
+                    {
+                        {
+                            x;
+                        }
+                    }
+                }
+            }
+        "#;
+        let locals = resolve_source(source).expect("Resolution should succeed");
+        // x is accessed from 3 blocks deep:
+        // block3 (0) -> block2 (1) -> block1 (2) -> fn body (3) where x is defined
+        let has_depth_3 = locals.values().any(|loc| loc.depth == 3);
+        assert!(has_depth_3, "Should resolve 'x' at depth 3 from deeply nested blocks");
+    }
+
+    #[test]
+    fn test_assign_in_nested_block_resolves_outer_variable() {
+        // Assigning to a variable declared in outer scope from a nested block.
+        // This should resolve the variable read in the assignment expression,
+        // but Stmt::Assign itself doesn't add to locals (no ExprId).
+        let source = r#"
+            fn test() {
+                let x = 1;
+                {
+                    {
+                        x = 5;
+                        x;
+                    }
+                }
+            }
+        "#;
+        let locals = resolve_source(source).expect("Resolution should succeed");
+        // The variable reference `x` after assignment should resolve at depth 2:
+        // innermost block (0) -> middle block (1) -> fn body (2) where x is defined
+        let has_depth_2 = locals.values().any(|loc| loc.depth == 2);
+        assert!(has_depth_2, "Should resolve 'x' at depth 2 after assignment in nested block");
+    }
+
+    #[test]
+    fn test_variable_shadowing_in_nested_blocks() {
+        // Inner block shadows outer variable - inner x should resolve at depth 0.
+        let source = r#"
+            fn test() {
+                let x = 1;
+                {
+                    let x = 2;
+                    x;
+                }
+            }
+        "#;
+        let locals = resolve_source(source).expect("Resolution should succeed");
+        // The inner x is in the same scope as the reference, so depth 0
+        let has_depth_0 = locals.values().any(|loc| loc.depth == 0);
+        assert!(has_depth_0, "Should resolve shadowed 'x' at depth 0");
     }
 
     #[test]
