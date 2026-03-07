@@ -622,7 +622,7 @@ impl<'ctx> TreeWalker<'ctx> {
             return Err("internal error: built-in class not found".into());
         };
 
-        // Look up the method in the class
+        // Look up the method in the class (built-in classes only have native methods)
         let func = class_env.borrow().get(method);
         match func {
             Some(Value::NativeFunction(_, native_fn)) => {
@@ -631,33 +631,6 @@ impl<'ctx> TreeWalker<'ctx> {
                 all_args.push(obj);
                 all_args.extend(args);
                 native_fn(self.ctx, &all_args)
-            }
-            Some(Value::Function(params, body, closure)) => {
-                // Call user-defined method with self as first argument
-                let self_sym = self.ctx.intern("self");
-                let has_self = params.first().is_some_and(|p| *p == self_sym);
-
-                let expected_args = if has_self {
-                    params.len() - 1
-                } else {
-                    params.len()
-                };
-                if args.len() != expected_args {
-                    return Err("wrong number of arguments".into());
-                }
-
-                let func_env = Environment::extend(closure);
-                if has_self {
-                    func_env.borrow_mut().set(params[0], obj);
-                }
-                for (param, value) in params.iter().skip(if has_self { 1 } else { 0 }).zip(args) {
-                    func_env.borrow_mut().set(*param, value.clone());
-                }
-
-                match *body {
-                    Stmt::Block(stmts) => catch_return(self.eval_block(stmts, func_env)),
-                    _ => self.eval_stmt(*body, Some(func_env)),
-                }
             }
             Some(_) => Err("not a method".into()),
             None => Err("method not found".into()),
@@ -673,26 +646,16 @@ impl<'ctx> TreeWalker<'ctx> {
         let func = obj_env.borrow().get(method);
         match func {
             Some(Value::Function(params, body, closure)) => {
-                // For instance methods, prepend self
-                let self_sym = self.ctx.intern("self");
-                let has_self = params.first().is_some_and(|p| *p == self_sym);
-
-                let expected_args = if has_self {
-                    params.len() - 1
-                } else {
-                    params.len()
-                };
-                if args.len() != expected_args {
+                // Instance methods always have self as first parameter (enforced by resolver)
+                if args.len() != params.len() - 1 {
                     return Err("wrong number of arguments".into());
                 }
 
                 let func_env = Environment::extend(closure);
-                if has_self {
-                    func_env
-                        .borrow_mut()
-                        .set(params[0], Value::Object(obj_env.clone()));
-                }
-                for (param, value) in params.iter().skip(if has_self { 1 } else { 0 }).zip(args) {
+                func_env
+                    .borrow_mut()
+                    .set(params[0], Value::Object(obj_env.clone()));
+                for (param, value) in params.iter().skip(1).zip(args) {
                     func_env.borrow_mut().set(*param, value.clone());
                 }
 

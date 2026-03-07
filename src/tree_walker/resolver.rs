@@ -207,12 +207,11 @@ impl<'a> Resolver<'a> {
                         // 2. Resolve initializer: if it references this variable,
                         //    we'll catch it (e.g., `let x = x;` is an error)
                         self.resolve_expr(expr)?;
-                        // 3. Define: variable is now ready to use
-                        self.define(*name);
                     }
                     if let Some(obj_expr) = target_obj {
                         self.resolve_expr(obj_expr)?;
                     }
+                    self.define(*name);
                 }
             }
 
