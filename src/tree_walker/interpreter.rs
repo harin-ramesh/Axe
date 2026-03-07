@@ -173,6 +173,9 @@ impl<'ctx> TreeWalker<'ctx> {
             Stmt::Block(exprs) => self.eval_block(exprs, env),
             Stmt::Let(expr) => self.eval_let(expr, env),
             Stmt::Assign(name, expr) => self.eval_assign(name, expr, env),
+            Stmt::PropertyAssign(obj_expr, prop, value_expr) => {
+                self.eval_property_assign(obj_expr, prop, value_expr, env)
+            }
             Stmt::If(condition, then_branch, else_branch) => {
                 self.eval_if(condition, then_branch, else_branch, env)
             }
@@ -225,40 +228,39 @@ impl<'ctx> TreeWalker<'ctx> {
 
     fn eval_let(
         &mut self,
-        declarations: Vec<(Symbol, Option<Expr>, Option<Expr>)>,
+        declarations: Vec<(Symbol, Option<Expr>)>,
         env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        for decl in declarations {
-            let (name, expr_opt, expr_obj) = decl;
-
+        for (name, expr_opt) in declarations {
             if !is_valid_symbol_name(self.ctx, name) {
                 return Err("invalid variable name".into());
             }
 
-            // If there's a target object (like obj.prop = value), handle property assignment
-            if let Some(obj_expr) = expr_obj {
-                let obj = self.eval_expr(obj_expr, Some(env.clone()))?;
-                if let Value::Object(obj_env) = obj {
-                    let value = if let Some(expr) = expr_opt {
-                        self.eval_expr(expr, Some(env.clone()))?
-                    } else {
-                        Value::Literal(Literal::Null)
-                    };
-                    obj_env.borrow_mut().set(name, value);
-                } else {
-                    return Err("Cannot assign property to non-object".into());
-                }
+            let value = if let Some(expr) = expr_opt {
+                self.eval_expr(expr, Some(env.clone()))?
             } else {
-                // Normal variable declaration
-                let value = if let Some(expr) = expr_opt {
-                    self.eval_expr(expr, Some(env.clone()))?
-                } else {
-                    Value::Literal(Literal::Null)
-                };
-                env.borrow_mut().set(name, value);
-            }
+                Value::Literal(Literal::Null)
+            };
+            env.borrow_mut().set(name, value);
         }
         Ok(Value::Literal(Literal::Null))
+    }
+
+    fn eval_property_assign(
+        &mut self,
+        obj_expr: Expr,
+        prop: Symbol,
+        value_expr: Expr,
+        env: EnvRef,
+    ) -> Result<Value, EvalSignal> {
+        let obj = self.eval_expr(obj_expr, Some(env.clone()))?;
+        if let Value::Object(obj_env) = obj {
+            let value = self.eval_expr(value_expr, Some(env.clone()))?;
+            obj_env.borrow_mut().set(prop, value);
+            Ok(Value::Literal(Literal::Null))
+        } else {
+            Err("Cannot assign property to non-object".into())
+        }
     }
 
     fn eval_assign(&mut self, name: Symbol, expr: Expr, env: EnvRef) -> Result<Value, EvalSignal> {

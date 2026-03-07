@@ -200,19 +200,22 @@ impl<'a> Resolver<'a> {
             }
 
             Stmt::Let(declarations) => {
-                for (name, initializer, target_obj) in declarations {
+                for (name, initializer) in declarations {
                     // 1. Declare: variable exists but is "not defined" yet
                     self.declare(*name);
                     if let Some(expr) = initializer {
                         // 2. Resolve initializer: if it references this variable,
                         //    we'll catch it (e.g., `let x = x;` is an error)
                         self.resolve_expr(expr)?;
+                        // 3. Define: variable is now ready to use
+                        self.define(*name);
                     }
-                    if let Some(obj_expr) = target_obj {
-                        self.resolve_expr(obj_expr)?;
-                    }
-                    self.define(*name);
                 }
+            }
+
+            Stmt::PropertyAssign(obj_expr, _prop, value_expr) => {
+                self.resolve_expr(obj_expr)?;
+                self.resolve_expr(value_expr)?;
             }
 
             Stmt::Assign(_name, expr) => {
@@ -281,7 +284,7 @@ impl<'a> Resolver<'a> {
                         }
                         Stmt::Let(decls) => {
                             // Field declarations (parser ensures only literals)
-                            for (var_name, initializer, _) in decls {
+                            for (var_name, initializer) in decls {
                                 self.declare(*var_name);
                                 if let Some(expr) = initializer {
                                     self.resolve_expr(expr)?;

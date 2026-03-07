@@ -10,9 +10,7 @@ fn let_creates_new_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
@@ -30,9 +28,7 @@ fn let_overwrites_in_same_scope() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(20))),
             Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
@@ -51,9 +47,7 @@ fn assign_updates_existing_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(20))),
         ],
     };
@@ -87,9 +81,7 @@ fn assign_updates_parent_scope() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("counter"),
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::Function(
                 ctx.intern("increment"),
                 vec![],
@@ -120,18 +112,14 @@ fn let_creates_local_variable_in_function() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Function(
                 ctx.intern("shadow"),
                 vec![],
                 Box::new(Stmt::Block(vec![
                     Stmt::Let(vec![(
                         ctx.intern("x"),
-                        Some(Expr::Literal(Literal::Int(999))),
-                        None,
-                    )]),
+                        Some(Expr::Literal(Literal::Int(999))))]),
                     Stmt::Expr(Expr::Var(ctx.intern("x"))),
                 ])),
             ),
@@ -152,14 +140,10 @@ fn assign_in_while_loop() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("i"),
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::Let(vec![(
                 ctx.intern("sum"),
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
@@ -200,9 +184,7 @@ fn let_with_invalid_name_fails() {
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             ctx.intern("123invalid"),
-            Some(Expr::Literal(Literal::Int(10))),
-            None,
-        )])],
+            Some(Expr::Literal(Literal::Int(10))))])],
     };
 
     let err = axe.run(program).unwrap_err();
@@ -218,9 +200,7 @@ fn assign_updates_through_multiple_scopes() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("value"),
-                Some(Expr::Literal(Literal::Int(1))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(1))))]),
             Stmt::Function(
                 ctx.intern("outer"),
                 vec![],
@@ -233,9 +213,7 @@ fn assign_updates_through_multiple_scopes() {
                                 ctx.intern("value"),
                                 Expr::Literal(Literal::Int(100)),
                             )])),
-                        )),
-                        None,
-                    )]),
+                        )))]),
                     Stmt::Expr(Expr::Call(ctx.intern("inner"), vec![])),
                 ])),
             ),
@@ -256,9 +234,7 @@ fn block_creates_own_scope() {
         stmts: vec![
             Stmt::Block(vec![Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )])]),
+                Some(Expr::Literal(Literal::Int(10))))])]),
             Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
@@ -276,14 +252,10 @@ fn inner_scope_can_access_outer_variables() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(42))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(42))))]),
             Stmt::Let(vec![(
                 ctx.intern("result"),
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::Block(vec![Stmt::Assign(
                 ctx.intern("result"),
                 Expr::Var(ctx.intern("x")),
@@ -305,14 +277,10 @@ fn block_let_shadows_outer_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Block(vec![Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(99))),
-                None,
-            )])]),
+                Some(Expr::Literal(Literal::Int(99))))])]),
             Stmt::Expr(Expr::Var(ctx.intern("x"))),
         ],
     };
@@ -330,9 +298,7 @@ fn block_assign_modifies_outer_scope() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Block(vec![Stmt::Assign(
                 ctx.intern("x"),
                 Expr::Literal(Literal::Int(99)),
@@ -354,9 +320,7 @@ fn assign_modifies_outer_scope_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(10))))]),
             Stmt::Block(vec![Stmt::Assign(
                 ctx.intern("x"),
                 Expr::Literal(Literal::Int(50)),
@@ -378,26 +342,18 @@ fn nested_blocks_scope_correctly() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("a"),
-                Some(Expr::Literal(Literal::Int(1))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(1))))]),
             Stmt::Let(vec![(
                 ctx.intern("result"),
-                Some(Expr::Literal(Literal::Int(0))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::Block(vec![
                 Stmt::Let(vec![(
                     ctx.intern("b"),
-                    Some(Expr::Literal(Literal::Int(2))),
-                    None,
-                )]),
+                    Some(Expr::Literal(Literal::Int(2))))]),
                 Stmt::Block(vec![
                     Stmt::Let(vec![(
                         ctx.intern("c"),
-                        Some(Expr::Literal(Literal::Int(3))),
-                        None,
-                    )]),
+                        Some(Expr::Literal(Literal::Int(3))))]),
                     Stmt::Assign(
                         ctx.intern("result"),
                         Expr::Binary(
@@ -429,9 +385,7 @@ fn function_has_own_scope() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(100))),
-                None,
-            )]),
+                Some(Expr::Literal(Literal::Int(100))))]),
             Stmt::Function(
                 ctx.intern("get_param"),
                 vec![ctx.intern("x")],
@@ -462,9 +416,7 @@ fn function_scope_does_not_leak() {
                 vec![],
                 Box::new(Stmt::Block(vec![Stmt::Let(vec![(
                     ctx.intern("local_var"),
-                    Some(Expr::Literal(Literal::Int(999))),
-                    None,
-                )])])),
+                    Some(Expr::Literal(Literal::Int(999))))])])),
             ),
             Stmt::Expr(Expr::Call(ctx.intern("create_local"), vec![])),
             Stmt::Expr(Expr::Var(ctx.intern("local_var"))),

@@ -3,8 +3,8 @@ use crate::context::Context;
 use crate::interner::Symbol;
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
 
-/// A variable declaration: (name, initializer, target_object)
-type Declaration = (Symbol, Option<Expr>, Option<Expr>);
+/// A variable declaration: (name, initializer)
+type Declaration = (Symbol, Option<Expr>);
 
 pub struct Parser<'src, 'ctx> {
     tokeniser: Tokeniser<'src>,
@@ -199,7 +199,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 None
             };
 
-            declarations.push((name, initializer, None));
+            declarations.push((name, initializer));
 
             if self.lookahead.map(|t| t.kind) != Some(TokenKind::Comma) {
                 break;
@@ -347,7 +347,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             Some(TokenKind::Delimeter) => Expr::Literal(Literal::Null),
             _ => self.parse_declaration_value()?,
         };
-        Ok((name, Some(value), None))
+        Ok((name, Some(value)))
     }
 
     // DeclarationValue
@@ -443,11 +443,11 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 }
                 ExprKind::Property(obj_expr, prop_name) => {
                     let right = self.parse_logical_or_expression()?;
-                    return Ok(Stmt::Let(vec![(
+                    return Ok(Stmt::PropertyAssign(
+                        obj_expr.as_ref().clone(),
                         prop_name.clone(),
-                        Some(right),
-                        Some(obj_expr.as_ref().clone()),
-                    )]));
+                        right,
+                    ));
                 }
                 _ => return Err("Invalid left-hand side in assignment"),
             };
