@@ -1,7 +1,40 @@
-use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::ast::{Expr, ExprKind, Literal, Operation, ParamVec, Program, Stmt, UnaryOp};
 use crate::context::Context;
 use crate::interner::Symbol;
 use crate::tokeniser::{Token, TokenKind, Tokeniser};
+use std::borrow::Cow;
+
+/// Parser error type that avoids memory leaks from Box::leak.
+/// Uses Cow to handle both static and dynamic error messages efficiently.
+#[derive(Debug, Clone)]
+pub struct ParseError(Cow<'static, str>);
+
+impl ParseError {
+    #[inline]
+    pub fn new(msg: impl Into<Cow<'static, str>>) -> Self {
+        Self(msg.into())
+    }
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+impl From<&'static str> for ParseError {
+    fn from(s: &'static str) -> Self {
+        Self(Cow::Borrowed(s))
+    }
+}
+
+impl From<String> for ParseError {
+    fn from(s: String) -> Self {
+        Self(Cow::Owned(s))
+    }
+}
 
 /// A variable declaration: (name, initializer)
 type Declaration = (Symbol, Option<Expr>);
@@ -22,7 +55,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Program, &'static str> {
+    pub fn parse(&mut self) -> Result<Program, ParseError> {
         self.lookahead = Some(self.tokeniser.get_next_token()?);
         let expr = self.parse_program()?;
         Ok(expr)
@@ -34,26 +67,24 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         self.ctx.intern(s)
     }
 
-    fn eat(&mut self, expected_token: TokenKind) -> Result<Token<'src>, &'static str> {
+    fn eat(&mut self, expected_token: TokenKind) -> Result<Token<'src>, ParseError> {
         let token = match self.lookahead.take() {
-            None => return Err("Unexpected end of input"),
+            None => return Err(ParseError::from("Unexpected end of input")),
             Some(t) => t,
         };
 
         if token.kind != expected_token {
-            let msg = format!(
+            return Err(ParseError::new(format!(
                 "[Line {}] Unexpected `{}`, expected `{}`",
                 token.line, token.lexeme, expected_token
-            );
-            let leaked: &'static str = Box::leak(msg.into_boxed_str());
-            return Err(leaked);
+            )));
         }
 
         self.lookahead = Some(self.tokeniser.get_next_token()?);
         Ok(token)
     }
 
-    fn parse_program(&mut self) -> Result<Program, &'static str> {
+    fn parse_program(&mut self) -> Result<Program, ParseError> {
         let stmts = self.parse_statements(TokenKind::Eof)?;
         Ok(Program { stmts })
     }
@@ -61,7 +92,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // StatementList
     //  : Statement
     //  | StatemtnList Statement -> Statement Statement Statment
-    fn parse_statements(&mut self, stop_token: TokenKind) -> Result<Vec<Stmt>, &'static str> {
+    fn parse_statements(&mut self, stop_token: TokenKind) -> Result<Vec<Stmt>, ParseError> {
         let mut stmts = vec![self.parse_statement()?];
 
         while let Some(token) = &self.lookahead {
@@ -87,7 +118,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     //  | Break
     //  | Continue
     //  | From
-    fn parse_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr = match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::OpeningBrace) => self.parse_block_statemnt()?,
             Some(TokenKind::Let) => self.parse_let_statement()?,
@@ -113,7 +144,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         Ok(expr)
     }
 
-    fn parse_from_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_from_statement(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::From)?;
         let module_token = self.eat(TokenKind::Identifier)?;
         let module_name = self.intern(module_token.lexeme);
@@ -136,7 +167,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // ReturnStatement
     //  : 'return' ';'
     //  | 'return' Expression ';'
-    fn parse_return_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_return_statement(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::Return)?;
         // Handle bare `return;` with no expression
         let return_expr = if self.lookahead.map(|t| t.kind) == Some(TokenKind::Delimeter) {
@@ -150,7 +181,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // ClassDeclaration
     //  : 'class' Identifier (':' Identifier)? '{' ClassBody '}'
-    fn parse_class_declaration(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_class_declaration(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::Class)?;
         let name_token = self.eat(TokenKind::Identifier)?;
         let name = self.intern(name_token.lexeme);
@@ -169,14 +200,20 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // ClassBody
     //  : (FunctionDeclaration | FieldDeclaration)*
-    fn parse_class_body(&mut self) -> Result<Vec<Stmt>, &'static str> {
+    fn parse_class_body(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut statements = Vec::new();
         while self.lookahead.map(|t| t.kind) != Some(TokenKind::ClosingBrace) {
             match self.lookahead.map(|t| t.kind) {
                 Some(TokenKind::Fn) => statements.push(self.parse_function_declaration()?),
                 Some(TokenKind::Let) => statements.push(self.parse_field_declaration()?),
-                Some(TokenKind::Eof) | None => return Err("Unexpected end of input in class body"),
-                _ => return Err("Only method and field declarations are allowed in class body"),
+                Some(TokenKind::Eof) | None => {
+                    return Err(ParseError::from("Unexpected end of input in class body"))
+                }
+                _ => {
+                    return Err(ParseError::from(
+                        "Only method and field declarations are allowed in class body",
+                    ))
+                }
             }
         }
         Ok(statements)
@@ -184,7 +221,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // FieldDeclaration (class fields - only literals allowed)
     //  : 'let' Identifier ('=' Literal)? ';'
-    fn parse_field_declaration(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_field_declaration(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::Let)?;
         let mut declarations = Vec::new();
 
@@ -212,7 +249,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     }
 
     // Parse only a literal (for class fields)
-    fn parse_literal_only(&mut self) -> Result<Expr, &'static str> {
+    fn parse_literal_only(&mut self) -> Result<Expr, ParseError> {
         match self.lookahead.map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal(),
             Some(TokenKind::String) => self.parse_string_literal(),
@@ -228,13 +265,15 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::Null)?;
                 Ok(Expr::Literal(Literal::Null))
             }
-            _ => Err("Class fields can only be initialized with literals"),
+            _ => Err(ParseError::from(
+                "Class fields can only be initialized with literals",
+            )),
         }
     }
 
     // FunctionDeclaration
     //  : 'fn' Identifier '(' ParameterList ')' '{' Statements '}'
-    fn parse_function_declaration(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_function_declaration(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::Fn)?;
 
         let name_token = self.eat(TokenKind::Identifier)?;
@@ -254,8 +293,8 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // ParameterList
     //  : Identifier (',' Identifier)*
     //  | ε
-    fn parse_parameter_list(&mut self) -> Result<Vec<Symbol>, &'static str> {
-        let mut params = Vec::new();
+    fn parse_parameter_list(&mut self) -> Result<ParamVec, ParseError> {
+        let mut params = ParamVec::new();
 
         // Parse first parameter if present
         if self.lookahead.map(|t| t.kind) == Some(TokenKind::Identifier) {
@@ -275,7 +314,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // WhileStatement
     //  : 'while' '(' Expression ')' Statements
-    fn parse_while_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_while_statement(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::While)?;
 
         self.eat(TokenKind::LParen)?;
@@ -291,7 +330,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // ForStatement
     //  : 'for' Identifier 'in' Expression '{' Statements '}'
-    fn parse_for_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_for_statement(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::For)?;
 
         // Parse loop variable name
@@ -312,7 +351,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // LetStatement
     //  : 'let' DeclarationList ';'
-    fn parse_let_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_let_statement(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::Let)?;
         let declarations = self.parse_declarations()?;
         self.eat(TokenKind::Delimeter)?;
@@ -322,7 +361,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // DeclarationList
     //  : Declaration
     //  | DeclarationList ',' Declaration
-    fn parse_declarations(&mut self) -> Result<Vec<Declaration>, &'static str> {
+    fn parse_declarations(&mut self) -> Result<Vec<Declaration>, ParseError> {
         let mut decls = vec![self.parse_declaration()?];
 
         while let Some(token) = &self.lookahead {
@@ -339,7 +378,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // Declaration
     //  : Identifier
     //  | Identifier '=' Expression
-    fn parse_declaration(&mut self) -> Result<Declaration, &'static str> {
+    fn parse_declaration(&mut self) -> Result<Declaration, ParseError> {
         let name_token = self.eat(TokenKind::Identifier)?;
         let name = self.intern(name_token.lexeme);
         let value = match self.lookahead.map(|t| t.kind) {
@@ -352,7 +391,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // DeclarationValue
     //  : '=' Expression
-    fn parse_declaration_value(&mut self) -> Result<Expr, &'static str> {
+    fn parse_declaration_value(&mut self) -> Result<Expr, ParseError> {
         self.eat(TokenKind::SimpleAssign)?;
         self.parse_logical_or_expression()
     }
@@ -360,7 +399,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // IfStatement
     //  : 'if' '(' Expression ')' Statements
     //  : 'if' '(' Expression ')' Statements 'else' Statements
-    fn parse_if_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_if_statement(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::If)?;
         self.eat(TokenKind::LParen)?;
 
@@ -391,14 +430,14 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // Condition
     //  : EqualityExpression (supports all comparison and equality operators)
-    fn parse_condition(&mut self) -> Result<Expr, &'static str> {
+    fn parse_condition(&mut self) -> Result<Expr, ParseError> {
         self.parse_equality_expression()
     }
 
     // BlockStatement
     //  : '{' StatementList '}'
     //  | '{' '}'
-    fn parse_block_statemnt(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_block_statemnt(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::OpeningBrace)?;
         let block = if self.lookahead.map(|t| t.kind) == Some(TokenKind::ClosingBrace) {
             Stmt::Block(vec![])
@@ -412,7 +451,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // ExpressionStatement
     //  : Expression ';'
-    fn parse_expression_statemnt(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_expression_statemnt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.parse_expression()?;
         self.eat(TokenKind::Delimeter)?;
         Ok(expr)
@@ -420,14 +459,14 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // Expression
     //  : AssignmentExpression
-    fn parse_expression(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_expression(&mut self) -> Result<Stmt, ParseError> {
         self.parse_assignment_expression()
     }
 
     // AssignmentExpression
     //  : LogicalOrExpression
     //  | LeftHandSideExpression '=' AssignmentExpression
-    fn parse_assignment_expression(&mut self) -> Result<Stmt, &'static str> {
+    fn parse_assignment_expression(&mut self) -> Result<Stmt, ParseError> {
         let left = self.parse_logical_or_expression()?;
 
         if let Some(token) = &self.lookahead
@@ -449,7 +488,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                         right,
                     ));
                 }
-                _ => return Err("Invalid left-hand side in assignment"),
+                _ => return Err(ParseError::from("Invalid left-hand side in assignment")),
             };
         }
 
@@ -459,7 +498,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // LogicalOrExpression (lowest precedence of these operators)
     //  : LogicalAndExpression
     //  | LogicalOrExpression '||' LogicalAndExpression
-    fn parse_logical_or_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_logical_or_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_logical_and_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -477,7 +516,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // LogicalAndExpression
     //  : BitwiseOrExpression
     //  | LogicalAndExpression '&&' BitwiseOrExpression
-    fn parse_logical_and_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_logical_and_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_bitwise_or_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -495,7 +534,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // BitwiseOrExpression
     //  : BitwiseAndExpression
     //  | BitwiseOrExpression '|' BitwiseAndExpression
-    fn parse_bitwise_or_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_bitwise_or_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_bitwise_and_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -513,7 +552,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // BitwiseAndExpression
     //  : EqualityExpression
     //  | BitwiseAndExpression '&' EqualityExpression
-    fn parse_bitwise_and_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_bitwise_and_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_equality_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -531,7 +570,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // EqualityExpression
     //  : RelationalExpression
     //  | EqualityExpression ('==' | '!=') RelationalExpression
-    fn parse_equality_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_equality_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_relational_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -551,7 +590,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // RelationalExpression
     //  : AdditiveExpression
     //  | RelationalExpression ('<' | '>' | '<=' | '>=') AdditiveExpression
-    fn parse_relational_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_relational_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_additive_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -573,7 +612,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // AdditiveExpression
     //  : MultiplicativeExpression
     //  | AdditiveExpression ('+' | '-') MultiplicativeExpression
-    fn parse_additive_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_additive_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_multiplicative_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -593,7 +632,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // MultiplicativeExpression
     //  : UnaryExpression
     //  | MultiplicativeExpression ('*' | '/' | '%') UnaryExpression
-    fn parse_multiplicative_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_multiplicative_expression(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_unary_expression()?;
 
         while let Some(token) = &self.lookahead {
@@ -615,7 +654,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // BooleanLiteral
     //  : 'true'
     //  | 'false'
-    fn parse_boolean_literal(&mut self) -> Result<Expr, &'static str> {
+    fn parse_boolean_literal(&mut self) -> Result<Expr, ParseError> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::True) => {
                 self.eat(TokenKind::True)?;
@@ -625,13 +664,13 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::False)?;
                 Ok(Expr::Literal(Literal::Bool(false)))
             }
-            _ => Err("Unexpected token: expected boolean literal"),
+            _ => Err(ParseError::from("Unexpected token: expected boolean literal")),
         }
     }
 
     // NullLiteral
     //  : 'null'
-    fn parse_null_literal(&mut self) -> Result<Expr, &'static str> {
+    fn parse_null_literal(&mut self) -> Result<Expr, ParseError> {
         self.eat(TokenKind::Null)?;
         Ok(Expr::Literal(Literal::Null))
     }
@@ -642,7 +681,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     //  | '-' UnaryExpression  (unary minus / negation)
     //  | '!' UnaryExpression  (logical not)
     //  | '~' UnaryExpression  (bitwise invert)
-    fn parse_unary_expression(&mut self) -> Result<Expr, &'static str> {
+    fn parse_unary_expression(&mut self) -> Result<Expr, ParseError> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Plus) => {
                 // Unary plus - just return the operand (no-op)
@@ -676,7 +715,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     //  | StringLiteral
     //  | Identifier
     //  | '(' Expression ')'
-    fn parse_primary(&mut self) -> Result<Expr, &'static str> {
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         let expr = match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::Number) => self.parse_numeric_literal()?,
             Some(TokenKind::String) => self.parse_string_literal()?,
@@ -694,14 +733,14 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::RParen)?;
                 expr
             }
-            _ => return Err("Unexpected token: expected literal or '('"),
+            _ => return Err(ParseError::from("Unexpected token: expected literal or '('")),
         };
 
         // Handle method/property access on all primaries: "hello".len(), foo.bar, etc.
         self.parse_member_access(expr)
     }
 
-    fn parse_object_instantiation(&mut self) -> Result<Expr, &'static str> {
+    fn parse_object_instantiation(&mut self) -> Result<Expr, ParseError> {
         self.eat(TokenKind::New)?;
 
         let class_token = self.eat(TokenKind::Identifier)?;
@@ -717,7 +756,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // ListLiteral
     //  : '[' ']'
     //  | '[' Expression (',' Expression)* ']'
-    fn parse_list_literal(&mut self) -> Result<Expr, &'static str> {
+    fn parse_list_literal(&mut self) -> Result<Expr, ParseError> {
         self.eat(TokenKind::LBracket)?;
 
         let mut elements = Vec::new();
@@ -738,7 +777,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         Ok(Expr::List(elements))
     }
 
-    fn parse_static_access(&mut self, mut expr: Expr) -> Result<Expr, &'static str> {
+    fn parse_static_access(&mut self, mut expr: Expr) -> Result<Expr, ParseError> {
         if self.lookahead.map(|t| t.kind) == Some(TokenKind::StaticAccess) {
             self.eat(TokenKind::StaticAccess)?;
             let property_token = self.eat(TokenKind::Identifier)?;
@@ -756,7 +795,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     }
 
     // Parse chained property/method access: .foo.bar.baz or .foo().bar()
-    fn parse_member_access(&mut self, mut expr: Expr) -> Result<Expr, &'static str> {
+    fn parse_member_access(&mut self, mut expr: Expr) -> Result<Expr, ParseError> {
         while self.lookahead.map(|t| t.kind) == Some(TokenKind::MemberAccess) {
             self.eat(TokenKind::MemberAccess)?;
             let property_token = self.eat(TokenKind::Identifier)?;
@@ -778,7 +817,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // Identifier or FunctionCall
     //  : IDENTIFIER
     //  | IDENTIFIER '(' ArgumentList? ')'
-    fn parse_identifier(&mut self) -> Result<Expr, &'static str> {
+    fn parse_identifier(&mut self) -> Result<Expr, ParseError> {
         let token = self.eat(TokenKind::Identifier)?;
         let name = self.intern(token.lexeme);
 
@@ -796,7 +835,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // ArgumentList
     //  : Expression (',' Expression)*
     //  | ε
-    fn parse_argument_list(&mut self) -> Result<Vec<Expr>, &'static str> {
+    fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError> {
         let mut args = Vec::new();
 
         // Check for empty argument list
@@ -818,7 +857,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     // NumericLiteral
     //  : NUMBER
-    fn parse_numeric_literal(&mut self) -> Result<Expr, &'static str> {
+    fn parse_numeric_literal(&mut self) -> Result<Expr, ParseError> {
         let token = self.eat(TokenKind::Number)?;
         let lexeme = token.lexeme;
 
@@ -827,13 +866,13 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         } else if let Ok(f) = lexeme.parse::<f64>() {
             Ok(Expr::Literal(Literal::Float(f)))
         } else {
-            Err("Invalid number literal")
+            Err(ParseError::from("Invalid number literal"))
         }
     }
 
     // StringLiteral
     //  : STRING
-    fn parse_string_literal(&mut self) -> Result<Expr, &'static str> {
+    fn parse_string_literal(&mut self) -> Result<Expr, ParseError> {
         let token = self.eat(TokenKind::String)?;
         Ok(Expr::Literal(Literal::Str(self.intern(token.lexeme))))
     }

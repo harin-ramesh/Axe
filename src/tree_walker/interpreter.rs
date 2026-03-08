@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use crate::ast::{Expr, ExprId, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::ast::{Expr, ExprId, ExprKind, Literal, Operation, ParamVec, Program, Stmt, UnaryOp};
 use crate::context::Context;
 use crate::interner::Symbol;
 use crate::transformer::Transformer;
@@ -181,7 +181,7 @@ impl<'ctx> TreeWalker<'ctx> {
             }
             Stmt::While(condition, body) => self.eval_while(condition, body, env),
             Stmt::For(var, iterable, body) => self.eval_for(var, iterable, body, env),
-            Stmt::Function(name, params, body) => self.eval_function(name, params, body, env),
+            Stmt::Function(name, params, body) => self.eval_function(name, &params, &body, env),
             Stmt::Class(name, parent, body) => self.eval_class(name, parent, body, env),
             Stmt::Return(expr) => {
                 let value = self.eval_expr(*expr, Some(env))?;
@@ -404,7 +404,7 @@ impl<'ctx> TreeWalker<'ctx> {
                 }
                 Stmt::Function(fn_name, params, fn_body) => {
                     // All methods stored in class_env
-                    self.eval_function(fn_name, params, fn_body, class_env.clone())?;
+                    self.eval_function(fn_name, &params, &fn_body, class_env.clone())?;
                 }
                 _ => {}
             }
@@ -416,11 +416,11 @@ impl<'ctx> TreeWalker<'ctx> {
     fn eval_function(
         &mut self,
         name: Symbol,
-        params: Vec<Symbol>,
-        body: Box<Stmt>,
+        params: &ParamVec,
+        body: &Box<Stmt>,
         env: EnvRef,
     ) -> Result<Value, EvalSignal> {
-        let func_value = Value::Function(params, body, env.clone());
+        let func_value = Value::Function(params.clone(), body.clone(), env.clone());
         env.borrow_mut().set(name, func_value);
         Ok(Value::Literal(Literal::Null))
     }

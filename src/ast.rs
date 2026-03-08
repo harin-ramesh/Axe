@@ -5,9 +5,14 @@
 //! making it suitable for use with both a tree-walking interpreter
 //! and a future bytecode VM.
 
+use smallvec::SmallVec;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::interner::Symbol;
+
+/// SmallVec type for function parameters (most functions have 4 or fewer parameters).
+/// Stack-allocated for small parameter lists, heap-allocated if more are needed.
+pub type ParamVec = SmallVec<[Symbol; 4]>;
 
 /// Global counter for generating unique expression IDs.
 static EXPR_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -127,7 +132,7 @@ impl Expr {
 
     #[allow(non_snake_case)]
     #[inline]
-    pub fn Lambda(params: Vec<Symbol>, body: Box<Stmt>) -> Self {
+    pub fn Lambda(params: ParamVec, body: Box<Stmt>) -> Self {
         Self::new(ExprKind::Lambda(params, body))
     }
 
@@ -185,7 +190,7 @@ pub enum ExprKind {
     /// A function call: name(args...)
     Call(Symbol, Vec<Expr>),
     /// A lambda expression: |params| body
-    Lambda(Vec<Symbol>, Box<Stmt>),
+    Lambda(ParamVec, Box<Stmt>),
     /// Object instantiation: new ClassName(args...)
     New(Symbol, Vec<Expr>),
     /// Property access: obj.property
@@ -218,7 +223,7 @@ pub enum Stmt {
     /// For loop: for var in iterable { body }
     For(Symbol, Expr, Box<Stmt>),
     /// Function declaration: fn name(params) { body }
-    Function(Symbol, Vec<Symbol>, Box<Stmt>),
+    Function(Symbol, ParamVec, Box<Stmt>),
     /// Class declaration: class Name [: Parent] { body }
     Class(Symbol, Option<Symbol>, Vec<Stmt>),
     /// A return statement: return expr

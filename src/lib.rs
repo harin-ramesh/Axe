@@ -14,7 +14,7 @@ pub use interner::{Interner, Symbol};
 pub use context::Context;
 
 // Re-export AST types
-pub use ast::{Expr, Literal, Operation, Program, Stmt};
+pub use ast::{Expr, Literal, Operation, ParamVec, Program, Stmt};
 
 // Re-export tree-walker interpreter types
 pub use tree_walker::{
@@ -27,5 +27,8 @@ pub use tree_walker::TreeWalker as Axe;
 // Re-export stack VM types
 pub use stack_vm::{AxeVM, Chunk, Compiler, Value as VMValue};
 
-pub use parser::Parser;
+pub use parser::{ParseError, Parser};
 pub use transformer::Transformer;
+
+// Re-export smallvec for tests and users
+pub use smallvec;
