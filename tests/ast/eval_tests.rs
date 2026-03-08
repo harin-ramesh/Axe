@@ -1,3 +1,4 @@
+use axe::smallvec::smallvec;
 use axe::{Axe, Context, Environment, Expr, Literal, Operation, Program, Stmt, Value};
 
 // ============================================================================
@@ -488,7 +489,8 @@ fn eval_let_invalid_name_fails() {
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             name,
-            Some(Expr::Literal(Literal::Int(1))))])],
+            Some(Expr::Literal(Literal::Int(1))),
+        )])],
     };
     let result = axe.run(program);
     assert!(result.is_err());
@@ -566,9 +568,7 @@ fn eval_if_true_branch() {
     let result_sym = context.intern("result");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(
-                result_sym,
-                Some(Expr::Literal(Literal::Int(0))))]),
+            Stmt::Let(vec![(result_sym, Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(true)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -592,9 +592,7 @@ fn eval_if_false_branch() {
     let result_sym = context.intern("result");
     let program = Program {
         stmts: vec![
-            Stmt::Let(vec![(
-                result_sym,
-                Some(Expr::Literal(Literal::Int(0))))]),
+            Stmt::Let(vec![(result_sym, Some(Expr::Literal(Literal::Int(0))))]),
             Stmt::If(
                 Expr::Literal(Literal::Bool(false)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -728,7 +726,7 @@ fn eval_function_definition() {
     let program = Program {
         stmts: vec![Stmt::Function(
             context.intern("add"),
-            vec![a, b],
+            smallvec![a, b],
             Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Binary(
                 Operation::Add,
                 Box::new(Expr::Var(a)),
@@ -748,7 +746,7 @@ fn eval_function_call() {
         stmts: vec![
             Stmt::Function(
                 context.intern("double"),
-                vec![x],
+                smallvec![x],
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Binary(
                     Operation::Mul,
                     Box::new(Expr::Var(x)),
@@ -774,7 +772,7 @@ fn eval_function_call_wrong_arg_count_fails() {
         stmts: vec![
             Stmt::Function(
                 context.intern("add"),
-                vec![a, b],
+                smallvec![a, b],
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Int(
                     0,
                 )))])),
@@ -1053,7 +1051,7 @@ fn eval_class_with_method() {
                 Stmt::Let(vec![(count, Some(Expr::Literal(Literal::Int(0))))]),
                 Stmt::Function(
                     increment,
-                    vec![self_sym],
+                    smallvec![self_sym],
                     Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Null))])),
                 ),
             ],

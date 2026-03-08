@@ -5,7 +5,7 @@ use axe::{Axe, Context, Parser};
 // =============================================================================
 
 /// Helper function to parse source code with a fresh context.
-fn parse(source: &str) -> Result<axe::Program, &'static str> {
+fn parse(source: &str) -> Result<axe::Program, axe::ParseError> {
     let ctx = Context::new();
     let mut parser = Parser::new(source, &ctx);
     parser.parse()

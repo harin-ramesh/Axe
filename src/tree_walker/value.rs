@@ -1,6 +1,6 @@
 //! Runtime values for the tree-walking interpreter.
 
-use crate::ast::{Literal, Stmt};
+use crate::ast::{Literal, ParamVec, Stmt};
 use crate::context::Context;
 use crate::interner::Symbol;
 
@@ -14,7 +14,7 @@ pub type NativeFn = fn(&Context, &[Value]) -> Result<Value, super::interpreter::
 pub enum Value {
     Literal(Literal),
     List(Vec<Value>),
-    Function(Vec<Symbol>, Box<Stmt>, EnvRef),
+    Function(ParamVec, Box<Stmt>, EnvRef),
     NativeFunction(Symbol, NativeFn),
     Object(EnvRef),
 }
