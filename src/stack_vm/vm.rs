@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::instructions::Instruction;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6,23 +8,32 @@ pub enum Value {
     Bool(bool),
     Int(i64),
     Float(f64),
+    Obj(Rc<Obj>),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Obj {
     Str(String),
 }
 
 impl Value {
-    fn as_number(&self) -> f64 {
-        match self {
-            Value::Int(n) => *n as f64,
-            Value::Float(n) => *n,
-            _ => panic!("Expected number, got {:?}", self),
-        }
+    pub fn str(s: impl Into<String>) -> Self {
+        Value::Obj(Rc::new(Obj::Str(s.into())))
     }
+}
 
+impl Value {
     fn as_int(&self) -> i64 {
         match self {
             Value::Int(n) => *n,
-            Value::Float(n) => *n as i64,
-            _ => panic!("Expected integer, got {:?}", self),
+            _ => panic!("Expected Int, got {:?}", self),
+        }
+    }
+
+    fn as_float(&self) -> f64 {
+        match self {
+            Value::Float(n) => *n,
+            _ => panic!("Expected Float, got {:?}", self),
         }
     }
 
@@ -32,7 +43,9 @@ impl Value {
             Value::Null => false,
             Value::Int(n) => *n != 0,
             Value::Float(n) => *n != 0.0,
-            Value::Str(s) => !s.is_empty(),
+            Value::Obj(o) => match o.as_ref() {
+                Obj::Str(s) => !s.is_empty(),
+            },
         }
     }
 
@@ -166,8 +179,11 @@ impl<'a> AxeVM<'a> {
                     let a = self.pop();
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
-                        (Value::Str(a), Value::Str(b)) => Value::Str(format!("{}{}", a, b)),
-                        _ => Value::Float(a.as_number() + b.as_number()),
+                        (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+                        (Value::Obj(ao), Value::Obj(bo)) => match (ao.as_ref(), bo.as_ref()) {
+                            (Obj::Str(a), Obj::Str(b)) => Value::str(format!("{}{}", a, b)),
+                        },
+                        _ => panic!("type error: {:?} + {:?}", a, b),
                     };
                     self.push(result);
                 }
@@ -177,7 +193,8 @@ impl<'a> AxeVM<'a> {
                     let a = self.pop();
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => Value::Int(a - b),
-                        _ => Value::Float(a.as_number() - b.as_number()),
+                        (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
+                        _ => panic!("type error: {:?} - {:?}", a, b),
                     };
                     self.push(result);
                 }
@@ -187,7 +204,8 @@ impl<'a> AxeVM<'a> {
                     let a = self.pop();
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
-                        _ => Value::Float(a.as_number() * b.as_number()),
+                        (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+                        _ => panic!("type error: {:?} * {:?}", a, b),
                     };
                     self.push(result);
                 }
@@ -197,7 +215,8 @@ impl<'a> AxeVM<'a> {
                     let a = self.pop();
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
-                        _ => Value::Float(a.as_number() / b.as_number()),
+                        (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+                        _ => panic!("type error: {:?} / {:?}", a, b),
                     };
                     self.push(result);
                 }
@@ -207,7 +226,8 @@ impl<'a> AxeVM<'a> {
                     let a = self.pop();
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => Value::Int(a % b),
-                        _ => Value::Float(a.as_number() % b.as_number()),
+                        (Value::Float(a), Value::Float(b)) => Value::Float(a % b),
+                        _ => panic!("type error: {:?} % {:?}", a, b),
                     };
                     self.push(result);
                 }
@@ -216,7 +236,8 @@ impl<'a> AxeVM<'a> {
                     let a = self.pop();
                     let result = match a {
                         Value::Int(n) => Value::Int(-n),
-                        _ => Value::Float(-a.as_number()),
+                        Value::Float(n) => Value::Float(-n),
+                        _ => panic!("type error: -{:?}", a),
                     };
                     self.push(result);
                 }
@@ -235,27 +256,47 @@ impl<'a> AxeVM<'a> {
                 }
 
                 Instruction::LT => {
-                    let b = self.pop().as_number();
-                    let a = self.pop().as_number();
-                    self.push(Value::Bool(a < b));
+                    let b = self.pop();
+                    let a = self.pop();
+                    let result = match (&a, &b) {
+                        (Value::Int(a), Value::Int(b)) => a < b,
+                        (Value::Float(a), Value::Float(b)) => a < b,
+                        _ => panic!("type error: {:?} < {:?}", a, b),
+                    };
+                    self.push(Value::Bool(result));
                 }
 
                 Instruction::LTE => {
-                    let b = self.pop().as_number();
-                    let a = self.pop().as_number();
-                    self.push(Value::Bool(a <= b));
+                    let b = self.pop();
+                    let a = self.pop();
+                    let result = match (&a, &b) {
+                        (Value::Int(a), Value::Int(b)) => a <= b,
+                        (Value::Float(a), Value::Float(b)) => a <= b,
+                        _ => panic!("type error: {:?} <= {:?}", a, b),
+                    };
+                    self.push(Value::Bool(result));
                 }
 
                 Instruction::GT => {
-                    let b = self.pop().as_number();
-                    let a = self.pop().as_number();
-                    self.push(Value::Bool(a > b));
+                    let b = self.pop();
+                    let a = self.pop();
+                    let result = match (&a, &b) {
+                        (Value::Int(a), Value::Int(b)) => a > b,
+                        (Value::Float(a), Value::Float(b)) => a > b,
+                        _ => panic!("type error: {:?} > {:?}", a, b),
+                    };
+                    self.push(Value::Bool(result));
                 }
 
                 Instruction::GTE => {
-                    let b = self.pop().as_number();
-                    let a = self.pop().as_number();
-                    self.push(Value::Bool(a >= b));
+                    let b = self.pop();
+                    let a = self.pop();
+                    let result = match (&a, &b) {
+                        (Value::Int(a), Value::Int(b)) => a >= b,
+                        (Value::Float(a), Value::Float(b)) => a >= b,
+                        _ => panic!("type error: {:?} >= {:?}", a, b),
+                    };
+                    self.push(Value::Bool(result));
                 }
 
                 // Logical
@@ -378,14 +419,14 @@ mod tests {
     #[test]
     fn test_string_concat() {
         let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Str("Hello, ".to_string()));
-        chunk.emit_constant(Value::Str("World!".to_string()));
+        chunk.emit_constant(Value::str("Hello, "));
+        chunk.emit_constant(Value::str("World!"));
         chunk.emit(Instruction::ADD);
         chunk.emit(Instruction::HALT);
 
         let mut vm = AxeVM::new(&chunk);
         let result = vm.exec();
-        assert_eq!(result, Some(Value::Str("Hello, World!".to_string())));
+        assert_eq!(result, Some(Value::str("Hello, World!")));
     }
 
     #[test]

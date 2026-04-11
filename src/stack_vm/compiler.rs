@@ -70,7 +70,7 @@ impl<'ctx> Compiler<'ctx> {
             Literal::Float(n) => self.chunk.emit_constant(Value::Float(*n)),
             Literal::Str(s) => {
                 let string = self.ctx.resolve(*s);
-                self.chunk.emit_constant(Value::Str(string))
+                self.chunk.emit_constant(Value::str(string))
             }
         }
     }
@@ -158,7 +158,7 @@ mod tests {
         let hello_sym = ctx.intern("hello");
         assert_eq!(
             compile_and_run(&ctx, Expr::Literal(Literal::Str(hello_sym))),
-            Some(Value::Str("hello".to_string()))
+            Some(Value::str("hello"))
         );
     }
 
@@ -292,7 +292,7 @@ mod tests {
         );
         assert_eq!(
             compile_and_run(&ctx, expr),
-            Some(Value::Str("Hello, World!".to_string()))
+            Some(Value::str("Hello, World!"))
         );
     }
 }

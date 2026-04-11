@@ -1,4 +1,4 @@
-use axe::{Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMValue, Value};
+use axe::{Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMObj, VMValue, Value};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter};
@@ -121,7 +121,9 @@ fn print_vm_value(value: &VMValue) {
         VMValue::Bool(b) => println!("{}", b),
         VMValue::Int(n) => println!("{}", n),
         VMValue::Float(n) => println!("{}", n),
-        VMValue::Str(s) => println!("{}", s),
+        VMValue::Obj(o) => match o.as_ref() {
+            VMObj::Str(s) => println!("{}", s),
+        },
     }
 }
 
