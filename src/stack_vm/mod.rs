@@ -9,4 +9,4 @@ mod vm;
 
 pub use compiler::Compiler;
 pub use instructions::Instruction;
-pub use vm::{AxeVM, Chunk, Value};
+pub use vm::{AxeVM, Chunk, Obj, Value};
