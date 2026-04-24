@@ -12,7 +12,6 @@ pub enum TokenKind {
     WhiteSpace,
     Comment,
     Comma,
-    Symbol,
     Number,
     String,
     Identifier,
@@ -74,7 +73,6 @@ impl fmt::Display for TokenKind {
             TokenKind::WhiteSpace => "Whitespace",
             TokenKind::Comment => "Comment",
             TokenKind::Comma => ",",
-            TokenKind::Symbol => "Symbol",
             TokenKind::Number => "Number",
             TokenKind::String => "String",
             TokenKind::Identifier => "Identifier",
@@ -192,7 +190,6 @@ static TOKEN_PATTERNS: LazyLock<Vec<(TokenKind, Regex)>> = LazyLock::new(|| {
         (TokenKind::Import, Regex::new(r"^import\b").unwrap()),
         (TokenKind::Identifier, Regex::new(r"^[a-zA-Z_]\w*").unwrap()),
         (TokenKind::Delimeter, Regex::new(r"^;").unwrap()),
-        (TokenKind::Symbol, Regex::new(r"^[^\s()]+").unwrap()),
     ]
 });
 
