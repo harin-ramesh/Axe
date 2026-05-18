@@ -46,6 +46,15 @@ impl<'ctx> Compiler<'ctx> {
                     self.compile_stmt(stmt);
                 }
             }
+            Stmt::If(cond, then_stmt, else_stmt) => {
+                self.compile_expr(cond);
+                let jump_to_else = self.chunk.emit_jump(Instruction::JUMP_IF_FALSE);
+                self.compile_stmt(then_stmt);
+                let jump_over_else = self.chunk.emit_jump(Instruction::JUMP);
+                self.chunk.patch_jump(jump_to_else);
+                self.compile_stmt(else_stmt);
+                self.chunk.patch_jump(jump_over_else);
+            }
             // TODO: Implement other statements
             _ => todo!("Statement not yet implemented: {:?}", stmt),
         }
