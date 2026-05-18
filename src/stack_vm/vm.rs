@@ -94,6 +94,26 @@ impl Chunk {
         self.emit(Instruction::CONST);
         self.emit(index);
     }
+
+    /// Emit a jump opcode followed by a 2-byte placeholder offset.
+    /// Returns the index of the first placeholder byte so it can be patched later.
+    pub fn emit_jump(&mut self, opcode: u8) -> usize {
+        self.emit(opcode);
+        let offset = self.code.len();
+        self.emit(0xff);
+        self.emit(0xff);
+        offset
+    }
+
+    /// Patch a previously emitted jump so it targets the current end of the chunk.
+    pub fn patch_jump(&mut self, offset: usize) {
+        // Distance from the byte after the 2-byte operand to the current ip.
+        let jump = self.code.len() - (offset + 2);
+        assert!(jump <= u16::MAX as usize, "Jump offset too large");
+        let bytes = (jump as u16).to_le_bytes();
+        self.code[offset] = bytes[0];
+        self.code[offset + 1] = bytes[1];
+    }
 }
 
 impl Default for Chunk {
@@ -147,11 +167,31 @@ impl<'a> AxeVM<'a> {
         self.chunk.constants[index].clone()
     }
 
+    fn read_u16(&mut self) -> u16 {
+        let lo = self.chunk.code[self.ip];
+        let hi = self.chunk.code[self.ip + 1];
+        self.ip += 2;
+        u16::from_le_bytes([lo, hi])
+    }
+
     fn eval(&mut self) {
         loop {
             let opcode = self.read_u8();
             match opcode {
                 Instruction::HALT => break,
+
+                Instruction::JUMP => {
+                    let offset = self.read_u16() as usize;
+                    self.ip += offset;
+                }
+
+                Instruction::JUMP_IF_FALSE => {
+                    let offset = self.read_u16() as usize;
+                    let cond = self.pop();
+                    if !cond.is_truthy() {
+                        self.ip += offset;
+                    }
+                }
 
                 // Stack operations
                 Instruction::CONST => {

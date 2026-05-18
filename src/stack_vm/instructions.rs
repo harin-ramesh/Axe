@@ -3,6 +3,8 @@ pub struct Instruction;
 impl Instruction {
     // Control
     pub const HALT: u8 = 0x00;
+    pub const JUMP: u8 = 0x50;
+    pub const JUMP_IF_FALSE: u8 = 0x51;
 
     // Stack operations
     pub const CONST: u8 = 0x01;
