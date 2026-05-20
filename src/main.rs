@@ -1,4 +1,7 @@
-use axe::{Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMObj, VMValue, Value};
+use axe::{
+    Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMObj, VMValue, Value,
+    disassemble_chunk,
+};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter};
@@ -23,12 +26,14 @@ fn main() {
     // Parse arguments
     let mut backend = Backend::TreeWalker;
     let mut file_arg: Option<&str> = None;
+    let mut disassemble = false;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
             "--vm" => backend = Backend::StackVM,
             "--tree-walker" => backend = Backend::TreeWalker,
+            "--disassemble" | "--dis" => disassemble = true,
             "--help" | "-h" => {
                 print_usage();
                 return;
@@ -43,6 +48,15 @@ fn main() {
             }
         }
         i += 1;
+    }
+
+    if disassemble {
+        let Some(filename) = file_arg else {
+            eprintln!("--disassemble requires a FILE argument");
+            process::exit(1);
+        };
+        disassemble_file(filename);
+        return;
     }
 
     // Check if a file argument was provided
@@ -61,7 +75,35 @@ fn print_usage() {
     eprintln!("Options:");
     eprintln!("  --tree-walker  Use tree-walking interpreter (default)");
     eprintln!("  --vm           Use stack-based VM");
+    eprintln!("  --disassemble  Compile FILE and print bytecode disassembly (no execution)");
     eprintln!("  -h, --help     Show this help message");
+}
+
+fn disassemble_file(filename: &str) {
+    let content = match fs::read_to_string(filename) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("Error reading file '{}': {}", filename, e);
+            process::exit(1);
+        }
+    };
+
+    if content.trim().is_empty() {
+        return;
+    }
+
+    let ctx = Context::new();
+    let mut parser = Parser::new(&content, &ctx);
+    let program = match parser.parse() {
+        Ok(program) => program,
+        Err(e) => {
+            eprintln!("Parse error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let chunk = Compiler::new(&ctx).compile(&program);
+    print!("{}", disassemble_chunk(&chunk, filename));
 }
 
 fn run_file(filename: &str, backend: Backend) {

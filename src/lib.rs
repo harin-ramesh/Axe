@@ -25,7 +25,10 @@ pub use tree_walker::{
 pub use tree_walker::TreeWalker as Axe;
 
 // Re-export stack VM types
-pub use stack_vm::{AxeVM, Chunk, Compiler, Obj as VMObj, Value as VMValue};
+pub use stack_vm::{
+    AxeVM, Chunk, Compiler, Obj as VMObj, Value as VMValue, disassemble_chunk,
+    disassemble_instruction,
+};
 
 pub use parser::{ParseError, Parser};
 pub use transformer::Transformer;
