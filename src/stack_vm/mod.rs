@@ -4,9 +4,11 @@
 //! programs. It's more efficient than the tree-walker for repeated execution.
 
 mod compiler;
+mod disassembler;
 mod instructions;
 mod vm;
 
 pub use compiler::Compiler;
+pub use disassembler::{disassemble_chunk, disassemble_instruction};
 pub use instructions::Instruction;
 pub use vm::{AxeVM, Chunk, Obj, Value};
