@@ -23,7 +23,7 @@ pub struct ExprId(pub u64);
 
 impl ExprId {
     pub fn new() -> Self {
-        Self(EXPR_ID_COUNTER.fetch_add(1, Ordering::SeqCst))
+        Self(EXPR_ID_COUNTER.fetch_add(1, Ordering::Relaxed))
     }
 }
 

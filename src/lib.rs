@@ -2,7 +2,8 @@ pub mod ast;
 pub mod context;
 pub mod interner;
 mod parser;
-pub mod stack_vm;
+
+pub mod vm;
 mod tokeniser;
 pub mod transformer;
 pub mod tree_walker;
@@ -25,8 +26,8 @@ pub use tree_walker::{
 pub use tree_walker::TreeWalker as Axe;
 
 // Re-export stack VM types
-pub use stack_vm::{
-    AxeVM, Chunk, Compiler, Obj as VMObj, Value as VMValue, disassemble_chunk,
+pub use vm::{
+    AxeVM, Bytecode, BytecodeBuilder, Compiler, Obj as VMObj, Value as VMValue, disassemble,
     disassemble_instruction,
 };
 

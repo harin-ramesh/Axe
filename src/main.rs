@@ -1,6 +1,5 @@
 use axe::{
-    Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMObj, VMValue, Value,
-    disassemble_chunk,
+    Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMObj, VMValue, Value, disassemble,
 };
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -24,7 +23,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     // Parse arguments
-    let mut backend = Backend::TreeWalker;
+    let mut backend = Backend::StackVM;
     let mut file_arg: Option<&str> = None;
     let mut disassemble = false;
 
@@ -102,8 +101,8 @@ fn disassemble_file(filename: &str) {
         }
     };
 
-    let chunk = Compiler::new(&ctx).compile(&program);
-    print!("{}", disassemble_chunk(&chunk, filename));
+    let bytecode = Compiler::new(&ctx).compile(&program);
+    print!("{}", disassemble(&bytecode));
 }
 
 fn run_file(filename: &str, backend: Backend) {
@@ -166,6 +165,8 @@ fn print_vm_value(value: &VMValue) {
         VMValue::Obj(o) => match o.as_ref() {
             VMObj::Str(s) => println!("{}", s),
         },
+        VMValue::Native(name, _) => println!("<native-fn {}>", name),
+        VMValue::Fn { entry, arity } => println!("Fn(@{}, /{})", entry, arity),
     }
 }
 

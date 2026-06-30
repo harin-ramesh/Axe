@@ -5,6 +5,8 @@ impl Instruction {
     pub const HALT: u8 = 0x00;
     pub const JUMP: u8 = 0x50;
     pub const JUMP_IF_FALSE: u8 = 0x51;
+    pub const CALL: u8 = 0x52;
+    pub const RETURN: u8 = 0x53;
 
     // Stack operations
     pub const CONST: u8 = 0x01;
@@ -15,6 +17,15 @@ impl Instruction {
     pub const NULL: u8 = 0x04;
     pub const TRUE: u8 = 0x05;
     pub const FALSE: u8 = 0x06;
+
+    // Globals (each followed by a u8 index)
+    pub const DEFINE_GLOBAL: u8 = 0x60;
+    pub const GET_GLOBAL:    u8 = 0x61;
+    pub const SET_GLOBAL:    u8 = 0x62;
+
+    pub const DEFINE_LOCAL: u8 = 0x63;
+    pub const GET_LOCAL:    u8 = 0x64;
+    pub const SET_LOCAL:    u8 = 0x65;
 
     // Arithmetic
     pub const ADD: u8 = 0x10;

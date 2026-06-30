@@ -1,37 +1,43 @@
 use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
 use crate::context::Context;
 
+use super::bytecode::{Bytecode, BytecodeBuilder};
+use super::tables::{GlobalTable, LocalTable};
 use super::instructions::Instruction;
-use super::vm::{Chunk, Value};
+use super::vm::Value;
 
 /// Compiles AST to bytecode
 pub struct Compiler<'ctx> {
-    chunk: Chunk,
+    builder: BytecodeBuilder,
     ctx: &'ctx Context,
+    globals: GlobalTable,
+    locals: LocalTable,
+    scope_depth: usize,
 }
 
 impl<'ctx> Compiler<'ctx> {
     pub fn new(ctx: &'ctx Context) -> Self {
+        let mut globals = GlobalTable::new();
+        for (name, _) in super::builtins::builtins() {
+            globals.define(ctx.intern(name)).expect("dup builtin");
+        }
+
         Compiler {
-            chunk: Chunk::new(),
+            builder: BytecodeBuilder::new(),
             ctx,
+            globals,
+            locals: LocalTable::new(),
+            scope_depth: 0,
         }
     }
 
-    /// Compile a program and return the bytecode chunk
-    pub fn compile(mut self, program: &Program) -> Chunk {
+    /// Compile a program and return the finished bytecode
+    pub fn compile(mut self, program: &Program) -> Bytecode {
         for stmt in &program.stmts {
             self.compile_stmt(stmt);
         }
-        self.chunk.emit(Instruction::HALT);
-        self.chunk
-    }
-
-    /// Compile a single expression and return the bytecode chunk
-    pub fn compile_expr_only(mut self, expr: &Expr) -> Chunk {
-        self.compile_expr(expr);
-        self.chunk.emit(Instruction::HALT);
-        self.chunk
+        self.builder.emit(Instruction::HALT);
+        self.builder.build()
     }
 
     fn compile_stmt(&mut self, stmt: &Stmt) {
@@ -39,25 +45,100 @@ impl<'ctx> Compiler<'ctx> {
             Stmt::Expr(expr) => {
                 self.compile_expr(expr);
                 // Pop the result since it's an expression statement
-                self.chunk.emit(Instruction::POP);
+                self.builder.emit(Instruction::POP);
             }
             Stmt::Block(stmts) => {
+                self.scope_depth += 1;
                 for stmt in stmts {
                     self.compile_stmt(stmt);
                 }
+                let popped = self.locals.pop_scope(self.scope_depth);
+                for _ in 0..popped {
+                    self.builder.emit(Instruction::POP);
+                }
+                self.scope_depth -= 1;
             }
             Stmt::If(cond, then_stmt, else_stmt) => {
                 self.compile_expr(cond);
-                let jump_to_else = self.chunk.emit_jump(Instruction::JUMP_IF_FALSE);
+                let jump_to_else = self.builder.emit_jump(Instruction::JUMP_IF_FALSE);
                 self.compile_stmt(then_stmt);
-                let jump_over_else = self.chunk.emit_jump(Instruction::JUMP);
-                self.chunk.patch_jump(jump_to_else);
+                let jump_over_else = self.builder.emit_jump(Instruction::JUMP);
+                self.builder.patch_jump(jump_to_else);
                 self.compile_stmt(else_stmt);
-                self.chunk.patch_jump(jump_over_else);
+                self.builder.patch_jump(jump_over_else);
+            }
+            Stmt::Let(bindings) => {
+                for (symbol, init) in bindings {
+                    match init {
+                        Some(expr) => self.compile_expr(expr),
+                        None => self.builder.emit(Instruction::NULL),
+                    }
+                    if self.scope_depth == 0 {
+                        let idx = self.globals.define(*symbol).expect("dup");
+                        self.builder.emit(Instruction::DEFINE_GLOBAL);
+                        self.builder.emit(idx);
+                    } else {
+                        self.locals.define(*symbol, self.scope_depth).expect("dup");
+                        // no instruction — value already sits in this local's slot
+                    }
+                }
+            }
+            Stmt::Assign(symbol, expr) => {
+                self.compile_expr(expr);
+                if let Some(idx) = self.locals.resolve(*symbol, self.scope_depth) {
+                    self.builder.emit(Instruction::SET_LOCAL);
+                    self.builder.emit(idx);
+                } else if let Some(idx) = self.globals.resolve(*symbol) {
+                    self.builder.emit(Instruction::SET_GLOBAL);
+                    self.builder.emit(idx);
+                } else {
+                    panic!("assignment to undefined variable");
+                }
+                self.builder.emit(Instruction::POP);
+            }
+            Stmt::Function(symbol, params, stmts) => {
+                let jump_over_func = self.builder.emit_jump(Instruction::JUMP);
+                let entry = self.builder.here();
+
+                self.scope_depth += 1;
+                for param in params {
+                    self.locals.define(*param, self.scope_depth).expect("dup param");
+                }
+
+                self.compile_stmt(stmts);
+                self.builder.emit(Instruction::NULL);
+                self.builder.emit(Instruction::RETURN);
+
+                self.locals.pop_scope(self.scope_depth);
+                self.scope_depth -= 1;
+
+                self.builder.patch_jump(jump_over_func);
+
+                self.builder
+                    .emit_constant(Value::Fn { entry, arity: params.len() as u8 });
+
+                if self.scope_depth == 0 {
+                    let idx = self.globals.define(*symbol).expect("dup");
+                    self.builder.emit(Instruction::DEFINE_GLOBAL);
+                    self.builder.emit(idx);
+                } else {
+                    self.locals.define(*symbol, self.scope_depth).expect("dup");
+                }
+            }
+            Stmt::Return(expr) => {
+                self.compile_expr(expr);
+                self.builder.emit(Instruction::RETURN);
             }
             // TODO: Implement other statements
             _ => todo!("Statement not yet implemented: {:?}", stmt),
         }
+    }
+
+    /// Compile a single expression and return the finished bytecode
+    pub fn compile_expr_only(mut self, expr: &Expr) -> Bytecode {
+        self.compile_expr(expr);
+        self.builder.emit(Instruction::HALT);
+        self.builder.build()
     }
 
     fn compile_expr(&mut self, expr: &Expr) {
@@ -65,6 +146,27 @@ impl<'ctx> Compiler<'ctx> {
             ExprKind::Literal(lit) => self.compile_literal(lit),
             ExprKind::Binary(op, lhs, rhs) => self.compile_binary(op, lhs, rhs),
             ExprKind::Unary(op, operand) => self.compile_unary(op, operand),
+            ExprKind::Var(var) => {
+                if let Some(idx) = self.locals.resolve(*var, self.scope_depth) {
+                    self.builder.emit(Instruction::GET_LOCAL);
+                    self.builder.emit(idx);
+                } else if let Some(idx) = self.globals.resolve(*var) {
+                    self.builder.emit(Instruction::GET_GLOBAL);
+                    self.builder.emit(idx);
+                } else {
+                    panic!("undefined variable");
+                }
+            }
+            ExprKind::Call(name, args) => {
+                let idx = self.globals.resolve(*name).expect("undefined function");
+                self.builder.emit(Instruction::GET_GLOBAL);
+                self.builder.emit(idx);
+                for arg in args {
+                    self.compile_expr(arg);
+                }
+                self.builder.emit(Instruction::CALL);
+                self.builder.emit(args.len() as u8);
+            }
             // TODO: Implement other expressions
             _ => todo!("Expression not yet implemented: {:?}", expr),
         }
@@ -72,14 +174,14 @@ impl<'ctx> Compiler<'ctx> {
 
     fn compile_literal(&mut self, lit: &Literal) {
         match lit {
-            Literal::Null => self.chunk.emit(Instruction::NULL),
-            Literal::Bool(true) => self.chunk.emit(Instruction::TRUE),
-            Literal::Bool(false) => self.chunk.emit(Instruction::FALSE),
-            Literal::Int(n) => self.chunk.emit_constant(Value::Int(*n)),
-            Literal::Float(n) => self.chunk.emit_constant(Value::Float(*n)),
+            Literal::Null => self.builder.emit(Instruction::NULL),
+            Literal::Bool(true) => self.builder.emit(Instruction::TRUE),
+            Literal::Bool(false) => self.builder.emit(Instruction::FALSE),
+            Literal::Int(n) => self.builder.emit_constant(Value::Int(*n)),
+            Literal::Float(n) => self.builder.emit_constant(Value::Float(*n)),
             Literal::Str(s) => {
                 let string = self.ctx.resolve(*s);
-                self.chunk.emit_constant(Value::str(string))
+                self.builder.emit_constant(Value::str(string))
             }
         }
     }
@@ -107,7 +209,7 @@ impl<'ctx> Compiler<'ctx> {
             Operation::BitwiseAnd => Instruction::BITAND,
             Operation::BitwiseOr => Instruction::BITOR,
         };
-        self.chunk.emit(instruction);
+        self.builder.emit(instruction);
     }
 
     fn compile_unary(&mut self, op: &UnaryOp, operand: &Expr) {
@@ -118,7 +220,7 @@ impl<'ctx> Compiler<'ctx> {
             UnaryOp::Not => Instruction::NOT,
             UnaryOp::Inv => Instruction::BITINV,
         };
-        self.chunk.emit(instruction);
+        self.builder.emit(instruction);
     }
 }
 
@@ -126,12 +228,12 @@ impl<'ctx> Compiler<'ctx> {
 mod tests {
     use super::*;
     use crate::context::Context;
-    use crate::stack_vm::AxeVM;
+    use crate::vm::AxeVM;
 
     fn compile_and_run(ctx: &Context, expr: Expr) -> Option<Value> {
         let compiler = Compiler::new(ctx);
-        let chunk = compiler.compile_expr_only(&expr);
-        let mut vm = AxeVM::new(&chunk);
+        let bytecode = compiler.compile_expr_only(&expr);
+        let mut vm = AxeVM::new(&bytecode);
         vm.exec()
     }
 

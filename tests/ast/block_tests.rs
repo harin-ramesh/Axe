@@ -40,10 +40,12 @@ fn block_with_variables() {
         stmts: vec![Stmt::Block(vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))))]),
+                Some(Expr::Literal(Literal::Int(10))),
+            )]),
             Stmt::Let(vec![(
                 ctx.intern("y"),
-                Some(Expr::Literal(Literal::Int(20))))]),
+                Some(Expr::Literal(Literal::Int(20))),
+            )]),
             Stmt::Expr(Expr::Binary(
                 Operation::Add,
                 Box::new(Expr::Var(ctx.intern("x"))),

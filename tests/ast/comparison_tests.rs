@@ -325,10 +325,12 @@ fn comparison_with_variables() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))))]),
+                Some(Expr::Literal(Literal::Int(10))),
+            )]),
             Stmt::Let(vec![(
                 ctx.intern("y"),
-                Some(Expr::Literal(Literal::Int(5))))]),
+                Some(Expr::Literal(Literal::Int(5))),
+            )]),
             Stmt::Expr(Expr::Binary(
                 Operation::Gt,
                 Box::new(Expr::Var(ctx.intern("x"))),
