@@ -116,7 +116,8 @@ fn if_with_variable_condition() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Int(5))))]),
+                Some(Expr::Literal(Literal::Int(5))),
+            )]),
             Stmt::If(
                 Expr::Var(context.intern("x")),
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
@@ -237,7 +238,8 @@ fn if_with_bool_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Bool(true))))]),
+                Some(Expr::Literal(Literal::Bool(true))),
+            )]),
             Stmt::If(
                 Expr::Var(context.intern("x")),
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(
@@ -260,7 +262,8 @@ fn if_with_false_bool_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Bool(false))))]),
+                Some(Expr::Literal(Literal::Bool(false))),
+            )]),
             Stmt::If(
                 Expr::Var(context.intern("x")),
                 Box::new(Stmt::Block(vec![Stmt::Expr(Expr::Literal(Literal::Str(

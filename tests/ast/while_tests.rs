@@ -9,7 +9,8 @@ fn while_basic_countdown() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("counter"),
-                Some(Expr::Literal(Literal::Int(5))))]),
+                Some(Expr::Literal(Literal::Int(5))),
+            )]),
             Stmt::While(
                 Expr::Var(context.intern("counter")),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -37,10 +38,12 @@ fn while_with_comparison_condition() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("i"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("sum"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
@@ -82,7 +85,8 @@ fn while_never_executes() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Literal(Literal::Int(0)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -106,7 +110,8 @@ fn while_with_false_condition() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("count"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Literal(Literal::Bool(false)),
                 Box::new(Stmt::Block(vec![Stmt::Assign(
@@ -134,10 +139,12 @@ fn while_with_nested_blocks() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("n"),
-                Some(Expr::Literal(Literal::Int(3))))]),
+                Some(Expr::Literal(Literal::Int(3))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("total"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Gt,
@@ -152,7 +159,8 @@ fn while_with_nested_blocks() {
                                 Operation::Mul,
                                 Box::new(Expr::Var(context.intern("n"))),
                                 Box::new(Expr::Literal(Literal::Int(2))),
-                            )))]),
+                            )),
+                        )]),
                         Stmt::Assign(
                             context.intern("total"),
                             Expr::Binary(
@@ -190,10 +198,12 @@ fn while_count_1_to_10_sum_is_correct() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("i"),
-                Some(Expr::Literal(Literal::Int(1))))]),
+                Some(Expr::Literal(Literal::Int(1))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("sum"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lte,
@@ -258,7 +268,8 @@ fn while_with_variable_modification() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("x"),
-                Some(Expr::Literal(Literal::Int(1))))]),
+                Some(Expr::Literal(Literal::Int(1))),
+            )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,
@@ -290,13 +301,16 @@ fn nested_while_loops() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("i"),
-                Some(Expr::Literal(Literal::Int(2))))]),
+                Some(Expr::Literal(Literal::Int(2))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("j"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("total"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Gt,
@@ -356,13 +370,16 @@ fn while_with_if_inside() {
         stmts: vec![
             Stmt::Let(vec![(
                 context.intern("i"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("evens"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::Let(vec![(
                 context.intern("odds"),
-                Some(Expr::Literal(Literal::Int(0))))]),
+                Some(Expr::Literal(Literal::Int(0))),
+            )]),
             Stmt::While(
                 Expr::Binary(
                     Operation::Lt,

@@ -1,24 +1,39 @@
 use std::rc::Rc;
 
-use super::instructions::Instruction;
+use crate::vm::NativeFn;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    Null,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Obj(Rc<Obj>),
-}
+use super::bytecode::Bytecode;
+use super::instructions::Instruction;
+use super::builtins::{builtins};
 
 #[derive(Debug, PartialEq)]
 pub enum Obj {
     Str(String),
 }
 
-impl Value {
-    pub fn str(s: impl Into<String>) -> Self {
-        Value::Obj(Rc::new(Obj::Str(s.into())))
+#[derive(Debug, Clone)]
+pub enum Value {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Obj(Rc<Obj>),
+    Native(&'static str, NativeFn),
+    Fn { entry: usize, arity: u8 },
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        use Value::*;
+        match (self, other) {
+            (Null, Null) => true,
+            (Bool(a), Bool(b)) => a == b,
+            (Int(a), Int(b)) => a == b,
+            (Float(a), Float(b)) => a == b,
+            (Obj(a), Obj(b)) => a == b,
+            (Native(a, _), Native(b, _)) => a == b,
+            _ => false,
+        }
     }
 }
 
@@ -30,6 +45,7 @@ impl Value {
         }
     }
 
+    #[allow(dead_code)]
     fn as_float(&self) -> f64 {
         match self {
             Value::Float(n) => *n,
@@ -46,100 +62,70 @@ impl Value {
             Value::Obj(o) => match o.as_ref() {
                 Obj::Str(s) => !s.is_empty(),
             },
+            Value::Native(_, _) => true,
+            Value::Fn { .. } => true,
         }
     }
 
     fn is_truthy(&self) -> bool {
         self.as_bool()
     }
-}
 
-/// Compiled bytecode chunk with constant pool
-#[derive(Debug, Clone)]
-pub struct Chunk {
-    pub code: Vec<u8>,
-    pub constants: Vec<Value>,
-}
+    pub fn str(s: impl Into<String>) -> Self {
+        Value::Obj(Rc::new(Obj::Str(s.into())))
+    }
 
-impl Chunk {
-    pub fn new() -> Self {
-        Chunk {
-            code: Vec::new(),
-            constants: Vec::new(),
+    pub fn display(&self) -> String {
+        match self {
+            Value::Null => "null".to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Int(n) => n.to_string(),
+            Value::Float(n) => n.to_string(),
+            Value::Obj(o) => match o.as_ref() {
+                Obj::Str(s) => s.clone(),
+            },
+            Value::Native(name, _) => format!("<native-fn {}>", name),
+            Value::Fn { entry, arity } => format!("<fn @{} /{}>", entry, arity),
         }
     }
-
-    /// Add a constant to the pool and return its index
-    pub fn add_constant(&mut self, value: Value) -> u8 {
-        // Check if constant already exists
-        for (i, existing) in self.constants.iter().enumerate() {
-            if existing == &value {
-                return i as u8;
-            }
-        }
-        let index = self.constants.len();
-        assert!(index < 256, "Too many constants in chunk");
-        self.constants.push(value);
-        index as u8
-    }
-
-    /// Emit a single byte
-    pub fn emit(&mut self, byte: u8) {
-        self.code.push(byte);
-    }
-
-    /// Emit a constant load instruction
-    pub fn emit_constant(&mut self, value: Value) {
-        let index = self.add_constant(value);
-        self.emit(Instruction::CONST);
-        self.emit(index);
-    }
-
-    /// Emit a jump opcode followed by a 2-byte placeholder offset.
-    /// Returns the index of the first placeholder byte so it can be patched later.
-    pub fn emit_jump(&mut self, opcode: u8) -> usize {
-        self.emit(opcode);
-        let offset = self.code.len();
-        self.emit(0xff);
-        self.emit(0xff);
-        offset
-    }
-
-    /// Patch a previously emitted jump so it targets the current end of the chunk.
-    pub fn patch_jump(&mut self, offset: usize) {
-        // Distance from the byte after the 2-byte operand to the current ip.
-        let jump = self.code.len() - (offset + 2);
-        assert!(jump <= u16::MAX as usize, "Jump offset too large");
-        let bytes = (jump as u16).to_le_bytes();
-        self.code[offset] = bytes[0];
-        self.code[offset + 1] = bytes[1];
-    }
 }
 
-impl Default for Chunk {
-    fn default() -> Self {
-        Self::new()
-    }
+struct Frame {
+    ret_ip: usize,
+    bp: usize,
 }
 
 pub struct AxeVM<'a> {
-    chunk: &'a Chunk,
+    bytecode: &'a Bytecode,
     ip: usize,
+    bp: usize,
     stack: Vec<Value>,
+    frames: Vec<Frame>,
+    globals: Vec<Value>,
 }
 
 impl<'a> AxeVM<'a> {
-    pub fn new(chunk: &'a Chunk) -> Self {
+    pub fn new(bytecode: &'a Bytecode) -> Self {
+        let globals = builtins()
+            .iter()
+            .map(|(name, f)| Value::Native(name, *f))
+            .collect();
+
         AxeVM {
-            chunk,
+            bytecode,
             ip: 0,
+            bp: 0,
             stack: Vec::with_capacity(256),
+            frames: Vec::with_capacity(256),
+            globals: globals
         }
     }
 
     pub fn exec(&mut self) -> Option<Value> {
         self.ip = 0;
+        self.bp = 0;
         self.stack.clear();
+        self.frames.clear();
         self.eval();
         self.stack.pop()
     }
@@ -157,19 +143,19 @@ impl<'a> AxeVM<'a> {
     }
 
     fn read_u8(&mut self) -> u8 {
-        let value = self.chunk.code[self.ip];
+        let value = self.bytecode.code[self.ip];
         self.ip += 1;
         value
     }
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_u8() as usize;
-        self.chunk.constants[index].clone()
+        self.bytecode.constants[index].clone()
     }
 
     fn read_u16(&mut self) -> u16 {
-        let lo = self.chunk.code[self.ip];
-        let hi = self.chunk.code[self.ip + 1];
+        let lo = self.bytecode.code[self.ip];
+        let hi = self.bytecode.code[self.ip + 1];
         self.ip += 2;
         u16::from_le_bytes([lo, hi])
     }
@@ -375,6 +361,69 @@ impl<'a> AxeVM<'a> {
                     self.push(Value::Int(!a));
                 }
 
+                Instruction::DEFINE_GLOBAL => {
+                    let idx = self.read_u8() as usize;
+                    let value = self.pop();
+                    if idx >= self.globals.len() {
+                        self.globals.resize(idx+1, Value::Null)
+                    }
+                    self.globals[idx] = value;
+                }
+                Instruction::GET_GLOBAL => {
+                    let idx = self.read_u8() as usize;
+                    self.push(self.globals[idx].clone());
+                }
+
+                Instruction::SET_GLOBAL => {
+                    let idx = self.read_u8() as usize;
+                    self.globals[idx] = self.peek().clone();
+                }
+
+                Instruction::DEFINE_LOCAL => {
+                    let slot = self.read_u8() as usize;
+                    let value = self.peek().clone();
+                    self.stack[self.bp + slot] = value;
+                }
+
+                Instruction::SET_LOCAL => {
+                    let slot = self.read_u8() as usize;
+                    let value = self.peek().clone();
+                    self.stack[self.bp + slot] = value;
+                }
+
+                Instruction::GET_LOCAL => {
+                    let slot = self.read_u8() as usize;
+                    let value = self.stack[self.bp + slot].clone();
+                    self.push(value);
+                }
+                Instruction::CALL => {
+                    let argc = self.read_u8() as usize;
+                    let callee_idx = self.stack.len() - argc - 1;
+                    let callee = self.stack[callee_idx].clone();
+                    match callee {
+                        Value::Native(_, func) => {
+                            let args: Vec<Value> = self.stack[callee_idx + 1..].to_vec();
+                            let result = func(&args);
+                            self.stack.truncate(callee_idx);
+                            self.push(result);
+                        }
+                        Value::Fn { entry, arity } => {
+                            assert_eq!(argc, arity as usize, "wrong arg count");
+                            self.frames.push(Frame { ret_ip: self.ip, bp: self.bp });
+                            self.bp = callee_idx + 1;
+                            self.ip = entry;
+                        }
+                        other => panic!("not callable: {:?}", other),
+                    }
+                }
+                Instruction::RETURN => {
+                    let result = self.pop();
+                    let frame = self.frames.pop().expect("return outside function");
+                    self.stack.truncate(self.bp - 1);
+                    self.ip = frame.ret_ip;
+                    self.bp = frame.bp;
+                    self.push(result);
+                }
                 _ => panic!("Unknown opcode: 0x{:02x}", opcode),
             }
         }
@@ -384,24 +433,27 @@ impl<'a> AxeVM<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vm::BytecodeBuilder;
 
     #[test]
     fn test_halt() {
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert!(result.is_none());
     }
 
     #[test]
     fn test_const() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(42));
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(42));
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(42)));
     }
@@ -409,126 +461,137 @@ mod tests {
     #[test]
     fn test_literals() {
         // Test NULL
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::NULL);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::NULL);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Null));
 
         // Test TRUE
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::TRUE);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::TRUE);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
 
         // Test FALSE
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::FALSE);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::FALSE);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(false)));
     }
 
     #[test]
     fn test_add() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(10));
-        chunk.emit_constant(Value::Int(20));
-        chunk.emit(Instruction::ADD);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(10));
+        b.emit_constant(Value::Int(20));
+        b.emit(Instruction::ADD);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(30)));
     }
 
     #[test]
     fn test_add_float() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Float(10.5));
-        chunk.emit_constant(Value::Float(20.5));
-        chunk.emit(Instruction::ADD);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Float(10.5));
+        b.emit_constant(Value::Float(20.5));
+        b.emit(Instruction::ADD);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Float(31.0)));
     }
 
     #[test]
     fn test_string_concat() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::str("Hello, "));
-        chunk.emit_constant(Value::str("World!"));
-        chunk.emit(Instruction::ADD);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::str("Hello, "));
+        b.emit_constant(Value::str("World!"));
+        b.emit(Instruction::ADD);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::str("Hello, World!")));
     }
 
     #[test]
     fn test_sub() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(50));
-        chunk.emit_constant(Value::Int(20));
-        chunk.emit(Instruction::SUB);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(50));
+        b.emit_constant(Value::Int(20));
+        b.emit(Instruction::SUB);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(30)));
     }
 
     #[test]
     fn test_mul() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(6));
-        chunk.emit_constant(Value::Int(7));
-        chunk.emit(Instruction::MUL);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(6));
+        b.emit_constant(Value::Int(7));
+        b.emit(Instruction::MUL);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(42)));
     }
 
     #[test]
     fn test_div() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(100));
-        chunk.emit_constant(Value::Int(4));
-        chunk.emit(Instruction::DIV);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(100));
+        b.emit_constant(Value::Int(4));
+        b.emit(Instruction::DIV);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(25)));
     }
 
     #[test]
     fn test_mod() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(17));
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit(Instruction::MOD);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(17));
+        b.emit_constant(Value::Int(5));
+        b.emit(Instruction::MOD);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(2)));
     }
 
     #[test]
     fn test_neg() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(42));
-        chunk.emit(Instruction::NEG);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(42));
+        b.emit(Instruction::NEG);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(-42)));
     }
@@ -536,101 +599,111 @@ mod tests {
     #[test]
     fn test_comparison() {
         // Test EQ
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit(Instruction::EQ);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(5));
+        b.emit_constant(Value::Int(5));
+        b.emit(Instruction::EQ);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
 
         // Test NEQ
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit_constant(Value::Int(3));
-        chunk.emit(Instruction::NEQ);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(5));
+        b.emit_constant(Value::Int(3));
+        b.emit(Instruction::NEQ);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
 
         // Test LT
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(3));
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit(Instruction::LT);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(3));
+        b.emit_constant(Value::Int(5));
+        b.emit(Instruction::LT);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
 
         // Test GT
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit_constant(Value::Int(3));
-        chunk.emit(Instruction::GT);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(5));
+        b.emit_constant(Value::Int(3));
+        b.emit(Instruction::GT);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
     }
 
     #[test]
     fn test_logical() {
         // Test NOT
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::TRUE);
-        chunk.emit(Instruction::NOT);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::TRUE);
+        b.emit(Instruction::NOT);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(false)));
 
         // Test AND
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::TRUE);
-        chunk.emit(Instruction::TRUE);
-        chunk.emit(Instruction::AND);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::TRUE);
+        b.emit(Instruction::TRUE);
+        b.emit(Instruction::AND);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
 
         // Test OR
-        let mut chunk = Chunk::new();
-        chunk.emit(Instruction::FALSE);
-        chunk.emit(Instruction::TRUE);
-        chunk.emit(Instruction::OR);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::FALSE);
+        b.emit(Instruction::TRUE);
+        b.emit(Instruction::OR);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Bool(true)));
     }
 
     #[test]
     fn test_bitwise() {
         // Test BITAND
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(0b1100));
-        chunk.emit_constant(Value::Int(0b1010));
-        chunk.emit(Instruction::BITAND);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(0b1100));
+        b.emit_constant(Value::Int(0b1010));
+        b.emit(Instruction::BITAND);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Int(0b1000)));
 
         // Test BITOR
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(0b1100));
-        chunk.emit_constant(Value::Int(0b1010));
-        chunk.emit(Instruction::BITOR);
-        chunk.emit(Instruction::HALT);
-        let mut vm = AxeVM::new(&chunk);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(0b1100));
+        b.emit_constant(Value::Int(0b1010));
+        b.emit(Instruction::BITOR);
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         assert_eq!(vm.exec(), Some(Value::Int(0b1110)));
     }
 
     #[test]
     fn test_dup() {
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit(Instruction::DUP);
-        chunk.emit(Instruction::MUL);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(5));
+        b.emit(Instruction::DUP);
+        b.emit(Instruction::MUL);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(25))); // 5 * 5
     }
@@ -638,34 +711,36 @@ mod tests {
     #[test]
     fn test_complex_expression() {
         // Compute: (10 + 20) * 2 - 5 = 55
-        let mut chunk = Chunk::new();
-        chunk.emit_constant(Value::Int(10));
-        chunk.emit_constant(Value::Int(20));
-        chunk.emit(Instruction::ADD);
-        chunk.emit_constant(Value::Int(2));
-        chunk.emit(Instruction::MUL);
-        chunk.emit_constant(Value::Int(5));
-        chunk.emit(Instruction::SUB);
-        chunk.emit(Instruction::HALT);
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Value::Int(10));
+        b.emit_constant(Value::Int(20));
+        b.emit(Instruction::ADD);
+        b.emit_constant(Value::Int(2));
+        b.emit(Instruction::MUL);
+        b.emit_constant(Value::Int(5));
+        b.emit(Instruction::SUB);
+        b.emit(Instruction::HALT);
 
-        let mut vm = AxeVM::new(&chunk);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(55)));
     }
 
     #[test]
     fn test_constant_deduplication() {
-        let mut chunk = Chunk::new();
+        let mut b = BytecodeBuilder::new();
         // Use same constant twice - should only be stored once
-        chunk.emit_constant(Value::Int(42));
-        chunk.emit_constant(Value::Int(42));
-        chunk.emit(Instruction::ADD);
-        chunk.emit(Instruction::HALT);
+        b.emit_constant(Value::Int(42));
+        b.emit_constant(Value::Int(42));
+        b.emit(Instruction::ADD);
+        b.emit(Instruction::HALT);
 
+        let bc = b.build();
         // Verify deduplication
-        assert_eq!(chunk.constants.len(), 1);
+        assert_eq!(bc.constants.len(), 1);
 
-        let mut vm = AxeVM::new(&chunk);
+        let mut vm = AxeVM::new(&bc);
         let result = vm.exec();
         assert_eq!(result, Some(Value::Int(84)));
     }

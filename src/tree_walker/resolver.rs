@@ -517,7 +517,10 @@ mod tests {
             }
         "#;
         let result = resolve_source(source);
-        assert!(result.is_ok(), "Should allow using variable after assignment");
+        assert!(
+            result.is_ok(),
+            "Should allow using variable after assignment"
+        );
     }
 
     #[test]
@@ -532,7 +535,10 @@ mod tests {
             }
         "#;
         let result = resolve_source(source);
-        assert!(result.is_ok(), "Should allow using variable after declaration (initialized to null)");
+        assert!(
+            result.is_ok(),
+            "Should allow using variable after declaration (initialized to null)"
+        );
     }
 
     #[test]
@@ -572,7 +578,10 @@ mod tests {
         // x is accessed from inner block:
         // inner block scope (0) -> outer block scope (1) where x is defined
         let has_depth_1 = locals.values().any(|loc| loc.depth == 1);
-        assert!(has_depth_1, "Should resolve 'x' at depth 1 from nested block");
+        assert!(
+            has_depth_1,
+            "Should resolve 'x' at depth 1 from nested block"
+        );
     }
 
     #[test]
@@ -594,7 +603,10 @@ mod tests {
         // x is accessed from 3 blocks deep:
         // block3 (0) -> block2 (1) -> block1 (2) -> fn body (3) where x is defined
         let has_depth_3 = locals.values().any(|loc| loc.depth == 3);
-        assert!(has_depth_3, "Should resolve 'x' at depth 3 from deeply nested blocks");
+        assert!(
+            has_depth_3,
+            "Should resolve 'x' at depth 3 from deeply nested blocks"
+        );
     }
 
     #[test]
@@ -617,7 +629,10 @@ mod tests {
         // The variable reference `x` after assignment should resolve at depth 2:
         // innermost block (0) -> middle block (1) -> fn body (2) where x is defined
         let has_depth_2 = locals.values().any(|loc| loc.depth == 2);
-        assert!(has_depth_2, "Should resolve 'x' at depth 2 after assignment in nested block");
+        assert!(
+            has_depth_2,
+            "Should resolve 'x' at depth 2 after assignment in nested block"
+        );
     }
 
     #[test]

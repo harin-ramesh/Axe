@@ -90,10 +90,10 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     }
 
     // StatementList
-    //  : Statement
+    //  : ε
     //  | StatemtnList Statement -> Statement Statement Statment
     fn parse_statements(&mut self, stop_token: TokenKind) -> Result<Vec<Stmt>, ParseError> {
-        let mut stmts = vec![self.parse_statement()?];
+        let mut stmts = Vec::new();
 
         while let Some(token) = &self.lookahead {
             if token.kind == stop_token {
@@ -207,12 +207,12 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 Some(TokenKind::Fn) => statements.push(self.parse_function_declaration()?),
                 Some(TokenKind::Let) => statements.push(self.parse_field_declaration()?),
                 Some(TokenKind::Eof) | None => {
-                    return Err(ParseError::from("Unexpected end of input in class body"))
+                    return Err(ParseError::from("Unexpected end of input in class body"));
                 }
                 _ => {
                     return Err(ParseError::from(
                         "Only method and field declarations are allowed in class body",
-                    ))
+                    ));
                 }
             }
         }
@@ -439,11 +439,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     //  | '{' '}'
     fn parse_block_statemnt(&mut self) -> Result<Stmt, ParseError> {
         self.eat(TokenKind::OpeningBrace)?;
-        let block = if self.lookahead.map(|t| t.kind) == Some(TokenKind::ClosingBrace) {
-            Stmt::Block(vec![])
-        } else {
-            Stmt::Block(self.parse_statements(TokenKind::ClosingBrace)?)
-        };
+        let block = Stmt::Block(self.parse_statements(TokenKind::ClosingBrace)?);
         self.eat(TokenKind::ClosingBrace)?;
 
         Ok(block)
@@ -664,7 +660,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::False)?;
                 Ok(Expr::Literal(Literal::Bool(false)))
             }
-            _ => Err(ParseError::from("Unexpected token: expected boolean literal")),
+            _ => Err(ParseError::from(
+                "Unexpected token: expected boolean literal",
+            )),
         }
     }
 
@@ -733,7 +731,11 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::RParen)?;
                 expr
             }
-            _ => return Err(ParseError::from("Unexpected token: expected literal or '('")),
+            _ => {
+                return Err(ParseError::from(
+                    "Unexpected token: expected literal or '('",
+                ));
+            }
         };
 
         // Handle method/property access on all primaries: "hello".len(), foo.bar, etc.

@@ -9,7 +9,8 @@ fn assign_to_existing_global_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))))]),
+                Some(Expr::Literal(Literal::Int(10))),
+            )]),
             Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(20))),
         ],
     };
@@ -26,7 +27,8 @@ fn let_creates_variable_if_not_exists() {
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             ctx.intern("x"),
-            Some(Expr::Literal(Literal::Int(10))))])],
+            Some(Expr::Literal(Literal::Int(10))),
+        )])],
     };
 
     let result = axe.run(program);
@@ -41,7 +43,8 @@ fn assign_with_invalid_name_fails() {
     let program = Program {
         stmts: vec![Stmt::Let(vec![(
             ctx.intern("123invalid"),
-            Some(Expr::Literal(Literal::Int(10))))])],
+            Some(Expr::Literal(Literal::Int(10))),
+        )])],
     };
 
     let err = axe.run(program).unwrap_err();
@@ -57,7 +60,8 @@ fn assign_using_expression() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(5))))]),
+                Some(Expr::Literal(Literal::Int(5))),
+            )]),
             Stmt::Assign(
                 ctx.intern("x"),
                 Expr::Binary(
@@ -82,7 +86,8 @@ fn let_in_block_updates_variable() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))))]),
+                Some(Expr::Literal(Literal::Int(10))),
+            )]),
             Stmt::Block(vec![
                 Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(100))),
                 Stmt::Expr(Expr::Var(ctx.intern("x"))),
@@ -103,7 +108,8 @@ fn let_in_nested_block_updates() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(10))))]),
+                Some(Expr::Literal(Literal::Int(10))),
+            )]),
             Stmt::Block(vec![Stmt::Assign(
                 ctx.intern("x"),
                 Expr::Literal(Literal::Int(20)),
@@ -125,7 +131,8 @@ fn let_in_same_scope_updates() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(1))))]),
+                Some(Expr::Literal(Literal::Int(1))),
+            )]),
             Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(100))),
         ],
     };
@@ -143,7 +150,8 @@ fn let_updates_through_blocks() {
         stmts: vec![
             Stmt::Let(vec![(
                 ctx.intern("x"),
-                Some(Expr::Literal(Literal::Int(1))))]),
+                Some(Expr::Literal(Literal::Int(1))),
+            )]),
             Stmt::Block(vec![
                 Stmt::Assign(ctx.intern("x"), Expr::Literal(Literal::Int(10))),
                 Stmt::Block(vec![Stmt::Assign(
