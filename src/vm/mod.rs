@@ -7,7 +7,7 @@ mod tables;
 mod vm;
 
 pub use builtins::{NativeFn, builtins};
-pub use bytecode::{Bytecode, BytecodeBuilder};
+pub use bytecode::{Bytecode, BytecodeBuilder, Constant};
 pub use compiler::Compiler;
 pub use disassembler::{disassemble, disassemble_instruction};
 pub use instructions::Instruction;

@@ -1,11 +1,23 @@
 use super::instructions::Instruction;
-use super::vm::Value;
+
+/// A compile-time constant baked into the bytecode's constant pool.
+///
+/// Constants are pure data — they carry no heap handles. String constants
+/// are materialized into the VM's heap when the `CONST` opcode loads them,
+/// which keeps `Bytecode` self-contained and independent of any VM/heap.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Constant {
+    Int(i64),
+    Float(f64),
+    Str(String),
+    Fn { entry: usize, arity: u8 },
+}
 
 /// Immutable compiled bytecode ready for execution.
 #[derive(Debug, Clone, Default)]
 pub struct Bytecode {
     pub code: Vec<u8>,
-    pub constants: Vec<Value>,
+    pub constants: Vec<Constant>,
 }
 
 /// Builder used by the compiler to construct bytecode incrementally.
@@ -27,7 +39,7 @@ impl BytecodeBuilder {
 
     /// Add a constant to the pool and return its index.
     /// Returns the existing index if the same value is already present.
-    pub fn add_constant(&mut self, value: Value) -> u8 {
+    pub fn add_constant(&mut self, value: Constant) -> u8 {
         for (i, existing) in self.bytecode.constants.iter().enumerate() {
             if existing == &value {
                 return i as u8;
@@ -45,7 +57,7 @@ impl BytecodeBuilder {
     }
 
     /// Emit a constant load instruction.
-    pub fn emit_constant(&mut self, value: Value) {
+    pub fn emit_constant(&mut self, value: Constant) {
         let index = self.add_constant(value);
         self.emit(Instruction::CONST);
         self.emit(index);

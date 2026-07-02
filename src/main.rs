@@ -1,5 +1,5 @@
 use axe::{
-    Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMObj, VMValue, Value, disassemble,
+    Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMValue, Value, disassemble,
 };
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -152,21 +152,10 @@ fn run_with_vm(ctx: &Context, program: Program) {
     let chunk = compiler.compile(&program);
     let mut vm = AxeVM::new(&chunk);
     if let Some(result) = vm.exec() {
-        print_vm_value(&result);
-    }
-}
-
-fn print_vm_value(value: &VMValue) {
-    match value {
-        VMValue::Null => {}
-        VMValue::Bool(b) => println!("{}", b),
-        VMValue::Int(n) => println!("{}", n),
-        VMValue::Float(n) => println!("{}", n),
-        VMValue::Obj(o) => match o.as_ref() {
-            VMObj::Str(s) => println!("{}", s),
-        },
-        VMValue::Native(name, _) => println!("<native-fn {}>", name),
-        VMValue::Fn { entry, arity } => println!("Fn(@{}, /{})", entry, arity),
+        // Null is the unit result of statements; don't print it.
+        if !matches!(result, VMValue::Null) {
+            println!("{}", vm.display_value(&result));
+        }
     }
 }
 
@@ -441,7 +430,10 @@ fn run_repl(backend: Backend) {
                                     let mut vm = AxeVM::new(&chunk);
                                     if let Some(result) = vm.exec() {
                                         if !matches!(result, VMValue::Null) {
-                                            println!("\x1b[1;32m=>\x1b[0m {:?}", result);
+                                            println!(
+                                                "\x1b[1;32m=>\x1b[0m {}",
+                                                vm.display_value(&result)
+                                            );
                                         }
                                     }
                                 }

@@ -1,8 +1,7 @@
 use std::fmt::Write;
 
-use super::bytecode::Bytecode;
+use super::bytecode::{Bytecode, Constant};
 use super::instructions::Instruction;
-use super::vm::{Obj, Value};
 
 /// Disassemble bytecode into a human-readable string.
 ///
@@ -109,7 +108,7 @@ fn constant(out: &mut String, name: &str, bytecode: &Bytecode, offset: usize) ->
     let value = bytecode
         .constants
         .get(idx as usize)
-        .map(format_value)
+        .map(format_constant)
         .unwrap_or_else(|| "<out of range>".to_string());
     let _ = writeln!(out, "{:<14} {}", name, value);
     offset + 2
@@ -134,17 +133,12 @@ fn byte_operand(out: &mut String, name: &str, bytecode: &Bytecode, offset: usize
     offset + 2
 }
 
-fn format_value(v: &Value) -> String {
-    match v {
-        Value::Null => "Null".to_string(),
-        Value::Bool(b) => format!("Bool({})", b),
-        Value::Int(n) => format!("Int({})", n),
-        Value::Float(n) => format!("Float({})", n),
-        Value::Obj(o) => match o.as_ref() {
-            Obj::Str(s) => format!("Str({:?})", s),
-        },
-        Value::Native(name, _) => format!("<native-fn {}>", name),
-        Value::Fn { entry, arity } => format!("Fn(@{}, /{})", entry, arity),
+fn format_constant(c: &Constant) -> String {
+    match c {
+        Constant::Int(n) => format!("Int({})", n),
+        Constant::Float(n) => format!("Float({})", n),
+        Constant::Str(s) => format!("Str({:?})", s),
+        Constant::Fn { entry, arity } => format!("Fn(@{}, /{})", entry, arity),
     }
 }
 
@@ -171,8 +165,8 @@ mod tests {
     #[test]
     fn constant_opcode_inlines_value() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Value::Int(42));
-        b.emit_constant(Value::str("hello"));
+        b.emit_constant(Constant::Int(42));
+        b.emit_constant(Constant::Str("hello".into()));
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 
