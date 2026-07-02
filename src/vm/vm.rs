@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::vm::NativeFn;
 
+use super::builtins::builtins;
 use super::bytecode::Bytecode;
 use super::instructions::Instruction;
-use super::builtins::{builtins};
 
 #[derive(Debug, PartialEq)]
 pub enum Obj {
@@ -117,7 +117,7 @@ impl<'a> AxeVM<'a> {
             bp: 0,
             stack: Vec::with_capacity(256),
             frames: Vec::with_capacity(256),
-            globals: globals
+            globals: globals,
         }
     }
 
@@ -365,7 +365,7 @@ impl<'a> AxeVM<'a> {
                     let idx = self.read_u8() as usize;
                     let value = self.pop();
                     if idx >= self.globals.len() {
-                        self.globals.resize(idx+1, Value::Null)
+                        self.globals.resize(idx + 1, Value::Null)
                     }
                     self.globals[idx] = value;
                 }
@@ -409,7 +409,10 @@ impl<'a> AxeVM<'a> {
                         }
                         Value::Fn { entry, arity } => {
                             assert_eq!(argc, arity as usize, "wrong arg count");
-                            self.frames.push(Frame { ret_ip: self.ip, bp: self.bp });
+                            self.frames.push(Frame {
+                                ret_ip: self.ip,
+                                bp: self.bp,
+                            });
                             self.bp = callee_idx + 1;
                             self.ip = entry;
                         }

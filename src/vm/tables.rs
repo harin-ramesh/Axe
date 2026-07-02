@@ -1,7 +1,7 @@
 use crate::Symbol;
 
 pub struct GlobalTable {
-    names: Vec<Symbol>
+    names: Vec<Symbol>,
 }
 
 impl GlobalTable {
@@ -24,7 +24,7 @@ impl GlobalTable {
     }
 
     pub fn resolve(&self, name: Symbol) -> Option<u8> {
-        self.names.iter().position(|&n| n==name).map(|i| i as u8)
+        self.names.iter().position(|&n| n == name).map(|i| i as u8)
     }
 
     #[allow(dead_code)]
@@ -40,15 +40,12 @@ struct Local {
 
 impl Local {
     pub fn new(name: Symbol, depth: usize) -> Self {
-        Self {
-            name,
-            depth
-        }
-    } 
+        Self { name, depth }
+    }
 }
 
 pub struct LocalTable {
-    locals: Vec<Local>
+    locals: Vec<Local>,
 }
 
 impl LocalTable {
@@ -71,7 +68,10 @@ impl LocalTable {
     }
 
     pub fn resolve(&self, name: Symbol, depth: usize) -> Option<u8> {
-        self.locals.iter().position(|n| n.name==name && n.depth <= depth).map(|i| i as u8)
+        self.locals
+            .iter()
+            .position(|n| n.name == name && n.depth <= depth)
+            .map(|i| i as u8)
     }
 
     pub fn pop_scope(&mut self, depth: usize) -> usize {
@@ -92,4 +92,3 @@ impl LocalTable {
         self.locals.len()
     }
 }
-

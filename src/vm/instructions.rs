@@ -20,12 +20,12 @@ impl Instruction {
 
     // Globals (each followed by a u8 index)
     pub const DEFINE_GLOBAL: u8 = 0x60;
-    pub const GET_GLOBAL:    u8 = 0x61;
-    pub const SET_GLOBAL:    u8 = 0x62;
+    pub const GET_GLOBAL: u8 = 0x61;
+    pub const SET_GLOBAL: u8 = 0x62;
 
     pub const DEFINE_LOCAL: u8 = 0x63;
-    pub const GET_LOCAL:    u8 = 0x64;
-    pub const SET_LOCAL:    u8 = 0x65;
+    pub const GET_LOCAL: u8 = 0x64;
+    pub const SET_LOCAL: u8 = 0x65;
 
     // Arithmetic
     pub const ADD: u8 = 0x10;

@@ -2,8 +2,8 @@ use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
 use crate::context::Context;
 
 use super::bytecode::{Bytecode, BytecodeBuilder};
-use super::tables::{GlobalTable, LocalTable};
 use super::instructions::Instruction;
+use super::tables::{GlobalTable, LocalTable};
 use super::vm::Value;
 
 /// Compiles AST to bytecode
@@ -102,7 +102,9 @@ impl<'ctx> Compiler<'ctx> {
 
                 self.scope_depth += 1;
                 for param in params {
-                    self.locals.define(*param, self.scope_depth).expect("dup param");
+                    self.locals
+                        .define(*param, self.scope_depth)
+                        .expect("dup param");
                 }
 
                 self.compile_stmt(stmts);
@@ -114,8 +116,10 @@ impl<'ctx> Compiler<'ctx> {
 
                 self.builder.patch_jump(jump_over_func);
 
-                self.builder
-                    .emit_constant(Value::Fn { entry, arity: params.len() as u8 });
+                self.builder.emit_constant(Value::Fn {
+                    entry,
+                    arity: params.len() as u8,
+                });
 
                 if self.scope_depth == 0 {
                     let idx = self.globals.define(*symbol).expect("dup");
