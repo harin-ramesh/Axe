@@ -3,10 +3,10 @@ pub mod context;
 pub mod interner;
 mod parser;
 
-pub mod vm;
 mod tokeniser;
 pub mod transformer;
 pub mod tree_walker;
+pub mod vm;
 
 // Re-export interner types
 pub use interner::{Interner, Symbol};

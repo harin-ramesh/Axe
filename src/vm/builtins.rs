@@ -3,10 +3,7 @@ use super::vm::Value;
 pub type NativeFn = fn(&[Value]) -> Value;
 
 pub fn builtins() -> &'static [(&'static str, NativeFn)] {
-    &[
-        ("print", native_print),
-        ("println", native_println),
-    ]
+    &[("print", native_print), ("println", native_println)]
 }
 
 fn native_print(args: &[Value]) -> Value {
@@ -18,7 +15,6 @@ fn native_print(args: &[Value]) -> Value {
     }
     Value::Null
 }
-
 
 fn native_println(args: &[Value]) -> Value {
     for (i, arg) in args.iter().enumerate() {
