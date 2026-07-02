@@ -1,10 +1,9 @@
 use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
 use crate::context::Context;
 
-use super::bytecode::{Bytecode, BytecodeBuilder};
+use super::bytecode::{Bytecode, BytecodeBuilder, Constant};
 use super::instructions::Instruction;
 use super::tables::{GlobalTable, LocalTable};
-use super::vm::Value;
 
 /// Compiles AST to bytecode
 pub struct Compiler<'ctx> {
@@ -116,7 +115,7 @@ impl<'ctx> Compiler<'ctx> {
 
                 self.builder.patch_jump(jump_over_func);
 
-                self.builder.emit_constant(Value::Fn {
+                self.builder.emit_constant(Constant::Fn {
                     entry,
                     arity: params.len() as u8,
                 });
@@ -181,11 +180,11 @@ impl<'ctx> Compiler<'ctx> {
             Literal::Null => self.builder.emit(Instruction::NULL),
             Literal::Bool(true) => self.builder.emit(Instruction::TRUE),
             Literal::Bool(false) => self.builder.emit(Instruction::FALSE),
-            Literal::Int(n) => self.builder.emit_constant(Value::Int(*n)),
-            Literal::Float(n) => self.builder.emit_constant(Value::Float(*n)),
+            Literal::Int(n) => self.builder.emit_constant(Constant::Int(*n)),
+            Literal::Float(n) => self.builder.emit_constant(Constant::Float(*n)),
             Literal::Str(s) => {
                 let string = self.ctx.resolve(*s);
-                self.builder.emit_constant(Value::str(string))
+                self.builder.emit_constant(Constant::Str(string.into()))
             }
         }
     }
@@ -232,13 +231,23 @@ impl<'ctx> Compiler<'ctx> {
 mod tests {
     use super::*;
     use crate::context::Context;
-    use crate::vm::AxeVM;
+    use crate::vm::{AxeVM, Value};
 
     fn compile_and_run(ctx: &Context, expr: Expr) -> Option<Value> {
         let compiler = Compiler::new(ctx);
         let bytecode = compiler.compile_expr_only(&expr);
         let mut vm = AxeVM::new(&bytecode);
         vm.exec()
+    }
+
+    /// Run an expression and render its result via the VM's heap. Needed for
+    /// string results, whose `Value`s are opaque `ObjRef` handles.
+    fn compile_and_display(ctx: &Context, expr: Expr) -> Option<String> {
+        let compiler = Compiler::new(ctx);
+        let bytecode = compiler.compile_expr_only(&expr);
+        let mut vm = AxeVM::new(&bytecode);
+        let result = vm.exec();
+        result.map(|v| vm.display_value(&v))
     }
 
     #[test]
@@ -272,8 +281,8 @@ mod tests {
         // String
         let hello_sym = ctx.intern("hello");
         assert_eq!(
-            compile_and_run(&ctx, Expr::Literal(Literal::Str(hello_sym))),
-            Some(Value::str("hello"))
+            compile_and_display(&ctx, Expr::Literal(Literal::Str(hello_sym))),
+            Some("hello".to_string())
         );
     }
 
@@ -406,8 +415,8 @@ mod tests {
             Box::new(Expr::Literal(Literal::Str(world_sym))),
         );
         assert_eq!(
-            compile_and_run(&ctx, expr),
-            Some(Value::str("Hello, World!"))
+            compile_and_display(&ctx, expr),
+            Some("Hello, World!".to_string())
         );
     }
 }
