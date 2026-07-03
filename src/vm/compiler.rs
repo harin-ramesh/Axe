@@ -190,6 +190,17 @@ impl<'ctx> Compiler<'ctx> {
     }
 
     fn compile_binary(&mut self, op: &Operation, lhs: &Expr, rhs: &Expr) {
+        // Constant folding: if both operands reduce to compile-time constants,
+        // evaluate the operation now and emit a single constant. Because
+        // `fold_const` recurses, a fully-constant tree collapses at the outermost
+        // operation (e.g. `(10 + 20) * 2 - 5` becomes a single `55`).
+        if let (Some(a), Some(b)) = (fold_const(lhs), fold_const(rhs)) {
+            if let Some(folded) = fold_binary(op, a, b) {
+                self.compile_literal(&folded);
+                return;
+            }
+        }
+
         // Compile left operand first, then right
         self.compile_expr(lhs);
         self.compile_expr(rhs);
@@ -216,6 +227,14 @@ impl<'ctx> Compiler<'ctx> {
     }
 
     fn compile_unary(&mut self, op: &UnaryOp, operand: &Expr) {
+        // Constant folding for unary operations (e.g. `-42`, `~0`, `!true`).
+        if let Some(v) = fold_const(operand) {
+            if let Some(folded) = fold_unary(op, v) {
+                self.compile_literal(&folded);
+                return;
+            }
+        }
+
         self.compile_expr(operand);
 
         let instruction = match op {
@@ -224,6 +243,83 @@ impl<'ctx> Compiler<'ctx> {
             UnaryOp::Inv => Instruction::BITINV,
         };
         self.builder.emit(instruction);
+    }
+}
+
+/// Recursively evaluate an expression built entirely from literal operands.
+///
+/// Returns `None` for anything that isn't a compile-time constant — variables,
+/// calls, string operands, or operations whose result can't be folded *safely*
+/// (integer overflow, division by zero). Leaving those unfolded means the VM
+/// reproduces the exact same runtime behavior it had before folding.
+fn fold_const(expr: &Expr) -> Option<Literal> {
+    match &expr.kind {
+        ExprKind::Literal(lit) => Some(*lit),
+        ExprKind::Unary(op, operand) => fold_unary(op, fold_const(operand)?),
+        ExprKind::Binary(op, lhs, rhs) => fold_binary(op, fold_const(lhs)?, fold_const(rhs)?),
+        _ => None,
+    }
+}
+
+fn fold_unary(op: &UnaryOp, v: Literal) -> Option<Literal> {
+    match (op, v) {
+        // `checked_neg` guards i64::MIN, which would overflow.
+        (UnaryOp::Neg, Literal::Int(n)) => n.checked_neg().map(Literal::Int),
+        (UnaryOp::Neg, Literal::Float(f)) => Some(Literal::Float(-f)),
+        (UnaryOp::Not, Literal::Bool(b)) => Some(Literal::Bool(!b)),
+        (UnaryOp::Inv, Literal::Int(n)) => Some(Literal::Int(!n)),
+        _ => None,
+    }
+}
+
+fn fold_binary(op: &Operation, a: Literal, b: Literal) -> Option<Literal> {
+    use Literal::{Bool, Float, Int};
+    use Operation::*;
+    match (op, a, b) {
+        // Integer arithmetic. `checked_*` returns `None` on overflow and on
+        // div/rem by zero (and i64::MIN / -1), so those stay unfolded and the
+        // VM panics at runtime exactly as it would have.
+        (Add, Int(x), Int(y)) => x.checked_add(y).map(Int),
+        (Sub, Int(x), Int(y)) => x.checked_sub(y).map(Int),
+        (Mul, Int(x), Int(y)) => x.checked_mul(y).map(Int),
+        (Div, Int(x), Int(y)) => x.checked_div(y).map(Int),
+        (Mod, Int(x), Int(y)) => x.checked_rem(y).map(Int),
+
+        // Float arithmetic. Division by zero yields inf/NaN — the same result
+        // the VM produces — so it's safe to fold.
+        (Add, Float(x), Float(y)) => Some(Float(x + y)),
+        (Sub, Float(x), Float(y)) => Some(Float(x - y)),
+        (Mul, Float(x), Float(y)) => Some(Float(x * y)),
+        (Div, Float(x), Float(y)) => Some(Float(x / y)),
+        (Mod, Float(x), Float(y)) => Some(Float(x % y)),
+
+        // Comparisons (same-type operands only, matching VM semantics).
+        (Gt, Int(x), Int(y)) => Some(Bool(x > y)),
+        (Lt, Int(x), Int(y)) => Some(Bool(x < y)),
+        (Gte, Int(x), Int(y)) => Some(Bool(x >= y)),
+        (Lte, Int(x), Int(y)) => Some(Bool(x <= y)),
+        (Gt, Float(x), Float(y)) => Some(Bool(x > y)),
+        (Lt, Float(x), Float(y)) => Some(Bool(x < y)),
+        (Gte, Float(x), Float(y)) => Some(Bool(x >= y)),
+        (Lte, Float(x), Float(y)) => Some(Bool(x <= y)),
+
+        // Equality (same-type only; mixed types fall through to the runtime).
+        (Eq, Int(x), Int(y)) => Some(Bool(x == y)),
+        (Neq, Int(x), Int(y)) => Some(Bool(x != y)),
+        (Eq, Float(x), Float(y)) => Some(Bool(x == y)),
+        (Neq, Float(x), Float(y)) => Some(Bool(x != y)),
+        (Eq, Bool(x), Bool(y)) => Some(Bool(x == y)),
+        (Neq, Bool(x), Bool(y)) => Some(Bool(x != y)),
+
+        // Logical (both operands boolean).
+        (And, Bool(x), Bool(y)) => Some(Bool(x && y)),
+        (Or, Bool(x), Bool(y)) => Some(Bool(x || y)),
+
+        // Bitwise.
+        (BitwiseAnd, Int(x), Int(y)) => Some(Int(x & y)),
+        (BitwiseOr, Int(x), Int(y)) => Some(Int(x | y)),
+
+        _ => None,
     }
 }
 
@@ -400,6 +496,52 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(5))),
         );
         assert_eq!(compile_and_run(&ctx, expr), Some(Value::Int(55)));
+    }
+
+    #[test]
+    fn test_constant_folding_collapses_tree() {
+        let ctx = Context::new();
+
+        // (10 + 20) * 2 - 5 is fully constant and folds to a single 55.
+        let expr = Expr::Binary(
+            Operation::Sub,
+            Box::new(Expr::Binary(
+                Operation::Mul,
+                Box::new(Expr::Binary(
+                    Operation::Add,
+                    Box::new(Expr::Literal(Literal::Int(10))),
+                    Box::new(Expr::Literal(Literal::Int(20))),
+                )),
+                Box::new(Expr::Literal(Literal::Int(2))),
+            )),
+            Box::new(Expr::Literal(Literal::Int(5))),
+        );
+
+        let bytecode = Compiler::new(&ctx).compile_expr_only(&expr);
+
+        // Whole tree collapses: one constant, and code is just CONST 0; HALT.
+        assert_eq!(bytecode.constants, vec![Constant::Int(55)]);
+        assert_eq!(bytecode.code, vec![Instruction::CONST, 0, Instruction::HALT]);
+
+        // ...and it still evaluates correctly.
+        let mut vm = AxeVM::new(&bytecode);
+        assert_eq!(vm.exec(), Some(Value::Int(55)));
+    }
+
+    #[test]
+    fn test_constant_folding_skips_div_by_zero() {
+        let ctx = Context::new();
+
+        // 1 / 0 must NOT be folded — the DIV opcode stays so the VM panics
+        // at runtime exactly as it would without folding.
+        let expr = Expr::Binary(
+            Operation::Div,
+            Box::new(Expr::Literal(Literal::Int(1))),
+            Box::new(Expr::Literal(Literal::Int(0))),
+        );
+
+        let bytecode = Compiler::new(&ctx).compile_expr_only(&expr);
+        assert!(bytecode.code.contains(&Instruction::DIV));
     }
 
     #[test]
