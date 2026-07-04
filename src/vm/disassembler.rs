@@ -63,6 +63,16 @@ pub fn disassemble_instruction(bytecode: &Bytecode, offset: usize, out: &mut Str
 
         Instruction::JUMP => jump(out, "JUMP", bytecode, offset),
         Instruction::JUMP_IF_FALSE => jump(out, "JUMP_IF_FALSE", bytecode, offset),
+        Instruction::LOOP => loop_jump(out, "LOOP", bytecode, offset),
+
+        Instruction::BUILD_LIST => byte_operand(out, "BUILD_LIST", bytecode, offset),
+        Instruction::GET_INDEX => simple(out, "GET_INDEX", bytecode, offset),
+        Instruction::LEN => simple(out, "LEN", bytecode, offset),
+
+        Instruction::CLOSURE => closure(out, bytecode, offset),
+        Instruction::GET_UPVALUE => byte_operand(out, "GET_UPVALUE", bytecode, offset),
+        Instruction::SET_UPVALUE => byte_operand(out, "SET_UPVALUE", bytecode, offset),
+        Instruction::CLOSE_UPVALUE => simple(out, "CLOSE_UPVALUE", bytecode, offset),
 
         Instruction::DEFINE_GLOBAL => byte_operand(out, "DEFINE_GLOBAL", bytecode, offset),
         Instruction::SET_GLOBAL => byte_operand(out, "SET_GLOBAL", bytecode, offset),
@@ -74,6 +84,17 @@ pub fn disassemble_instruction(bytecode: &Bytecode, offset: usize, out: &mut Str
 
         Instruction::CALL => byte_operand(out, "CALL", bytecode, offset),
         Instruction::RETURN => simple(out, "RETURN", bytecode, offset),
+
+        Instruction::CLASS => constant(out, "CLASS", bytecode, offset),
+        Instruction::INHERIT => simple(out, "INHERIT", bytecode, offset),
+        Instruction::METHOD => constant(out, "METHOD", bytecode, offset),
+        Instruction::STATIC_FIELD => constant(out, "STATIC_FIELD", bytecode, offset),
+        Instruction::GET_PROPERTY => constant(out, "GET_PROPERTY", bytecode, offset),
+        Instruction::SET_PROPERTY => constant(out, "SET_PROPERTY", bytecode, offset),
+        Instruction::GET_STATIC => constant(out, "GET_STATIC", bytecode, offset),
+        Instruction::NEW => invoke(out, "NEW", bytecode, offset),
+        Instruction::INVOKE => invoke(out, "INVOKE", bytecode, offset),
+        Instruction::STATIC_INVOKE => invoke(out, "STATIC_INVOKE", bytecode, offset),
 
         unknown => {
             write_prefix(out, bytecode, offset, 1);
@@ -126,11 +147,53 @@ fn jump(out: &mut String, name: &str, bytecode: &Bytecode, offset: usize) -> usi
     offset + 3
 }
 
+/// Like `jump`, but for the backward `LOOP` opcode (VM subtracts the delta).
+fn loop_jump(out: &mut String, name: &str, bytecode: &Bytecode, offset: usize) -> usize {
+    write_prefix(out, bytecode, offset, 3);
+    let lo = bytecode.code[offset + 1];
+    let hi = bytecode.code[offset + 2];
+    let delta = u16::from_le_bytes([lo, hi]) as usize;
+    let target = (offset + 3).saturating_sub(delta);
+    let _ = writeln!(out, "{:<14} -> {:04}", name, target);
+    offset + 3
+}
+
+/// Format a `CLOSURE` instruction: `<fn_const> <count>` then `count` pairs of
+/// `(is_local, index)` bytes describing each captured upvalue.
+fn closure(out: &mut String, bytecode: &Bytecode, offset: usize) -> usize {
+    let fn_idx = bytecode.code[offset + 1];
+    let count = bytecode.code[offset + 2] as usize;
+    let total = 3 + count * 2;
+    write_prefix(out, bytecode, offset, total.min(BYTES_COL_WIDTH));
+    let value = bytecode
+        .constants
+        .get(fn_idx as usize)
+        .map(format_constant)
+        .unwrap_or_else(|| "<out of range>".to_string());
+    let _ = writeln!(out, "{:<14} {} upvals={}", "CLOSURE", value, count);
+    offset + total
+}
+
 fn byte_operand(out: &mut String, name: &str, bytecode: &Bytecode, offset: usize) -> usize {
     write_prefix(out, bytecode, offset, 2);
     let idx = bytecode.code[offset + 1];
     let _ = writeln!(out, "{:<14} {}", name, idx);
     offset + 2
+}
+
+/// Format a name-constant + argc opcode (NEW, INVOKE, STATIC_INVOKE), whose
+/// operands are a 1-byte constant index followed by a 1-byte argument count.
+fn invoke(out: &mut String, name: &str, bytecode: &Bytecode, offset: usize) -> usize {
+    write_prefix(out, bytecode, offset, 3);
+    let idx = bytecode.code[offset + 1];
+    let argc = bytecode.code[offset + 2];
+    let value = bytecode
+        .constants
+        .get(idx as usize)
+        .map(format_constant)
+        .unwrap_or_else(|| "<out of range>".to_string());
+    let _ = writeln!(out, "{:<14} {} ({})", name, value, argc);
+    offset + 3
 }
 
 fn format_constant(c: &Constant) -> String {
@@ -139,6 +202,7 @@ fn format_constant(c: &Constant) -> String {
         Constant::Float(n) => format!("Float({})", n),
         Constant::Str(s) => format!("Str({:?})", s),
         Constant::Fn { entry, arity } => format!("Fn(@{}, /{})", entry, arity),
+        Constant::Sym(s) => format!("Sym(#{})", s.id()),
     }
 }
 

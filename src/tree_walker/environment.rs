@@ -17,7 +17,7 @@ use super::value::Value;
 ///    fn makeCounter() {
 ///        let count = 0;
 ///        fn increment() { count = count + 1; }
-///        fn getCount() { count; }
+///        fn getCount() { return count; }
 ///        return [increment, getCount];
 ///    }
 ///    ```
