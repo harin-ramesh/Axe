@@ -194,11 +194,11 @@ class Counter {
 
     fn increment(self) {
         self.count = self.count + 1;
-        self.count;
+        return self.count;
     }
 
     fn get(self) {
-        self.count;
+        return self.count;
     }
 }
 
@@ -215,7 +215,7 @@ class MathUtils {
     let PI = 3;
 
     fn add(a, b) {
-        a + b;
+        return a + b;
     }
 }
 
@@ -228,7 +228,7 @@ class Box {
         self.value = v;
     }
     fn get(self) {
-        self.value;
+        return self.value;
     }
 }
 

@@ -7,6 +7,8 @@ impl Instruction {
     pub const JUMP_IF_FALSE: u8 = 0x51;
     pub const CALL: u8 = 0x52;
     pub const RETURN: u8 = 0x53;
+    /// Backward jump: `ip -= operand`. Used to loop back to a condition check.
+    pub const LOOP: u8 = 0x54;
 
     // Stack operations
     pub const CONST: u8 = 0x01;
@@ -26,6 +28,14 @@ impl Instruction {
     pub const DEFINE_LOCAL: u8 = 0x63;
     pub const GET_LOCAL: u8 = 0x64;
     pub const SET_LOCAL: u8 = 0x65;
+
+    // Closures / upvalues.
+    // CLOSURE: <fn_const:u8> <upvalue_count:u8> then (is_local:u8, index:u8) pairs.
+    // GET_UPVALUE/SET_UPVALUE take a u8 upvalue slot. CLOSE_UPVALUE takes none.
+    pub const CLOSURE: u8 = 0x66;
+    pub const GET_UPVALUE: u8 = 0x67;
+    pub const SET_UPVALUE: u8 = 0x68;
+    pub const CLOSE_UPVALUE: u8 = 0x69;
 
     // Arithmetic
     pub const ADD: u8 = 0x10;
@@ -52,4 +62,27 @@ impl Instruction {
     pub const BITAND: u8 = 0x40;
     pub const BITOR: u8 = 0x41;
     pub const BITINV: u8 = 0x42;
+
+    // Classes / objects
+    // CLASS/METHOD/STATIC_FIELD/GET_*/SET_PROPERTY take a u8 constant index
+    // pointing at a `Constant::Sym` (the member name). NEW/INVOKE/STATIC_INVOKE
+    // take a name-constant index followed by a u8 argument count.
+    pub const CLASS: u8 = 0x70;
+    pub const INHERIT: u8 = 0x71;
+    pub const METHOD: u8 = 0x72;
+    pub const STATIC_FIELD: u8 = 0x73;
+    pub const GET_PROPERTY: u8 = 0x74;
+    pub const SET_PROPERTY: u8 = 0x75;
+    pub const GET_STATIC: u8 = 0x76;
+    pub const NEW: u8 = 0x77;
+    pub const INVOKE: u8 = 0x78;
+    pub const STATIC_INVOKE: u8 = 0x79;
+
+    // Lists
+    /// Build a list from the top `operand` stack values. Followed by a u8 count.
+    pub const BUILD_LIST: u8 = 0x7A;
+    /// Index into a list: pops index then list, pushes the element.
+    pub const GET_INDEX: u8 = 0x7B;
+    /// Push the length (as Int) of the list (or string) on top of the stack.
+    pub const LEN: u8 = 0x7C;
 }

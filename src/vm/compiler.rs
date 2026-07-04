@@ -1,17 +1,69 @@
-use crate::ast::{Expr, ExprKind, Literal, Operation, Program, Stmt, UnaryOp};
+use crate::Symbol;
+use crate::ast::{Expr, ExprKind, Literal, Operation, ParamVec, Program, Stmt, UnaryOp};
 use crate::context::Context;
 
 use super::bytecode::{Bytecode, BytecodeBuilder, Constant};
 use super::instructions::Instruction;
-use super::tables::{GlobalTable, LocalTable};
+use super::tables::GlobalTable;
+
+/// A local variable in a function scope. Its stack slot equals its index in the
+/// scope's `locals` vector (locals are pushed/popped LIFO).
+#[derive(Clone, Copy)]
+struct Local {
+    name: Symbol,
+    depth: usize,
+    /// Set once a nested function captures this local as an upvalue, so scope
+    /// exit knows to emit `CLOSE_UPVALUE` instead of a plain `POP`.
+    captured: bool,
+}
+
+/// Describes how a closure captures one upvalue: from the immediately enclosing
+/// function's local (`is_local`), or by inheriting the enclosing closure's
+/// upvalue.
+#[derive(Clone, Copy)]
+struct UpvalueDesc {
+    index: u8,
+    is_local: bool,
+}
+
+/// Compilation state for a single function (or the top-level script). Functions
+/// nest, so the compiler holds a stack of these.
+struct FnScope {
+    locals: Vec<Local>,
+    upvalues: Vec<UpvalueDesc>,
+    scope_depth: usize,
+}
+
+impl FnScope {
+    fn new() -> Self {
+        Self {
+            locals: Vec::new(),
+            upvalues: Vec::new(),
+            scope_depth: 0,
+        }
+    }
+}
+
+/// Where a name resolves to.
+enum VarLoc {
+    Local(u8),
+    Upvalue(u8),
+    Global(u8),
+    Undefined,
+}
 
 /// Compiles AST to bytecode
 pub struct Compiler<'ctx> {
     builder: BytecodeBuilder,
     ctx: &'ctx Context,
     globals: GlobalTable,
-    locals: LocalTable,
-    scope_depth: usize,
+    /// Stack of function scopes; the last is the one being compiled. Index 0 is
+    /// the top-level script.
+    fn_scopes: Vec<FnScope>,
+    /// Counter for generating unique names for compiler-synthesized locals
+    /// (e.g. the hidden list/index locals of a `for` loop), so nested loops
+    /// don't collide.
+    synthetic_counter: usize,
 }
 
 impl<'ctx> Compiler<'ctx> {
@@ -25,9 +77,119 @@ impl<'ctx> Compiler<'ctx> {
             builder: BytecodeBuilder::new(),
             ctx,
             globals,
-            locals: LocalTable::new(),
-            scope_depth: 0,
+            fn_scopes: vec![FnScope::new()],
+            synthetic_counter: 0,
         }
+    }
+
+    fn scope(&self) -> &FnScope {
+        self.fn_scopes.last().unwrap()
+    }
+
+    fn scope_mut(&mut self) -> &mut FnScope {
+        self.fn_scopes.last_mut().unwrap()
+    }
+
+    fn at_global(&self) -> bool {
+        self.fn_scopes.len() == 1 && self.scope().scope_depth == 0
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_mut().scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        let depth = self.scope().scope_depth;
+        while let Some(&Local {
+            depth: d, captured, ..
+        }) = self.scope().locals.last()
+        {
+            if d < depth {
+                break;
+            }
+            self.scope_mut().locals.pop();
+            if captured {
+                self.builder.emit(Instruction::CLOSE_UPVALUE);
+            } else {
+                self.builder.emit(Instruction::POP);
+            }
+        }
+        self.scope_mut().scope_depth -= 1;
+    }
+
+    fn discard_scope_locals(&mut self) {
+        let depth = self.scope().scope_depth;
+        let s = self.scope_mut();
+        while let Some(l) = s.locals.last() {
+            if l.depth >= depth {
+                s.locals.pop();
+            } else {
+                break;
+            }
+        }
+        s.scope_depth -= 1;
+    }
+
+    fn add_local(&mut self, name: Symbol) -> u8 {
+        let depth = self.scope().scope_depth;
+        let s = self.scope_mut();
+        let slot = s.locals.len() as u8;
+        s.locals.push(Local {
+            name,
+            depth,
+            captured: false,
+        });
+        slot
+    }
+
+    fn resolve_local_in(&self, scope_idx: usize, name: Symbol) -> Option<u8> {
+        self.fn_scopes[scope_idx]
+            .locals
+            .iter()
+            .rposition(|l| l.name == name)
+            .map(|i| i as u8)
+    }
+
+    fn resolve_upvalue(&mut self, scope_idx: usize, name: Symbol) -> Option<u8> {
+        if scope_idx == 0 {
+            return None;
+        }
+        let enclosing = scope_idx - 1;
+        if let Some(local) = self.resolve_local_in(enclosing, name) {
+            self.fn_scopes[enclosing].locals[local as usize].captured = true;
+            return Some(self.add_upvalue(scope_idx, local, true));
+        }
+        if let Some(uv) = self.resolve_upvalue(enclosing, name) {
+            return Some(self.add_upvalue(scope_idx, uv, false));
+        }
+        None
+    }
+
+    fn add_upvalue(&mut self, scope_idx: usize, index: u8, is_local: bool) -> u8 {
+        if let Some(i) = self.fn_scopes[scope_idx]
+            .upvalues
+            .iter()
+            .position(|u| u.index == index && u.is_local == is_local)
+        {
+            return i as u8;
+        }
+        let ups = &mut self.fn_scopes[scope_idx].upvalues;
+        ups.push(UpvalueDesc { index, is_local });
+        (ups.len() - 1) as u8
+    }
+
+    fn resolve_variable(&mut self, name: Symbol) -> VarLoc {
+        let top = self.fn_scopes.len() - 1;
+        if let Some(slot) = self.resolve_local_in(top, name) {
+            return VarLoc::Local(slot);
+        }
+        if let Some(uv) = self.resolve_upvalue(top, name) {
+            return VarLoc::Upvalue(uv);
+        }
+        if let Some(idx) = self.globals.resolve(name) {
+            return VarLoc::Global(idx);
+        }
+        VarLoc::Undefined
     }
 
     /// Compile a program and return the finished bytecode
@@ -47,15 +209,11 @@ impl<'ctx> Compiler<'ctx> {
                 self.builder.emit(Instruction::POP);
             }
             Stmt::Block(stmts) => {
-                self.scope_depth += 1;
+                self.begin_scope();
                 for stmt in stmts {
                     self.compile_stmt(stmt);
                 }
-                let popped = self.locals.pop_scope(self.scope_depth);
-                for _ in 0..popped {
-                    self.builder.emit(Instruction::POP);
-                }
-                self.scope_depth -= 1;
+                self.end_scope();
             }
             Stmt::If(cond, then_stmt, else_stmt) => {
                 self.compile_expr(cond);
@@ -72,72 +230,234 @@ impl<'ctx> Compiler<'ctx> {
                         Some(expr) => self.compile_expr(expr),
                         None => self.builder.emit(Instruction::NULL),
                     }
-                    if self.scope_depth == 0 {
+                    if self.at_global() {
                         let idx = self.globals.define(*symbol).expect("dup");
                         self.builder.emit(Instruction::DEFINE_GLOBAL);
                         self.builder.emit(idx);
                     } else {
-                        self.locals.define(*symbol, self.scope_depth).expect("dup");
+                        self.add_local(*symbol);
                         // no instruction — value already sits in this local's slot
                     }
                 }
             }
             Stmt::Assign(symbol, expr) => {
                 self.compile_expr(expr);
-                if let Some(idx) = self.locals.resolve(*symbol, self.scope_depth) {
-                    self.builder.emit(Instruction::SET_LOCAL);
-                    self.builder.emit(idx);
-                } else if let Some(idx) = self.globals.resolve(*symbol) {
-                    self.builder.emit(Instruction::SET_GLOBAL);
-                    self.builder.emit(idx);
-                } else {
-                    panic!("assignment to undefined variable");
+                match self.resolve_variable(*symbol) {
+                    VarLoc::Local(slot) => {
+                        self.builder.emit(Instruction::SET_LOCAL);
+                        self.builder.emit(slot);
+                    }
+                    VarLoc::Upvalue(slot) => {
+                        self.builder.emit(Instruction::SET_UPVALUE);
+                        self.builder.emit(slot);
+                    }
+                    VarLoc::Global(idx) => {
+                        self.builder.emit(Instruction::SET_GLOBAL);
+                        self.builder.emit(idx);
+                    }
+                    VarLoc::Undefined => panic!("assignment to undefined variable"),
                 }
                 self.builder.emit(Instruction::POP);
             }
             Stmt::Function(symbol, params, stmts) => {
-                let jump_over_func = self.builder.emit_jump(Instruction::JUMP);
-                let entry = self.builder.here();
-
-                self.scope_depth += 1;
-                for param in params {
-                    self.locals
-                        .define(*param, self.scope_depth)
-                        .expect("dup param");
-                }
-
-                self.compile_stmt(stmts);
-                self.builder.emit(Instruction::NULL);
-                self.builder.emit(Instruction::RETURN);
-
-                self.locals.pop_scope(self.scope_depth);
-                self.scope_depth -= 1;
-
-                self.builder.patch_jump(jump_over_func);
-
-                self.builder.emit_constant(Constant::Fn {
-                    entry,
-                    arity: params.len() as u8,
-                });
-
-                if self.scope_depth == 0 {
+                if self.at_global() {
                     let idx = self.globals.define(*symbol).expect("dup");
+                    self.compile_function(params, stmts);
                     self.builder.emit(Instruction::DEFINE_GLOBAL);
                     self.builder.emit(idx);
                 } else {
-                    self.locals.define(*symbol, self.scope_depth).expect("dup");
+                    self.add_local(*symbol);
+                    self.compile_function(params, stmts);
                 }
             }
+            Stmt::Class(name, parent, body) => self.compile_class(name, *parent, body),
+            Stmt::PropertyAssign(obj_expr, prop, value_expr) => {
+                self.compile_expr(obj_expr);
+                self.compile_expr(value_expr);
+                let name_const = self.builder.add_constant(Constant::Sym(*prop));
+                self.builder.emit(Instruction::SET_PROPERTY);
+                self.builder.emit(name_const);
+                self.builder.emit(Instruction::POP);
+            }
+            Stmt::While(cond, body) => {
+                // loop_start:
+                //   <cond> ; JUMP_IF_FALSE exit ; <body> ; LOOP loop_start
+                // exit:
+                let loop_start = self.builder.here();
+                self.compile_expr(cond);
+                let exit_jump = self.builder.emit_jump(Instruction::JUMP_IF_FALSE);
+                self.compile_stmt(body);
+                self.builder.emit_loop(loop_start);
+                self.builder.patch_jump(exit_jump);
+            }
+            Stmt::For(var, iterable, body) => self.compile_for(var, iterable, body),
             Stmt::Return(expr) => {
                 self.compile_expr(expr);
                 self.builder.emit(Instruction::RETURN);
             }
-            // TODO: Implement other statements
             _ => todo!("Statement not yet implemented: {:?}", stmt),
         }
     }
 
-    /// Compile a single expression and return the finished bytecode
+    /// Compile `for var in iterable { body }` by desugaring to an index loop
+    /// over the (list) iterable, using three hidden locals: the list, the
+    /// index, and the loop variable. Wrapped in its own scope so the loop
+    /// variables are locals even at top level.
+    fn compile_for(&mut self, var: &Symbol, iterable: &Expr, body: &Stmt) {
+        self.begin_scope();
+
+        // Unique names so nested `for` loops don't collide in the flat table.
+        let uid = self.synthetic_counter;
+        self.synthetic_counter += 1;
+        let list_name = self.ctx.intern(&format!("$for_list{}", uid));
+        let idx_name = self.ctx.intern(&format!("$for_idx{}", uid));
+
+        // hidden: __list = iterable  (value stays in this local's slot)
+        self.compile_expr(iterable);
+        let list_slot = self.add_local(list_name);
+
+        // hidden: __idx = 0
+        self.builder.emit_constant(Constant::Int(0));
+        let idx_slot = self.add_local(idx_name);
+
+        // loop variable, seeded with a placeholder so it owns a stack slot
+        self.builder.emit(Instruction::NULL);
+        let var_slot = self.add_local(*var);
+
+        // loop_start:  if !(idx < len(list)) goto exit
+        let loop_start = self.builder.here();
+        self.builder.emit(Instruction::GET_LOCAL);
+        self.builder.emit(idx_slot);
+        self.builder.emit(Instruction::GET_LOCAL);
+        self.builder.emit(list_slot);
+        self.builder.emit(Instruction::LEN);
+        self.builder.emit(Instruction::LT);
+        let exit_jump = self.builder.emit_jump(Instruction::JUMP_IF_FALSE);
+
+        // var = list[idx]
+        self.builder.emit(Instruction::GET_LOCAL);
+        self.builder.emit(list_slot);
+        self.builder.emit(Instruction::GET_LOCAL);
+        self.builder.emit(idx_slot);
+        self.builder.emit(Instruction::GET_INDEX);
+        self.builder.emit(Instruction::SET_LOCAL);
+        self.builder.emit(var_slot);
+        self.builder.emit(Instruction::POP);
+
+        self.compile_stmt(body);
+
+        // idx = idx + 1
+        self.builder.emit(Instruction::GET_LOCAL);
+        self.builder.emit(idx_slot);
+        self.builder.emit_constant(Constant::Int(1));
+        self.builder.emit(Instruction::ADD);
+        self.builder.emit(Instruction::SET_LOCAL);
+        self.builder.emit(idx_slot);
+        self.builder.emit(Instruction::POP);
+
+        self.builder.emit_loop(loop_start);
+        self.builder.patch_jump(exit_jump);
+
+        // Discard the three hidden locals (var, idx, list).
+        self.end_scope();
+    }
+
+    fn compile_function(&mut self, params: &ParamVec, body: &Stmt) {
+        let jump_over = self.builder.emit_jump(Instruction::JUMP);
+        let entry = self.builder.here();
+
+        self.fn_scopes.push(FnScope::new());
+        for param in params {
+            self.add_local(*param);
+        }
+
+        self.compile_function_body(body);
+
+        let scope = self.fn_scopes.pop().unwrap();
+
+        self.builder.patch_jump(jump_over);
+
+        let arity = params.len() as u8;
+        if scope.upvalues.is_empty() {
+            // Non-capturing: a flat function value, no heap allocation.
+            self.builder.emit_constant(Constant::Fn { entry, arity });
+        } else {
+            // Capturing: emit CLOSURE with the capture descriptors.
+            let fn_const = self.builder.add_constant(Constant::Fn { entry, arity });
+            self.builder.emit(Instruction::CLOSURE);
+            self.builder.emit(fn_const);
+            self.builder.emit(scope.upvalues.len() as u8);
+            for uv in &scope.upvalues {
+                self.builder.emit(uv.is_local as u8);
+                self.builder.emit(uv.index);
+            }
+        }
+    }
+
+    fn compile_function_body(&mut self, body: &Stmt) {
+        if let Stmt::Block(stmts) = body {
+            self.scope_mut().scope_depth += 1;
+            for stmt in stmts {
+                self.compile_stmt(stmt);
+            }
+            self.discard_scope_locals();
+        } else {
+            self.compile_stmt(body);
+        }
+
+        // Fall-through with no `return`: yield null.
+        self.builder.emit(Instruction::NULL);
+        self.builder.emit(Instruction::RETURN);
+    }
+
+    fn compile_class(&mut self, name: &Symbol, parent: Option<Symbol>, body: &[Stmt]) {
+        if !self.at_global() {
+            todo!("local class declarations are not yet supported");
+        }
+
+        let class_idx = self.globals.define(*name).expect("dup class");
+
+        let name_const = self.builder.add_constant(Constant::Sym(*name));
+        self.builder.emit(Instruction::CLASS);
+        self.builder.emit(name_const);
+
+        if let Some(parent) = parent {
+            let idx = self
+                .globals
+                .resolve(parent)
+                .expect("undefined parent class");
+            self.builder.emit(Instruction::GET_GLOBAL);
+            self.builder.emit(idx);
+            self.builder.emit(Instruction::INHERIT);
+        }
+
+        for member in body {
+            match member {
+                Stmt::Let(bindings) => {
+                    for (sym, init) in bindings {
+                        match init {
+                            Some(expr) => self.compile_expr(expr),
+                            None => self.builder.emit(Instruction::NULL),
+                        }
+                        let c = self.builder.add_constant(Constant::Sym(*sym));
+                        self.builder.emit(Instruction::STATIC_FIELD);
+                        self.builder.emit(c);
+                    }
+                }
+                Stmt::Function(fn_name, params, fn_body) => {
+                    self.compile_function(params, fn_body);
+                    let c = self.builder.add_constant(Constant::Sym(*fn_name));
+                    self.builder.emit(Instruction::METHOD);
+                    self.builder.emit(c);
+                }
+                _ => {}
+            }
+        }
+
+        self.builder.emit(Instruction::DEFINE_GLOBAL);
+        self.builder.emit(class_idx);
+    }
+
     pub fn compile_expr_only(mut self, expr: &Expr) -> Bytecode {
         self.compile_expr(expr);
         self.builder.emit(Instruction::HALT);
@@ -147,27 +467,102 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Literal(lit) => self.compile_literal(lit),
+            ExprKind::List(elements) => {
+                for element in elements {
+                    self.compile_expr(element);
+                }
+                self.builder.emit(Instruction::BUILD_LIST);
+                self.builder.emit(elements.len() as u8);
+            }
             ExprKind::Binary(op, lhs, rhs) => self.compile_binary(op, lhs, rhs),
             ExprKind::Unary(op, operand) => self.compile_unary(op, operand),
-            ExprKind::Var(var) => {
-                if let Some(idx) = self.locals.resolve(*var, self.scope_depth) {
+            ExprKind::Var(var) => match self.resolve_variable(*var) {
+                VarLoc::Local(slot) => {
                     self.builder.emit(Instruction::GET_LOCAL);
-                    self.builder.emit(idx);
-                } else if let Some(idx) = self.globals.resolve(*var) {
+                    self.builder.emit(slot);
+                }
+                VarLoc::Upvalue(slot) => {
+                    self.builder.emit(Instruction::GET_UPVALUE);
+                    self.builder.emit(slot);
+                }
+                VarLoc::Global(idx) => {
                     self.builder.emit(Instruction::GET_GLOBAL);
                     self.builder.emit(idx);
-                } else {
-                    panic!("undefined variable");
                 }
-            }
+                VarLoc::Undefined => panic!("undefined variable"),
+            },
             ExprKind::Call(name, args) => {
-                let idx = self.globals.resolve(*name).expect("undefined function");
+                // The callee may be a global, a local, or a captured upvalue.
+                match self.resolve_variable(*name) {
+                    VarLoc::Local(slot) => {
+                        self.builder.emit(Instruction::GET_LOCAL);
+                        self.builder.emit(slot);
+                    }
+                    VarLoc::Upvalue(slot) => {
+                        self.builder.emit(Instruction::GET_UPVALUE);
+                        self.builder.emit(slot);
+                    }
+                    VarLoc::Global(idx) => {
+                        self.builder.emit(Instruction::GET_GLOBAL);
+                        self.builder.emit(idx);
+                    }
+                    VarLoc::Undefined => panic!("undefined function"),
+                }
+                for arg in args {
+                    self.compile_expr(arg);
+                }
+                self.builder.emit(Instruction::CALL);
+                self.builder.emit(args.len() as u8);
+            }
+            // new ClassName(args...)
+            ExprKind::New(class, args) => {
+                let idx = self.globals.resolve(*class).expect("undefined class");
                 self.builder.emit(Instruction::GET_GLOBAL);
                 self.builder.emit(idx);
                 for arg in args {
                     self.compile_expr(arg);
                 }
-                self.builder.emit(Instruction::CALL);
+                let init_const = self
+                    .builder
+                    .add_constant(Constant::Sym(self.ctx.intern("init")));
+                self.builder.emit(Instruction::NEW);
+                self.builder.emit(init_const);
+                self.builder.emit(args.len() as u8);
+            }
+            // obj.property
+            ExprKind::Property(obj, name) => {
+                self.compile_expr(obj);
+                let c = self.builder.add_constant(Constant::Sym(*name));
+                self.builder.emit(Instruction::GET_PROPERTY);
+                self.builder.emit(c);
+            }
+            // obj.method(args...)
+            ExprKind::MethodCall(obj, method, args) => {
+                self.compile_expr(obj);
+                for arg in args {
+                    self.compile_expr(arg);
+                }
+                let c = self.builder.add_constant(Constant::Sym(*method));
+                self.builder.emit(Instruction::INVOKE);
+                self.builder.emit(c);
+                self.builder.emit(args.len() as u8);
+            }
+            // Class::property
+            ExprKind::StaticProperty(obj, name) => {
+                self.compile_expr(obj);
+                let c = self.builder.add_constant(Constant::Sym(*name));
+                self.builder.emit(Instruction::GET_STATIC);
+                self.builder.emit(c);
+            }
+            // Class::method(args...)
+            ExprKind::StaticMethodCall(obj, method, args) => {
+                self.compile_expr(obj);
+                for arg in args {
+                    self.compile_expr(arg);
+                }
+                let c = self.builder.add_constant(Constant::Sym(*method));
+                self.builder.emit(Instruction::STATIC_INVOKE);
+                self.builder.emit(c);
                 self.builder.emit(args.len() as u8);
             }
             // TODO: Implement other expressions
@@ -521,7 +916,10 @@ mod tests {
 
         // Whole tree collapses: one constant, and code is just CONST 0; HALT.
         assert_eq!(bytecode.constants, vec![Constant::Int(55)]);
-        assert_eq!(bytecode.code, vec![Instruction::CONST, 0, Instruction::HALT]);
+        assert_eq!(
+            bytecode.code,
+            vec![Instruction::CONST, 0, Instruction::HALT]
+        );
 
         // ...and it still evaluates correctly.
         let mut vm = AxeVM::new(&bytecode);
@@ -560,5 +958,224 @@ mod tests {
             compile_and_display(&ctx, expr),
             Some("Hello, World!".to_string())
         );
+    }
+
+    /// Compile and run a whole program from source, returning the value of its
+    /// final (expression) statement rendered to a display string. Unlike the
+    /// public `compile()`, the trailing expression's value is left on the stack
+    /// instead of being popped, so tests can observe it.
+    fn run_source(src: &str) -> Option<String> {
+        let ctx = Context::new();
+        let program = crate::parser::Parser::new(src, &ctx)
+            .parse()
+            .expect("parse failed");
+
+        let mut compiler = Compiler::new(&ctx);
+        let (last, rest) = program.stmts.split_last().expect("empty program");
+        for stmt in rest {
+            compiler.compile_stmt(stmt);
+        }
+        match last {
+            Stmt::Expr(expr) => compiler.compile_expr(expr),
+            other => compiler.compile_stmt(other),
+        }
+        compiler.builder.emit(Instruction::HALT);
+        let bytecode = compiler.builder.build();
+
+        let mut vm = AxeVM::new(&bytecode);
+        vm.exec().map(|v| vm.display_value(&v))
+    }
+
+    #[test]
+    fn test_class_fields_and_methods() {
+        // Instantiation, `init`, property get/set, and implicit last-expr return.
+        let out = run_source(
+            "class Counter {
+                fn init(self, start) { self.count = start; }
+                fn increment(self) { self.count = self.count + 1; return self.count; }
+                fn get(self) { return self.count; }
+            }
+            let c = new Counter(10);
+            c.increment();
+            c.increment();
+            c.get();",
+        );
+        assert_eq!(out, Some("12".to_string()));
+    }
+
+    #[test]
+    fn test_class_static_property_and_method() {
+        assert_eq!(
+            run_source(
+                "class MathUtils {
+                    let PI = 3;
+                    fn add(a, b) { return a + b; }
+                }
+                MathUtils::add(MathUtils::PI, 39);"
+            ),
+            Some("42".to_string())
+        );
+    }
+
+    #[test]
+    fn test_class_inheritance() {
+        // Child inherits parent's `init` and `speak`; its own method calls the
+        // inherited one through `self`.
+        let out = run_source(
+            "class Animal {
+                fn init(self, name) { self.name = name; }
+                fn speak(self) { return self.name; }
+            }
+            class Dog : Animal {
+                fn bark(self) { return self.speak(); }
+            }
+            let d = new Dog(\"Rex\");
+            d.bark();",
+        );
+        assert_eq!(out, Some("Rex".to_string()));
+    }
+
+    #[test]
+    fn test_closure_captures_param() {
+        // adder captures make_adder's parameter x.
+        let out = run_source(
+            "fn make_adder(x) {
+                 fn adder(y) { return x + y; }
+                 return adder;
+             }
+             let add5 = make_adder(5);
+             add5(10);",
+        );
+        assert_eq!(out, Some("15".to_string()));
+    }
+
+    #[test]
+    fn test_closure_shared_mutable_capture() {
+        // Repeated calls share and mutate the captured `c` (closed upvalue).
+        let out = run_source(
+            "fn counter() {
+                 let c = 0;
+                 fn inc() { c = c + 1; return c; }
+                 return inc;
+             }
+             let f = counter();
+             f(); f();
+             f();",
+        );
+        assert_eq!(out, Some("3".to_string()));
+    }
+
+    #[test]
+    fn test_closure_transitive_capture() {
+        // inner captures `a` transitively through middle's upvalue (is_local=false).
+        let out = run_source(
+            "fn outer(a) {
+                 fn middle(b) {
+                     fn inner(c) { return a + b + c; }
+                     return inner;
+                 }
+                 return middle;
+             }
+             let m = outer(100);
+             let i = m(20);
+             i(3);",
+        );
+        assert_eq!(out, Some("123".to_string()));
+    }
+
+    #[test]
+    fn test_closures_are_independent() {
+        // Two counters must not share state.
+        let out = run_source(
+            "fn counter() {
+                 let c = 0;
+                 fn inc() { c = c + 1; return c; }
+                 return inc;
+             }
+             let a = counter();
+             let b = counter();
+             a(); a(); a();
+             b();",
+        );
+        assert_eq!(out, Some("1".to_string())); // b is independent of a
+    }
+
+    #[test]
+    fn test_while_loop() {
+        // Sum 1..=100 with a while loop.
+        let out = run_source(
+            "let i = 1; let sum = 0;
+             while (i <= 100) { sum = sum + i; i = i + 1; }
+             sum;",
+        );
+        assert_eq!(out, Some("5050".to_string()));
+    }
+
+    #[test]
+    fn test_for_over_list_literal() {
+        let out = run_source(
+            "let total = 0;
+             for x in [10, 20, 30, 40] { total = total + x; }
+             total;",
+        );
+        assert_eq!(out, Some("100".to_string()));
+    }
+
+    #[test]
+    fn test_for_over_range() {
+        let out = run_source(
+            "let count = 0;
+             for n in range(0, 1000) { count = count + n; }
+             count;",
+        );
+        assert_eq!(out, Some("499500".to_string()));
+    }
+
+    #[test]
+    fn test_nested_for_loops() {
+        let out = run_source(
+            "let grid = 0;
+             for a in range(0, 3) { for b in range(0, 4) { grid = grid + 1; } }
+             grid;",
+        );
+        assert_eq!(out, Some("12".to_string()));
+    }
+
+    #[test]
+    fn test_list_literal_and_len_and_index() {
+        assert_eq!(run_source("len([1, 2, 3, 4]);"), Some("4".to_string()));
+        assert_eq!(
+            run_source("[10, 20, 30];"),
+            Some("[10, 20, 30]".to_string())
+        );
+        // range with explicit bounds
+        assert_eq!(run_source("range(2, 5);"), Some("[2, 3, 4]".to_string()));
+    }
+
+    #[test]
+    fn test_while_with_function_call_body() {
+        // Loop body that calls a function, exercising loop + call interaction.
+        let out = run_source(
+            "fn sq(n) { return n * n; }
+             let i = 0; let acc = 0;
+             while (i < 5) { acc = acc + sq(i); i = i + 1; }
+             acc;",
+        );
+        assert_eq!(out, Some("30".to_string())); // 0+1+4+9+16
+    }
+
+    #[test]
+    fn test_class_without_init() {
+        // A class with no constructor still instantiates; fields set later.
+        let out = run_source(
+            "class Box {
+                fn put(self, v) { self.v = v; }
+                fn get(self) { return self.v; }
+            }
+            let b = new Box();
+            b.put(7);
+            b.get();",
+        );
+        assert_eq!(out, Some("7".to_string()));
     }
 }

@@ -1,6 +1,4 @@
-use axe::{
-    Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMValue, Value, disassemble,
-};
+use axe::{Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMValue, Value, disassemble};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter};

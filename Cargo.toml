@@ -2,10 +2,26 @@
 name = "axe"
 version = "0.1.0"
 edition = "2024"
+default-run = "axe"
 
 [lib]
 name = "axe"
 path = "src/lib.rs"
+# Don't run the lib's unit tests as a bench target — its default test harness
+# rejects criterion flags like `--save-baseline`, breaking bare `cargo bench`.
+bench = false
+
+# Binaries are declared explicitly only to set `bench = false`, so `cargo bench`
+# runs the criterion target alone.
+[[bin]]
+name = "axe"
+path = "src/main.rs"
+bench = false
+
+[[bin]]
+name = "bench"
+path = "src/bin/bench.rs"
+bench = false
 
 [dependencies]
 regex = "1.11"
@@ -13,3 +29,13 @@ rustyline = "15"
 dirs = "6"
 fxhash = "0.2"
 smallvec = "1.13"
+
+[dev-dependencies]
+# Pinned to 0.5 with minimal features (no plotters/rayon) to keep the
+# dependency tree small. Provides `cargo bench` with baseline regression
+# reporting.
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "vm_bench"
+harness = false
