@@ -23,6 +23,16 @@ impl GlobalTable {
         Ok(idx as u8)
     }
 
+    /// Define `name`, or return the existing slot if already defined.
+    /// Top-level redefinition (`let x` twice, re-`let` in the REPL) is
+    /// allowed and reuses the slot.
+    pub fn define_or_get(&mut self, name: Symbol) -> Result<u8, String> {
+        if let Some(idx) = self.resolve(name) {
+            return Ok(idx);
+        }
+        self.define(name)
+    }
+
     pub fn resolve(&self, name: Symbol) -> Option<u8> {
         self.names.iter().position(|&n| n == name).map(|i| i as u8)
     }

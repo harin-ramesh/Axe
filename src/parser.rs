@@ -473,16 +473,14 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             // Validate left-hand side is an identifier
             match &left.kind {
                 ExprKind::Var(name) => {
+                    let name = *name;
                     let right = self.parse_logical_or_expression()?;
-                    return Ok(Stmt::Assign(name.clone(), right));
+                    return Ok(Stmt::Assign(name, right));
                 }
                 ExprKind::Property(obj_expr, prop_name) => {
+                    let (obj_expr, prop_name) = (obj_expr.as_ref().clone(), *prop_name);
                     let right = self.parse_logical_or_expression()?;
-                    return Ok(Stmt::PropertyAssign(
-                        obj_expr.as_ref().clone(),
-                        prop_name.clone(),
-                        right,
-                    ));
+                    return Ok(Stmt::PropertyAssign(obj_expr, prop_name, right));
                 }
                 _ => return Err(ParseError::from("Invalid left-hand side in assignment")),
             };
@@ -501,9 +499,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             if token.kind != TokenKind::Or {
                 break;
             }
-            self.eat(TokenKind::Or)?;
+            let t = self.eat(TokenKind::Or)?;
             let right = self.parse_logical_and_expression()?;
-            left = Expr::Binary(Operation::Or, Box::new(left), Box::new(right));
+            left = Expr::Binary(Operation::Or, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -519,9 +517,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             if token.kind != TokenKind::And {
                 break;
             }
-            self.eat(TokenKind::And)?;
+            let t = self.eat(TokenKind::And)?;
             let right = self.parse_bitwise_or_expression()?;
-            left = Expr::Binary(Operation::And, Box::new(left), Box::new(right));
+            left = Expr::Binary(Operation::And, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -537,9 +535,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             if token.kind != TokenKind::BitwiseOr {
                 break;
             }
-            self.eat(TokenKind::BitwiseOr)?;
+            let t = self.eat(TokenKind::BitwiseOr)?;
             let right = self.parse_bitwise_and_expression()?;
-            left = Expr::Binary(Operation::BitwiseOr, Box::new(left), Box::new(right));
+            left = Expr::Binary(Operation::BitwiseOr, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -555,9 +553,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             if token.kind != TokenKind::BitwiseAnd {
                 break;
             }
-            self.eat(TokenKind::BitwiseAnd)?;
+            let t = self.eat(TokenKind::BitwiseAnd)?;
             let right = self.parse_equality_expression()?;
-            left = Expr::Binary(Operation::BitwiseAnd, Box::new(left), Box::new(right));
+            left = Expr::Binary(Operation::BitwiseAnd, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -575,9 +573,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 TokenKind::Neq => Operation::Neq,
                 _ => break,
             };
-            self.eat(token.kind)?;
+            let t = self.eat(token.kind)?;
             let right = self.parse_relational_expression()?;
-            left = Expr::Binary(op, Box::new(left), Box::new(right));
+            left = Expr::Binary(op, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -597,9 +595,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 TokenKind::Gte => Operation::Gte,
                 _ => break,
             };
-            self.eat(token.kind)?;
+            let t = self.eat(token.kind)?;
             let right = self.parse_additive_expression()?;
-            left = Expr::Binary(op, Box::new(left), Box::new(right));
+            left = Expr::Binary(op, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -617,9 +615,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 TokenKind::Minus => Operation::Sub,
                 _ => break,
             };
-            self.eat(token.kind)?;
+            let t = self.eat(token.kind)?;
             let right = self.parse_multiplicative_expression()?;
-            left = Expr::Binary(op, Box::new(left), Box::new(right));
+            left = Expr::Binary(op, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -639,9 +637,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 TokenKind::Percent => Operation::Mod,
                 _ => break, // Not a multiplicative operator, exit loop
             };
-            self.eat(token.kind)?;
+            let t = self.eat(token.kind)?;
             let right = self.parse_unary_expression()?;
-            left = Expr::Binary(op, Box::new(left), Box::new(right));
+            left = Expr::Binary(op, Box::new(left), Box::new(right)).at(t.line);
         }
 
         Ok(left)
@@ -653,12 +651,12 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     fn parse_boolean_literal(&mut self) -> Result<Expr, ParseError> {
         match self.lookahead.as_ref().map(|t| t.kind) {
             Some(TokenKind::True) => {
-                self.eat(TokenKind::True)?;
-                Ok(Expr::Literal(Literal::Bool(true)))
+                let t = self.eat(TokenKind::True)?;
+                Ok(Expr::Literal(Literal::Bool(true)).at(t.line))
             }
             Some(TokenKind::False) => {
-                self.eat(TokenKind::False)?;
-                Ok(Expr::Literal(Literal::Bool(false)))
+                let t = self.eat(TokenKind::False)?;
+                Ok(Expr::Literal(Literal::Bool(false)).at(t.line))
             }
             _ => Err(ParseError::from(
                 "Unexpected token: expected boolean literal",
@@ -669,8 +667,8 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     // NullLiteral
     //  : 'null'
     fn parse_null_literal(&mut self) -> Result<Expr, ParseError> {
-        self.eat(TokenKind::Null)?;
-        Ok(Expr::Literal(Literal::Null))
+        let t = self.eat(TokenKind::Null)?;
+        Ok(Expr::Literal(Literal::Null).at(t.line))
     }
 
     // UnaryExpression
@@ -688,21 +686,21 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             }
             Some(TokenKind::Minus) => {
                 // Unary minus (negation)
-                self.eat(TokenKind::Minus)?;
+                let t = self.eat(TokenKind::Minus)?;
                 let operand = self.parse_unary_expression()?;
-                Ok(Expr::Unary(UnaryOp::Neg, Box::new(operand)))
+                Ok(Expr::Unary(UnaryOp::Neg, Box::new(operand)).at(t.line))
             }
             Some(TokenKind::Bang) => {
                 // Logical not
-                self.eat(TokenKind::Bang)?;
+                let t = self.eat(TokenKind::Bang)?;
                 let operand = self.parse_unary_expression()?;
-                Ok(Expr::Unary(UnaryOp::Not, Box::new(operand)))
+                Ok(Expr::Unary(UnaryOp::Not, Box::new(operand)).at(t.line))
             }
             Some(TokenKind::Tilde) => {
                 // Bitwise invert
-                self.eat(TokenKind::Tilde)?;
+                let t = self.eat(TokenKind::Tilde)?;
                 let operand = self.parse_unary_expression()?;
-                Ok(Expr::Unary(UnaryOp::Inv, Box::new(operand)))
+                Ok(Expr::Unary(UnaryOp::Inv, Box::new(operand)).at(t.line))
             }
             _ => self.parse_primary(),
         }
@@ -743,7 +741,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     }
 
     fn parse_object_instantiation(&mut self) -> Result<Expr, ParseError> {
-        self.eat(TokenKind::New)?;
+        let new_token = self.eat(TokenKind::New)?;
 
         let class_token = self.eat(TokenKind::Identifier)?;
         let class_name = self.intern(class_token.lexeme);
@@ -752,14 +750,14 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         let args = self.parse_argument_list()?;
         self.eat(TokenKind::RParen)?;
 
-        Ok(Expr::New(class_name, args))
+        Ok(Expr::New(class_name, args).at(new_token.line))
     }
 
     // ListLiteral
     //  : '[' ']'
     //  | '[' Expression (',' Expression)* ']'
     fn parse_list_literal(&mut self) -> Result<Expr, ParseError> {
-        self.eat(TokenKind::LBracket)?;
+        let bracket = self.eat(TokenKind::LBracket)?;
 
         let mut elements = Vec::new();
 
@@ -776,7 +774,7 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         }
 
         self.eat(TokenKind::RBracket)?;
-        Ok(Expr::List(elements))
+        Ok(Expr::List(elements).at(bracket.line))
     }
 
     fn parse_static_access(&mut self, mut expr: Expr) -> Result<Expr, ParseError> {
@@ -788,9 +786,10 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::LParen)?;
                 let args = self.parse_argument_list()?;
                 self.eat(TokenKind::RParen)?;
-                expr = Expr::StaticMethodCall(Box::new(expr), property_name, args);
+                expr = Expr::StaticMethodCall(Box::new(expr), property_name, args)
+                    .at(property_token.line);
             } else {
-                expr = Expr::StaticProperty(Box::new(expr), property_name);
+                expr = Expr::StaticProperty(Box::new(expr), property_name).at(property_token.line);
             }
         }
         Ok(expr)
@@ -808,9 +807,10 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
                 self.eat(TokenKind::LParen)?;
                 let args = self.parse_argument_list()?;
                 self.eat(TokenKind::RParen)?;
-                expr = Expr::MethodCall(Box::new(expr), property_name, args);
+                expr =
+                    Expr::MethodCall(Box::new(expr), property_name, args).at(property_token.line);
             } else {
-                expr = Expr::Property(Box::new(expr), property_name);
+                expr = Expr::Property(Box::new(expr), property_name).at(property_token.line);
             }
         }
         Ok(expr)
@@ -828,9 +828,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
             self.eat(TokenKind::LParen)?;
             let args = self.parse_argument_list()?;
             self.eat(TokenKind::RParen)?;
-            Ok(Expr::Call(name, args))
+            Ok(Expr::Call(name, args).at(token.line))
         } else {
-            Ok(Expr::Var(name))
+            Ok(Expr::Var(name).at(token.line))
         }
     }
 
@@ -864,9 +864,9 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
         let lexeme = token.lexeme;
 
         if let Ok(i) = lexeme.parse::<i64>() {
-            Ok(Expr::Literal(Literal::Int(i)))
+            Ok(Expr::Literal(Literal::Int(i)).at(token.line))
         } else if let Ok(f) = lexeme.parse::<f64>() {
-            Ok(Expr::Literal(Literal::Float(f)))
+            Ok(Expr::Literal(Literal::Float(f)).at(token.line))
         } else {
             Err(ParseError::from("Invalid number literal"))
         }
@@ -876,6 +876,6 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
     //  : STRING
     fn parse_string_literal(&mut self) -> Result<Expr, ParseError> {
         let token = self.eat(TokenKind::String)?;
-        Ok(Expr::Literal(Literal::Str(self.intern(token.lexeme))))
+        Ok(Expr::Literal(Literal::Str(self.intern(token.lexeme))).at(token.line))
     }
 }

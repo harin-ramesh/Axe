@@ -1,16 +1,15 @@
-//! Micro-benchmark harness comparing the stack VM against the tree-walker.
+//! Micro-benchmark harness for the stack VM.
 //!
 //! Run with:  cargo run --release --bin bench
 //!
 //! Each benchmark is a small Axe program run end-to-end (parse is done once;
-//! each timed iteration re-compiles + executes for the VM, and re-resolves +
-//! evaluates for the tree-walker — mirroring how each backend actually works).
-//! Iterations auto-scale to a fixed time budget so both fast and slow programs
-//! get a stable per-iteration figure.
+//! each timed iteration re-compiles + executes). Iterations auto-scale to a
+//! fixed time budget so both fast and slow programs get a stable
+//! per-iteration figure.
 
 use std::time::{Duration, Instant};
 
-use axe::{Axe, AxeVM, Compiler, Context, Parser};
+use axe::{AxeVM, Compiler, Context, Parser};
 
 /// Wall-clock budget each backend gets per benchmark before we stop iterating.
 const BUDGET: Duration = Duration::from_millis(600);
@@ -54,7 +53,7 @@ fn benchmarks() -> Vec<Benchmark> {
             name: "OO: 100k instances + method calls",
             src: "class Counter {
                       fn init(self, start) { self.count = start; }
-                      fn bump(self) { self.count = self.count + 1; self.count; }
+                      fn bump(self) { self.count = self.count + 1; return self.count; }
                   }
                   let i = 0; let acc = 0;
                   while (i < 100000) {
@@ -84,14 +83,10 @@ fn per_iter_us(iters: u64, elapsed: Duration) -> f64 {
 }
 
 fn main() {
-    println!(
-        "{:<42} {:>14} {:>14} {:>10}",
-        "benchmark", "VM (µs/iter)", "TW (µs/iter)", "speedup"
-    );
-    println!("{}", "-".repeat(82));
+    println!("{:<42} {:>14}", "benchmark", "VM (µs/iter)");
+    println!("{}", "-".repeat(57));
 
     for bench in benchmarks() {
-        // One shared context so parsed Symbols are valid for both backends.
         let ctx = Context::new();
         let program = match Parser::new(bench.src, &ctx).parse() {
             Ok(p) => p,
@@ -101,34 +96,15 @@ fn main() {
             }
         };
 
-        // VM: compile + execute each iteration.
+        // Compile + execute each iteration.
         let (vm_iters, vm_time) = measure(|| {
-            let bytecode = Compiler::new(&ctx).compile(&program);
+            let bytecode = Compiler::new(&ctx)
+                .compile(&program)
+                .expect("compile error");
             let mut vm = AxeVM::new(&bytecode);
-            let _ = vm.exec();
+            vm.exec().expect("runtime error");
         });
         let vm_us = per_iter_us(vm_iters, vm_time);
-
-        // Only benchmark the tree-walker if it can actually run the program.
-        // (It can't run OO — instance methods return null there — so timing it
-        // would just measure how fast it errors out.)
-        let tw_ok = Axe::new(&ctx).run(program.clone()).is_ok();
-        if tw_ok {
-            let (tw_iters, tw_time) = measure(|| {
-                let mut tw = Axe::new(&ctx);
-                let _ = tw.run(program.clone());
-            });
-            let tw_us = per_iter_us(tw_iters, tw_time);
-            let speedup = tw_us / vm_us;
-            println!(
-                "{:<42} {:>14.2} {:>14.2} {:>9.2}x",
-                bench.name, vm_us, tw_us, speedup
-            );
-        } else {
-            println!(
-                "{:<42} {:>14.2} {:>14} {:>10}",
-                bench.name, vm_us, "n/a", "VM-only"
-            );
-        }
+        println!("{:<42} {:>14.2}", bench.name, vm_us);
     }
 }

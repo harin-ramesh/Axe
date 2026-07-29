@@ -6,6 +6,26 @@ use super::bytecode::{Bytecode, BytecodeBuilder, Constant};
 use super::instructions::Instruction;
 use super::tables::GlobalTable;
 
+/// A compile-time error: what went wrong and the source line it points at
+/// (0 if unknown).
+#[derive(Debug, Clone)]
+pub struct CompileError {
+    pub message: String,
+    pub line: u32,
+}
+
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.line != 0 {
+            write!(f, "[line {}] {}", self.line, self.message)
+        } else {
+            write!(f, "{}", self.message)
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
+
 /// A local variable in a function scope. Its stack slot equals its index in the
 /// scope's `locals` vector (locals are pushed/popped LIFO).
 #[derive(Clone, Copy)]
@@ -64,6 +84,9 @@ pub struct Compiler<'ctx> {
     /// (e.g. the hidden list/index locals of a `for` loop), so nested loops
     /// don't collide.
     synthetic_counter: usize,
+    /// Most recent source line seen while walking the AST; attached to
+    /// compile errors and fed to the bytecode line table.
+    line: u32,
 }
 
 impl<'ctx> Compiler<'ctx> {
@@ -79,7 +102,40 @@ impl<'ctx> Compiler<'ctx> {
             globals,
             fn_scopes: vec![FnScope::new()],
             synthetic_counter: 0,
+            line: 0,
         }
+    }
+
+    /// Build a `CompileError` at the current source line.
+    fn err(&self, message: impl Into<String>) -> CompileError {
+        CompileError {
+            message: message.into(),
+            line: self.line,
+        }
+    }
+
+    /// Note that compilation has reached source line `line` (0 = unchanged).
+    fn mark_line(&mut self, line: u32) {
+        if line != 0 {
+            self.line = line;
+            self.builder.set_line(line);
+        }
+    }
+
+    /// Resolve a `Symbol` to its source name for error messages.
+    fn name_of(&self, sym: Symbol) -> String {
+        self.ctx.resolve(sym)
+    }
+
+    /// Add a `Constant::Sym` and record its source name so runtime errors
+    /// can print the member name.
+    fn sym_const(&mut self, sym: Symbol) -> Result<u8, CompileError> {
+        let c = self
+            .builder
+            .try_add_constant(Constant::Sym(sym))
+            .map_err(|e| self.err(e))?;
+        self.builder.name_sym(sym, self.name_of(sym));
+        Ok(c)
     }
 
     fn scope(&self) -> &FnScope {
@@ -193,45 +249,48 @@ impl<'ctx> Compiler<'ctx> {
     }
 
     /// Compile a program and return the finished bytecode
-    pub fn compile(mut self, program: &Program) -> Bytecode {
+    pub fn compile(mut self, program: &Program) -> Result<Bytecode, CompileError> {
         for stmt in &program.stmts {
-            self.compile_stmt(stmt);
+            self.compile_stmt(stmt)?;
         }
         self.builder.emit(Instruction::HALT);
-        self.builder.build()
+        Ok(self.builder.build())
     }
 
-    fn compile_stmt(&mut self, stmt: &Stmt) {
+    fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
         match stmt {
             Stmt::Expr(expr) => {
-                self.compile_expr(expr);
+                self.compile_expr(expr)?;
                 // Pop the result since it's an expression statement
                 self.builder.emit(Instruction::POP);
             }
             Stmt::Block(stmts) => {
                 self.begin_scope();
                 for stmt in stmts {
-                    self.compile_stmt(stmt);
+                    self.compile_stmt(stmt)?;
                 }
                 self.end_scope();
             }
             Stmt::If(cond, then_stmt, else_stmt) => {
-                self.compile_expr(cond);
+                self.compile_expr(cond)?;
                 let jump_to_else = self.builder.emit_jump(Instruction::JUMP_IF_FALSE);
-                self.compile_stmt(then_stmt);
+                self.compile_stmt(then_stmt)?;
                 let jump_over_else = self.builder.emit_jump(Instruction::JUMP);
                 self.builder.patch_jump(jump_to_else);
-                self.compile_stmt(else_stmt);
+                self.compile_stmt(else_stmt)?;
                 self.builder.patch_jump(jump_over_else);
             }
             Stmt::Let(bindings) => {
                 for (symbol, init) in bindings {
                     match init {
-                        Some(expr) => self.compile_expr(expr),
+                        Some(expr) => self.compile_expr(expr)?,
                         None => self.builder.emit(Instruction::NULL),
                     }
                     if self.at_global() {
-                        let idx = self.globals.define(*symbol).expect("dup");
+                        let idx = self
+                            .globals
+                            .define_or_get(*symbol)
+                            .map_err(|e| self.err(e))?;
                         self.builder.emit(Instruction::DEFINE_GLOBAL);
                         self.builder.emit(idx);
                     } else {
@@ -241,7 +300,7 @@ impl<'ctx> Compiler<'ctx> {
                 }
             }
             Stmt::Assign(symbol, expr) => {
-                self.compile_expr(expr);
+                self.compile_expr(expr)?;
                 match self.resolve_variable(*symbol) {
                     VarLoc::Local(slot) => {
                         self.builder.emit(Instruction::SET_LOCAL);
@@ -255,26 +314,35 @@ impl<'ctx> Compiler<'ctx> {
                         self.builder.emit(Instruction::SET_GLOBAL);
                         self.builder.emit(idx);
                     }
-                    VarLoc::Undefined => panic!("assignment to undefined variable"),
+                    VarLoc::Undefined => {
+                        return Err(self.err(format!(
+                            "assignment to undefined variable '{}'",
+                            self.name_of(*symbol)
+                        )));
+                    }
                 }
                 self.builder.emit(Instruction::POP);
             }
             Stmt::Function(symbol, params, stmts) => {
+                let name = self.name_of(*symbol);
                 if self.at_global() {
-                    let idx = self.globals.define(*symbol).expect("dup");
-                    self.compile_function(params, stmts);
+                    let idx = self
+                        .globals
+                        .define_or_get(*symbol)
+                        .map_err(|e| self.err(e))?;
+                    self.compile_function(&name, params, stmts)?;
                     self.builder.emit(Instruction::DEFINE_GLOBAL);
                     self.builder.emit(idx);
                 } else {
                     self.add_local(*symbol);
-                    self.compile_function(params, stmts);
+                    self.compile_function(&name, params, stmts)?;
                 }
             }
-            Stmt::Class(name, parent, body) => self.compile_class(name, *parent, body),
+            Stmt::Class(name, parent, body) => self.compile_class(name, *parent, body)?,
             Stmt::PropertyAssign(obj_expr, prop, value_expr) => {
-                self.compile_expr(obj_expr);
-                self.compile_expr(value_expr);
-                let name_const = self.builder.add_constant(Constant::Sym(*prop));
+                self.compile_expr(obj_expr)?;
+                self.compile_expr(value_expr)?;
+                let name_const = self.sym_const(*prop)?;
                 self.builder.emit(Instruction::SET_PROPERTY);
                 self.builder.emit(name_const);
                 self.builder.emit(Instruction::POP);
@@ -284,26 +352,37 @@ impl<'ctx> Compiler<'ctx> {
                 //   <cond> ; JUMP_IF_FALSE exit ; <body> ; LOOP loop_start
                 // exit:
                 let loop_start = self.builder.here();
-                self.compile_expr(cond);
+                self.compile_expr(cond)?;
                 let exit_jump = self.builder.emit_jump(Instruction::JUMP_IF_FALSE);
-                self.compile_stmt(body);
+                self.compile_stmt(body)?;
                 self.builder.emit_loop(loop_start);
                 self.builder.patch_jump(exit_jump);
             }
-            Stmt::For(var, iterable, body) => self.compile_for(var, iterable, body),
+            Stmt::For(var, iterable, body) => self.compile_for(var, iterable, body)?,
             Stmt::Return(expr) => {
-                self.compile_expr(expr);
+                if self.fn_scopes.len() == 1 {
+                    return Err(self.err("'return' outside a function"));
+                }
+                self.compile_expr(expr)?;
                 self.builder.emit(Instruction::RETURN);
             }
-            _ => todo!("Statement not yet implemented: {:?}", stmt),
+            Stmt::Break => return Err(self.err("'break' is not supported by the VM yet")),
+            Stmt::Continue => return Err(self.err("'continue' is not supported by the VM yet")),
+            Stmt::Import(..) => return Err(self.err("imports are not supported by the VM yet")),
         }
+        Ok(())
     }
 
     /// Compile `for var in iterable { body }` by desugaring to an index loop
     /// over the (list) iterable, using three hidden locals: the list, the
     /// index, and the loop variable. Wrapped in its own scope so the loop
     /// variables are locals even at top level.
-    fn compile_for(&mut self, var: &Symbol, iterable: &Expr, body: &Stmt) {
+    fn compile_for(
+        &mut self,
+        var: &Symbol,
+        iterable: &Expr,
+        body: &Stmt,
+    ) -> Result<(), CompileError> {
         self.begin_scope();
 
         // Unique names so nested `for` loops don't collide in the flat table.
@@ -313,7 +392,7 @@ impl<'ctx> Compiler<'ctx> {
         let idx_name = self.ctx.intern(&format!("$for_idx{}", uid));
 
         // hidden: __list = iterable  (value stays in this local's slot)
-        self.compile_expr(iterable);
+        self.compile_expr(iterable)?;
         let list_slot = self.add_local(list_name);
 
         // hidden: __idx = 0
@@ -344,7 +423,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.emit(var_slot);
         self.builder.emit(Instruction::POP);
 
-        self.compile_stmt(body);
+        self.compile_stmt(body)?;
 
         // idx = idx + 1
         self.builder.emit(Instruction::GET_LOCAL);
@@ -360,18 +439,25 @@ impl<'ctx> Compiler<'ctx> {
 
         // Discard the three hidden locals (var, idx, list).
         self.end_scope();
+        Ok(())
     }
 
-    fn compile_function(&mut self, params: &ParamVec, body: &Stmt) {
+    fn compile_function(
+        &mut self,
+        name: &str,
+        params: &ParamVec,
+        body: &Stmt,
+    ) -> Result<(), CompileError> {
         let jump_over = self.builder.emit_jump(Instruction::JUMP);
         let entry = self.builder.here();
+        self.builder.name_fn(entry, name.to_string());
 
         self.fn_scopes.push(FnScope::new());
         for param in params {
             self.add_local(*param);
         }
 
-        self.compile_function_body(body);
+        self.compile_function_body(body)?;
 
         let scope = self.fn_scopes.pop().unwrap();
 
@@ -380,10 +466,15 @@ impl<'ctx> Compiler<'ctx> {
         let arity = params.len() as u8;
         if scope.upvalues.is_empty() {
             // Non-capturing: a flat function value, no heap allocation.
-            self.builder.emit_constant(Constant::Fn { entry, arity });
+            self.builder
+                .try_emit_constant(Constant::Fn { entry, arity })
+                .map_err(|e| self.err(e))?;
         } else {
             // Capturing: emit CLOSURE with the capture descriptors.
-            let fn_const = self.builder.add_constant(Constant::Fn { entry, arity });
+            let fn_const = self
+                .builder
+                .try_add_constant(Constant::Fn { entry, arity })
+                .map_err(|e| self.err(e))?;
             self.builder.emit(Instruction::CLOSURE);
             self.builder.emit(fn_const);
             self.builder.emit(scope.upvalues.len() as u8);
@@ -392,40 +483,45 @@ impl<'ctx> Compiler<'ctx> {
                 self.builder.emit(uv.index);
             }
         }
+        Ok(())
     }
 
-    fn compile_function_body(&mut self, body: &Stmt) {
+    fn compile_function_body(&mut self, body: &Stmt) -> Result<(), CompileError> {
         if let Stmt::Block(stmts) = body {
             self.scope_mut().scope_depth += 1;
             for stmt in stmts {
-                self.compile_stmt(stmt);
+                self.compile_stmt(stmt)?;
             }
             self.discard_scope_locals();
         } else {
-            self.compile_stmt(body);
+            self.compile_stmt(body)?;
         }
 
-        // Fall-through with no `return`: yield null.
         self.builder.emit(Instruction::NULL);
         self.builder.emit(Instruction::RETURN);
+        Ok(())
     }
 
-    fn compile_class(&mut self, name: &Symbol, parent: Option<Symbol>, body: &[Stmt]) {
+    fn compile_class(
+        &mut self,
+        name: &Symbol,
+        parent: Option<Symbol>,
+        body: &[Stmt],
+    ) -> Result<(), CompileError> {
         if !self.at_global() {
-            todo!("local class declarations are not yet supported");
+            return Err(self.err("classes can only be declared at top level"));
         }
 
-        let class_idx = self.globals.define(*name).expect("dup class");
+        let class_idx = self.globals.define_or_get(*name).map_err(|e| self.err(e))?;
 
-        let name_const = self.builder.add_constant(Constant::Sym(*name));
+        let name_const = self.sym_const(*name)?;
         self.builder.emit(Instruction::CLASS);
         self.builder.emit(name_const);
 
         if let Some(parent) = parent {
-            let idx = self
-                .globals
-                .resolve(parent)
-                .expect("undefined parent class");
+            let idx = self.globals.resolve(parent).ok_or_else(|| {
+                self.err(format!("undefined parent class '{}'", self.name_of(parent)))
+            })?;
             self.builder.emit(Instruction::GET_GLOBAL);
             self.builder.emit(idx);
             self.builder.emit(Instruction::INHERIT);
@@ -436,17 +532,18 @@ impl<'ctx> Compiler<'ctx> {
                 Stmt::Let(bindings) => {
                     for (sym, init) in bindings {
                         match init {
-                            Some(expr) => self.compile_expr(expr),
+                            Some(expr) => self.compile_expr(expr)?,
                             None => self.builder.emit(Instruction::NULL),
                         }
-                        let c = self.builder.add_constant(Constant::Sym(*sym));
+                        let c = self.sym_const(*sym)?;
                         self.builder.emit(Instruction::STATIC_FIELD);
                         self.builder.emit(c);
                     }
                 }
                 Stmt::Function(fn_name, params, fn_body) => {
-                    self.compile_function(params, fn_body);
-                    let c = self.builder.add_constant(Constant::Sym(*fn_name));
+                    let method_name = format!("{}.{}", self.name_of(*name), self.name_of(*fn_name));
+                    self.compile_function(&method_name, params, fn_body)?;
+                    let c = self.sym_const(*fn_name)?;
                     self.builder.emit(Instruction::METHOD);
                     self.builder.emit(c);
                 }
@@ -456,26 +553,49 @@ impl<'ctx> Compiler<'ctx> {
 
         self.builder.emit(Instruction::DEFINE_GLOBAL);
         self.builder.emit(class_idx);
+        Ok(())
     }
 
-    pub fn compile_expr_only(mut self, expr: &Expr) -> Bytecode {
-        self.compile_expr(expr);
+    pub fn compile_expr_only(mut self, expr: &Expr) -> Result<Bytecode, CompileError> {
+        self.compile_expr(expr)?;
         self.builder.emit(Instruction::HALT);
-        self.builder.build()
+        Ok(self.builder.build())
     }
 
-    fn compile_expr(&mut self, expr: &Expr) {
+    /// Like `compile`, but if the program ends in an expression statement its
+    /// value is left on the stack instead of popped, so the caller (REPL,
+    /// tests) can observe the result of the final expression.
+    pub fn compile_repl(mut self, program: &Program) -> Result<Bytecode, CompileError> {
+        if let Some((last, rest)) = program.stmts.split_last() {
+            for stmt in rest {
+                self.compile_stmt(stmt)?;
+            }
+            match last {
+                Stmt::Expr(expr) => self.compile_expr(expr)?,
+                other => self.compile_stmt(other)?,
+            }
+        }
+        self.builder.emit(Instruction::HALT);
+        Ok(self.builder.build())
+    }
+
+    fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
+        self.mark_line(expr.line);
+        // Re-applied before multi-operand opcodes so the *operator*'s line —
+        // not the last operand's — is what runtime errors report.
+        let line = expr.line;
         match &expr.kind {
-            ExprKind::Literal(lit) => self.compile_literal(lit),
+            ExprKind::Literal(lit) => self.compile_literal(lit)?,
             ExprKind::List(elements) => {
                 for element in elements {
-                    self.compile_expr(element);
+                    self.compile_expr(element)?;
                 }
+                self.mark_line(line);
                 self.builder.emit(Instruction::BUILD_LIST);
                 self.builder.emit(elements.len() as u8);
             }
-            ExprKind::Binary(op, lhs, rhs) => self.compile_binary(op, lhs, rhs),
-            ExprKind::Unary(op, operand) => self.compile_unary(op, operand),
+            ExprKind::Binary(op, lhs, rhs) => self.compile_binary(op, lhs, rhs, line)?,
+            ExprKind::Unary(op, operand) => self.compile_unary(op, operand, line)?,
             ExprKind::Var(var) => match self.resolve_variable(*var) {
                 VarLoc::Local(slot) => {
                     self.builder.emit(Instruction::GET_LOCAL);
@@ -489,10 +609,11 @@ impl<'ctx> Compiler<'ctx> {
                     self.builder.emit(Instruction::GET_GLOBAL);
                     self.builder.emit(idx);
                 }
-                VarLoc::Undefined => panic!("undefined variable"),
+                VarLoc::Undefined => {
+                    return Err(self.err(format!("undefined variable '{}'", self.name_of(*var))));
+                }
             },
             ExprKind::Call(name, args) => {
-                // The callee may be a global, a local, or a captured upvalue.
                 match self.resolve_variable(*name) {
                     VarLoc::Local(slot) => {
                         self.builder.emit(Instruction::GET_LOCAL);
@@ -506,101 +627,117 @@ impl<'ctx> Compiler<'ctx> {
                         self.builder.emit(Instruction::GET_GLOBAL);
                         self.builder.emit(idx);
                     }
-                    VarLoc::Undefined => panic!("undefined function"),
+                    VarLoc::Undefined => {
+                        return Err(
+                            self.err(format!("undefined function '{}'", self.name_of(*name)))
+                        );
+                    }
                 }
                 for arg in args {
-                    self.compile_expr(arg);
+                    self.compile_expr(arg)?;
                 }
+                self.mark_line(line);
                 self.builder.emit(Instruction::CALL);
                 self.builder.emit(args.len() as u8);
             }
-            // new ClassName(args...)
             ExprKind::New(class, args) => {
-                let idx = self.globals.resolve(*class).expect("undefined class");
+                let idx = self.globals.resolve(*class).ok_or_else(|| {
+                    self.err(format!("undefined class '{}'", self.name_of(*class)))
+                })?;
                 self.builder.emit(Instruction::GET_GLOBAL);
                 self.builder.emit(idx);
                 for arg in args {
-                    self.compile_expr(arg);
+                    self.compile_expr(arg)?;
                 }
-                let init_const = self
-                    .builder
-                    .add_constant(Constant::Sym(self.ctx.intern("init")));
+                let init_const = self.sym_const(self.ctx.intern("init"))?;
+                self.mark_line(line);
                 self.builder.emit(Instruction::NEW);
                 self.builder.emit(init_const);
                 self.builder.emit(args.len() as u8);
             }
-            // obj.property
             ExprKind::Property(obj, name) => {
-                self.compile_expr(obj);
-                let c = self.builder.add_constant(Constant::Sym(*name));
+                self.compile_expr(obj)?;
+                let c = self.sym_const(*name)?;
+                self.mark_line(line);
                 self.builder.emit(Instruction::GET_PROPERTY);
                 self.builder.emit(c);
             }
-            // obj.method(args...)
             ExprKind::MethodCall(obj, method, args) => {
-                self.compile_expr(obj);
+                self.compile_expr(obj)?;
                 for arg in args {
-                    self.compile_expr(arg);
+                    self.compile_expr(arg)?;
                 }
-                let c = self.builder.add_constant(Constant::Sym(*method));
+                let c = self.sym_const(*method)?;
+                self.mark_line(line);
                 self.builder.emit(Instruction::INVOKE);
                 self.builder.emit(c);
                 self.builder.emit(args.len() as u8);
             }
-            // Class::property
             ExprKind::StaticProperty(obj, name) => {
-                self.compile_expr(obj);
-                let c = self.builder.add_constant(Constant::Sym(*name));
+                self.compile_expr(obj)?;
+                let c = self.sym_const(*name)?;
+                self.mark_line(line);
                 self.builder.emit(Instruction::GET_STATIC);
                 self.builder.emit(c);
             }
-            // Class::method(args...)
             ExprKind::StaticMethodCall(obj, method, args) => {
-                self.compile_expr(obj);
+                self.compile_expr(obj)?;
                 for arg in args {
-                    self.compile_expr(arg);
+                    self.compile_expr(arg)?;
                 }
-                let c = self.builder.add_constant(Constant::Sym(*method));
+                let c = self.sym_const(*method)?;
+                self.mark_line(line);
                 self.builder.emit(Instruction::STATIC_INVOKE);
                 self.builder.emit(c);
                 self.builder.emit(args.len() as u8);
             }
-            // TODO: Implement other expressions
-            _ => todo!("Expression not yet implemented: {:?}", expr),
+            ExprKind::Lambda(..) => {
+                return Err(self.err("lambda expressions are not supported by the VM yet"));
+            }
         }
+        Ok(())
     }
 
-    fn compile_literal(&mut self, lit: &Literal) {
+    fn compile_literal(&mut self, lit: &Literal) -> Result<(), CompileError> {
         match lit {
             Literal::Null => self.builder.emit(Instruction::NULL),
             Literal::Bool(true) => self.builder.emit(Instruction::TRUE),
             Literal::Bool(false) => self.builder.emit(Instruction::FALSE),
-            Literal::Int(n) => self.builder.emit_constant(Constant::Int(*n)),
-            Literal::Float(n) => self.builder.emit_constant(Constant::Float(*n)),
+            Literal::Int(n) => self
+                .builder
+                .try_emit_constant(Constant::Int(*n))
+                .map_err(|e| self.err(e))?,
+            Literal::Float(n) => self
+                .builder
+                .try_emit_constant(Constant::Float(*n))
+                .map_err(|e| self.err(e))?,
             Literal::Str(s) => {
                 let string = self.ctx.resolve(*s);
-                self.builder.emit_constant(Constant::Str(string.into()))
+                self.builder
+                    .try_emit_constant(Constant::Str(string))
+                    .map_err(|e| self.err(e))?
             }
         }
+        Ok(())
     }
 
-    fn compile_binary(&mut self, op: &Operation, lhs: &Expr, rhs: &Expr) {
-        // Constant folding: if both operands reduce to compile-time constants,
-        // evaluate the operation now and emit a single constant. Because
-        // `fold_const` recurses, a fully-constant tree collapses at the outermost
-        // operation (e.g. `(10 + 20) * 2 - 5` becomes a single `55`).
-        if let (Some(a), Some(b)) = (fold_const(lhs), fold_const(rhs)) {
-            if let Some(folded) = fold_binary(op, a, b) {
-                self.compile_literal(&folded);
-                return;
-            }
+    fn compile_binary(
+        &mut self,
+        op: &Operation,
+        lhs: &Expr,
+        rhs: &Expr,
+        line: u32,
+    ) -> Result<(), CompileError> {
+        if let (Some(a), Some(b)) = (fold_const(lhs), fold_const(rhs))
+            && let Some(folded) = fold_binary(op, a, b)
+        {
+            return self.compile_literal(&folded);
         }
 
-        // Compile left operand first, then right
-        self.compile_expr(lhs);
-        self.compile_expr(rhs);
+        self.compile_expr(lhs)?;
+        self.compile_expr(rhs)?;
+        self.mark_line(line);
 
-        // Emit the appropriate instruction
         let instruction = match op {
             Operation::Add => Instruction::ADD,
             Operation::Sub => Instruction::SUB,
@@ -619,18 +756,23 @@ impl<'ctx> Compiler<'ctx> {
             Operation::BitwiseOr => Instruction::BITOR,
         };
         self.builder.emit(instruction);
+        Ok(())
     }
 
-    fn compile_unary(&mut self, op: &UnaryOp, operand: &Expr) {
-        // Constant folding for unary operations (e.g. `-42`, `~0`, `!true`).
-        if let Some(v) = fold_const(operand) {
-            if let Some(folded) = fold_unary(op, v) {
-                self.compile_literal(&folded);
-                return;
-            }
+    fn compile_unary(
+        &mut self,
+        op: &UnaryOp,
+        operand: &Expr,
+        line: u32,
+    ) -> Result<(), CompileError> {
+        if let Some(v) = fold_const(operand)
+            && let Some(folded) = fold_unary(op, v)
+        {
+            return self.compile_literal(&folded);
         }
 
-        self.compile_expr(operand);
+        self.compile_expr(operand)?;
+        self.mark_line(line);
 
         let instruction = match op {
             UnaryOp::Neg => Instruction::NEG,
@@ -638,15 +780,10 @@ impl<'ctx> Compiler<'ctx> {
             UnaryOp::Inv => Instruction::BITINV,
         };
         self.builder.emit(instruction);
+        Ok(())
     }
 }
 
-/// Recursively evaluate an expression built entirely from literal operands.
-///
-/// Returns `None` for anything that isn't a compile-time constant — variables,
-/// calls, string operands, or operations whose result can't be folded *safely*
-/// (integer overflow, division by zero). Leaving those unfolded means the VM
-/// reproduces the exact same runtime behavior it had before folding.
 fn fold_const(expr: &Expr) -> Option<Literal> {
     match &expr.kind {
         ExprKind::Literal(lit) => Some(*lit),
@@ -658,7 +795,6 @@ fn fold_const(expr: &Expr) -> Option<Literal> {
 
 fn fold_unary(op: &UnaryOp, v: Literal) -> Option<Literal> {
     match (op, v) {
-        // `checked_neg` guards i64::MIN, which would overflow.
         (UnaryOp::Neg, Literal::Int(n)) => n.checked_neg().map(Literal::Int),
         (UnaryOp::Neg, Literal::Float(f)) => Some(Literal::Float(-f)),
         (UnaryOp::Not, Literal::Bool(b)) => Some(Literal::Bool(!b)),
@@ -671,24 +807,18 @@ fn fold_binary(op: &Operation, a: Literal, b: Literal) -> Option<Literal> {
     use Literal::{Bool, Float, Int};
     use Operation::*;
     match (op, a, b) {
-        // Integer arithmetic. `checked_*` returns `None` on overflow and on
-        // div/rem by zero (and i64::MIN / -1), so those stay unfolded and the
-        // VM panics at runtime exactly as it would have.
         (Add, Int(x), Int(y)) => x.checked_add(y).map(Int),
         (Sub, Int(x), Int(y)) => x.checked_sub(y).map(Int),
         (Mul, Int(x), Int(y)) => x.checked_mul(y).map(Int),
         (Div, Int(x), Int(y)) => x.checked_div(y).map(Int),
         (Mod, Int(x), Int(y)) => x.checked_rem(y).map(Int),
 
-        // Float arithmetic. Division by zero yields inf/NaN — the same result
-        // the VM produces — so it's safe to fold.
         (Add, Float(x), Float(y)) => Some(Float(x + y)),
         (Sub, Float(x), Float(y)) => Some(Float(x - y)),
         (Mul, Float(x), Float(y)) => Some(Float(x * y)),
         (Div, Float(x), Float(y)) => Some(Float(x / y)),
         (Mod, Float(x), Float(y)) => Some(Float(x % y)),
 
-        // Comparisons (same-type operands only, matching VM semantics).
         (Gt, Int(x), Int(y)) => Some(Bool(x > y)),
         (Lt, Int(x), Int(y)) => Some(Bool(x < y)),
         (Gte, Int(x), Int(y)) => Some(Bool(x >= y)),
@@ -698,7 +828,6 @@ fn fold_binary(op: &Operation, a: Literal, b: Literal) -> Option<Literal> {
         (Gte, Float(x), Float(y)) => Some(Bool(x >= y)),
         (Lte, Float(x), Float(y)) => Some(Bool(x <= y)),
 
-        // Equality (same-type only; mixed types fall through to the runtime).
         (Eq, Int(x), Int(y)) => Some(Bool(x == y)),
         (Neq, Int(x), Int(y)) => Some(Bool(x != y)),
         (Eq, Float(x), Float(y)) => Some(Bool(x == y)),
@@ -706,11 +835,9 @@ fn fold_binary(op: &Operation, a: Literal, b: Literal) -> Option<Literal> {
         (Eq, Bool(x), Bool(y)) => Some(Bool(x == y)),
         (Neq, Bool(x), Bool(y)) => Some(Bool(x != y)),
 
-        // Logical (both operands boolean).
         (And, Bool(x), Bool(y)) => Some(Bool(x && y)),
         (Or, Bool(x), Bool(y)) => Some(Bool(x || y)),
 
-        // Bitwise.
         (BitwiseAnd, Int(x), Int(y)) => Some(Int(x & y)),
         (BitwiseOr, Int(x), Int(y)) => Some(Int(x | y)),
 
@@ -726,18 +853,18 @@ mod tests {
 
     fn compile_and_run(ctx: &Context, expr: Expr) -> Option<Value> {
         let compiler = Compiler::new(ctx);
-        let bytecode = compiler.compile_expr_only(&expr);
+        let bytecode = compiler.compile_expr_only(&expr).expect("compile failed");
         let mut vm = AxeVM::new(&bytecode);
-        vm.exec()
+        vm.exec().expect("runtime error")
     }
 
     /// Run an expression and render its result via the VM's heap. Needed for
     /// string results, whose `Value`s are opaque `ObjRef` handles.
     fn compile_and_display(ctx: &Context, expr: Expr) -> Option<String> {
         let compiler = Compiler::new(ctx);
-        let bytecode = compiler.compile_expr_only(&expr);
+        let bytecode = compiler.compile_expr_only(&expr).expect("compile failed");
         let mut vm = AxeVM::new(&bytecode);
-        let result = vm.exec();
+        let result = vm.exec().expect("runtime error");
         result.map(|v| vm.display_value(&v))
     }
 
@@ -912,7 +1039,7 @@ mod tests {
             Box::new(Expr::Literal(Literal::Int(5))),
         );
 
-        let bytecode = Compiler::new(&ctx).compile_expr_only(&expr);
+        let bytecode = Compiler::new(&ctx).compile_expr_only(&expr).unwrap();
 
         // Whole tree collapses: one constant, and code is just CONST 0; HALT.
         assert_eq!(bytecode.constants, vec![Constant::Int(55)]);
@@ -923,22 +1050,22 @@ mod tests {
 
         // ...and it still evaluates correctly.
         let mut vm = AxeVM::new(&bytecode);
-        assert_eq!(vm.exec(), Some(Value::Int(55)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Int(55)));
     }
 
     #[test]
     fn test_constant_folding_skips_div_by_zero() {
         let ctx = Context::new();
 
-        // 1 / 0 must NOT be folded — the DIV opcode stays so the VM panics
-        // at runtime exactly as it would without folding.
+        // 1 / 0 must NOT be folded — the DIV opcode stays so the VM reports
+        // a runtime error exactly as it would without folding.
         let expr = Expr::Binary(
             Operation::Div,
             Box::new(Expr::Literal(Literal::Int(1))),
             Box::new(Expr::Literal(Literal::Int(0))),
         );
 
-        let bytecode = Compiler::new(&ctx).compile_expr_only(&expr);
+        let bytecode = Compiler::new(&ctx).compile_expr_only(&expr).unwrap();
         assert!(bytecode.code.contains(&Instruction::DIV));
     }
 
@@ -973,17 +1100,19 @@ mod tests {
         let mut compiler = Compiler::new(&ctx);
         let (last, rest) = program.stmts.split_last().expect("empty program");
         for stmt in rest {
-            compiler.compile_stmt(stmt);
+            compiler.compile_stmt(stmt).expect("compile failed");
         }
         match last {
-            Stmt::Expr(expr) => compiler.compile_expr(expr),
-            other => compiler.compile_stmt(other),
+            Stmt::Expr(expr) => compiler.compile_expr(expr).expect("compile failed"),
+            other => compiler.compile_stmt(other).expect("compile failed"),
         }
         compiler.builder.emit(Instruction::HALT);
         let bytecode = compiler.builder.build();
 
         let mut vm = AxeVM::new(&bytecode);
-        vm.exec().map(|v| vm.display_value(&v))
+        vm.exec()
+            .expect("runtime error")
+            .map(|v| vm.display_value(&v))
     }
 
     #[test]

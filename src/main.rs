@@ -1,4 +1,4 @@
-use axe::{Axe, AxeVM, Compiler, Context, Literal, Parser, Program, VMValue, Value, disassemble};
+use axe::{AxeVM, Compiler, Context, Parser, Program, VMValue, disassemble};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter};
@@ -10,26 +10,19 @@ use std::env;
 use std::fs;
 use std::process;
 
-/// Execution backend selection
-#[derive(Clone, Copy, PartialEq)]
-enum Backend {
-    TreeWalker,
-    StackVM,
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     // Parse arguments
-    let mut backend = Backend::StackVM;
     let mut file_arg: Option<&str> = None;
     let mut disassemble = false;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--vm" => backend = Backend::StackVM,
-            "--tree-walker" => backend = Backend::TreeWalker,
+            // Historical flag from when a tree-walker backend existed; the VM
+            // is the only backend now, so this is accepted and ignored.
+            "--vm" => {}
             "--disassemble" | "--dis" => disassemble = true,
             "--help" | "-h" => {
                 print_usage();
@@ -58,20 +51,18 @@ fn main() {
 
     // Check if a file argument was provided
     if let Some(filename) = file_arg {
-        run_file(filename, backend);
+        run_file(filename);
         return;
     }
 
     // Otherwise, start REPL
-    run_repl(backend);
+    run_repl();
 }
 
 fn print_usage() {
     eprintln!("Usage: axe [OPTIONS] [FILE]");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  --tree-walker  Use tree-walking interpreter (default)");
-    eprintln!("  --vm           Use stack-based VM");
     eprintln!("  --disassemble  Compile FILE and print bytecode disassembly (no execution)");
     eprintln!("  -h, --help     Show this help message");
 }
@@ -99,11 +90,17 @@ fn disassemble_file(filename: &str) {
         }
     };
 
-    let bytecode = Compiler::new(&ctx).compile(&program);
+    let bytecode = match Compiler::new(&ctx).compile(&program) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("compile error: {}", e);
+            process::exit(65);
+        }
+    };
     print!("{}", disassemble(&bytecode));
 }
 
-fn run_file(filename: &str, backend: Backend) {
+fn run_file(filename: &str) {
     // Read the file
     let content = match fs::read_to_string(filename) {
         Ok(content) => content,
@@ -125,34 +122,35 @@ fn run_file(filename: &str, backend: Backend) {
     let program = match parser.parse() {
         Ok(program) => program,
         Err(e) => {
-            eprintln!("Parse error: {}", e);
-            process::exit(1);
+            eprintln!("parse error: {}", e);
+            process::exit(65);
         }
     };
 
-    // Execute with selected backend
-    match backend {
-        Backend::TreeWalker => {
-            let mut axe = Axe::new(&ctx);
-            if let Err(e) = axe.run(program) {
-                eprintln!("Runtime error: {}", e);
-                process::exit(1);
-            }
-        }
-        Backend::StackVM => {
-            run_with_vm(&ctx, program);
-        }
-    }
+    run_with_vm(&ctx, program);
 }
 
 fn run_with_vm(ctx: &Context, program: Program) {
     let compiler = Compiler::new(ctx);
-    let chunk = compiler.compile(&program);
+    let chunk = match compiler.compile(&program) {
+        Ok(chunk) => chunk,
+        Err(e) => {
+            eprintln!("compile error: {}", e);
+            process::exit(65);
+        }
+    };
     let mut vm = AxeVM::new(&chunk);
-    if let Some(result) = vm.exec() {
-        // Null is the unit result of statements; don't print it.
-        if !matches!(result, VMValue::Null) {
-            println!("{}", vm.display_value(&result));
+    match vm.exec() {
+        Ok(Some(result)) => {
+            // Null is the unit result of statements; don't print it.
+            if !matches!(result, VMValue::Null) {
+                println!("{}", vm.display_value(&result));
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(70);
         }
     }
 }
@@ -171,7 +169,6 @@ impl AxeHelper {
                 "quit".to_string(),
                 "help".to_string(),
                 "clear".to_string(),
-                "reset".to_string(),
             ],
             keywords: vec![
                 "let".to_string(),
@@ -320,15 +317,8 @@ fn get_history_path() -> Option<std::path::PathBuf> {
     })
 }
 
-fn run_repl(backend: Backend) {
-    let backend_name = match backend {
-        Backend::TreeWalker => "tree-walker",
-        Backend::StackVM => "stack-vm",
-    };
-    println!(
-        "\x1b[1;35mAxe Programming Language REPL\x1b[0m \x1b[2m({})\x1b[0m",
-        backend_name
-    );
+fn run_repl() {
+    println!("\x1b[1;35mAxe Programming Language REPL\x1b[0m");
     println!(
         "\x1b[2mType 'exit' or 'quit' to exit, 'help' for help, 'clear' to clear screen\x1b[0m"
     );
@@ -355,7 +345,6 @@ fn run_repl(backend: Backend) {
     }
 
     let ctx = Context::new();
-    let mut axe = Axe::new(&ctx);
     let mut accumulated_input = String::new();
 
     loop {
@@ -386,13 +375,6 @@ fn run_repl(backend: Backend) {
                             std::io::Write::flush(&mut std::io::stdout()).ok();
                             continue;
                         }
-                        "reset" => {
-                            // Note: reset now creates a new interpreter but reuses the same context
-                            // This preserves interned strings across resets
-                            axe = Axe::new(&ctx);
-                            println!("\x1b[1;32mInterpreter state reset.\x1b[0m");
-                            continue;
-                        }
                         "" => continue,
                         _ => {}
                     }
@@ -410,31 +392,26 @@ fn run_repl(backend: Backend) {
                     let mut parser = Parser::new(&accumulated_input, &ctx);
                     match parser.parse() {
                         Ok(program) => {
-                            match backend {
-                                Backend::TreeWalker => {
-                                    match axe.run(program) {
-                                        Ok(value) => {
-                                            // Only print non-null values
-                                            if !matches!(value, Value::Literal(Literal::Null)) {
-                                                println!("\x1b[1;32m=>\x1b[0m {}", value);
+                            let compiler = Compiler::new(&ctx);
+                            // REPL keeps the final expression's value so it
+                            // can be echoed back.
+                            match compiler.compile_repl(&program) {
+                                Ok(chunk) => {
+                                    let mut vm = AxeVM::new(&chunk);
+                                    match vm.exec() {
+                                        Ok(Some(result)) => {
+                                            if !matches!(result, VMValue::Null) {
+                                                println!(
+                                                    "\x1b[1;32m=>\x1b[0m {}",
+                                                    vm.display_value(&result)
+                                                );
                                             }
                                         }
-                                        Err(e) => println!("\x1b[1;31mError:\x1b[0m {}", e),
+                                        Ok(None) => {}
+                                        Err(e) => println!("\x1b[1;31m{}\x1b[0m", e),
                                     }
                                 }
-                                Backend::StackVM => {
-                                    let compiler = Compiler::new(&ctx);
-                                    let chunk = compiler.compile(&program);
-                                    let mut vm = AxeVM::new(&chunk);
-                                    if let Some(result) = vm.exec() {
-                                        if !matches!(result, VMValue::Null) {
-                                            println!(
-                                                "\x1b[1;32m=>\x1b[0m {}",
-                                                vm.display_value(&result)
-                                            );
-                                        }
-                                    }
-                                }
+                                Err(e) => println!("\x1b[1;31mcompile error:\x1b[0m {}", e),
                             }
                         }
                         Err(e) => println!("\x1b[1;31mParse error:\x1b[0m {}", e),
@@ -522,7 +499,6 @@ fn print_help() {
     println!("  \x1b[36mexit\x1b[0m, \x1b[36mquit\x1b[0m    - Exit the REPL");
     println!("  \x1b[36mhelp\x1b[0m            - Show this help");
     println!("  \x1b[36mclear\x1b[0m           - Clear the screen");
-    println!("  \x1b[36mreset\x1b[0m           - Reset interpreter state");
     println!();
     println!("\x1b[1mKeyboard Shortcuts:\x1b[0m");
     println!("  \x1b[36mUp/Down\x1b[0m         - Navigate command history");
