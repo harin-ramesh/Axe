@@ -1,3 +1,5 @@
+use fxhash::FxHashMap;
+
 use super::instructions::Instruction;
 use crate::Symbol;
 
@@ -26,6 +28,40 @@ pub enum Constant {
 pub struct Bytecode {
     pub code: Vec<u8>,
     pub constants: Vec<Constant>,
+    /// Run-length encoded source line table: `(code offset, line)`, sorted by
+    /// offset. Each entry marks where the source line changes; `line_at`
+    /// resolves any instruction offset back to its line for error reporting.
+    pub lines: Vec<(u32, u32)>,
+    /// Function name table: `(entry offset, name)`, sorted by entry. Used to
+    /// name frames in runtime stack traces.
+    pub fn_names: Vec<(usize, String)>,
+    /// Source names of interned member symbols, so runtime errors can say
+    /// which property/method was involved (the VM has no interner access).
+    pub sym_names: FxHashMap<Symbol, String>,
+}
+
+impl Bytecode {
+    /// Source line for the instruction at `offset` (0 if unknown).
+    pub fn line_at(&self, offset: usize) -> u32 {
+        match self.lines.binary_search_by_key(&(offset as u32), |e| e.0) {
+            Ok(i) => self.lines[i].1,
+            Err(0) => 0,
+            Err(i) => self.lines[i - 1].1,
+        }
+    }
+
+    /// Name of the function whose body starts at `entry`, if known.
+    pub fn fn_name(&self, entry: usize) -> Option<&str> {
+        self.fn_names
+            .binary_search_by_key(&entry, |e| e.0)
+            .ok()
+            .map(|i| self.fn_names[i].1.as_str())
+    }
+
+    /// Source name of a member symbol, for error messages.
+    pub fn sym_name(&self, sym: Symbol) -> &str {
+        self.sym_names.get(&sym).map_or("<unknown>", |s| s.as_str())
+    }
 }
 
 /// Builder used by the compiler to construct bytecode incrementally.
@@ -33,6 +69,9 @@ pub struct Bytecode {
 #[derive(Debug, Clone, Default)]
 pub struct BytecodeBuilder {
     bytecode: Bytecode,
+    /// Source line for bytes emitted from now on; recorded into the RLE
+    /// line table on change.
+    current_line: u32,
 }
 
 impl BytecodeBuilder {
@@ -41,8 +80,60 @@ impl BytecodeBuilder {
     }
 
     /// Freeze the builder into an immutable, runnable `Bytecode`.
-    pub fn build(self) -> Bytecode {
+    pub fn build(mut self) -> Bytecode {
+        self.bytecode.fn_names.sort_by_key(|e| e.0);
         self.bytecode
+    }
+
+    /// Set the source line for subsequently emitted bytes. Line 0 (unknown)
+    /// is ignored so synthesized nodes don't clobber real line info.
+    pub fn set_line(&mut self, line: u32) {
+        if line != 0 && line != self.current_line {
+            self.current_line = line;
+            let offset = self.bytecode.code.len() as u32;
+            // Two line changes with no bytes between them: last one wins.
+            if let Some(last) = self.bytecode.lines.last_mut()
+                && last.0 == offset
+            {
+                last.1 = line;
+            } else {
+                self.bytecode.lines.push((offset, line));
+            }
+        }
+    }
+
+    /// Record that a function named `name` has its body entry at `entry`.
+    pub fn name_fn(&mut self, entry: usize, name: String) {
+        self.bytecode.fn_names.push((entry, name));
+    }
+
+    /// Record the source name of a member symbol for error messages.
+    pub fn name_sym(&mut self, sym: Symbol, name: String) {
+        self.bytecode.sym_names.entry(sym).or_insert(name);
+    }
+
+    /// Fallible version of `add_constant` for the compiler: a script with
+    /// too many distinct constants gets a compile error, not a panic.
+    pub fn try_add_constant(&mut self, value: Constant) -> Result<u8, String> {
+        for (i, existing) in self.bytecode.constants.iter().enumerate() {
+            if existing == &value {
+                return Ok(i as u8);
+            }
+        }
+        let index = self.bytecode.constants.len();
+        if index >= 256 {
+            return Err("too many constants in one script (max 256)".to_string());
+        }
+        self.bytecode.constants.push(value);
+        Ok(index as u8)
+    }
+
+    /// Fallible version of `emit_constant` — see `try_add_constant`.
+    pub fn try_emit_constant(&mut self, value: Constant) -> Result<(), String> {
+        let index = self.try_add_constant(value)?;
+        self.emit(Instruction::CONST);
+        self.emit(index);
+        Ok(())
     }
 
     /// Add a constant to the pool and return its index.

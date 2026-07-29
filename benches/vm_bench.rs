@@ -9,16 +9,14 @@
 //! regressions/improvements — which is what makes this useful for catching
 //! performance regressions over time.
 //!
-//! Three groups:
+//! Two groups:
 //!   - `vm_exec`        : VM execution only (bytecode compiled once) — the purest
 //!                        signal for runtime regressions.
 //!   - `vm_end_to_end`  : compile + execute — what a user actually pays.
-//!   - `tree_walker`    : the tree-walker, for the VM-vs-TW comparison (skips
-//!                        programs it can't run, e.g. OO).
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
-use axe::{Axe, AxeVM, Compiler, Context, Parser};
+use axe::{AxeVM, Compiler, Context, Parser};
 
 /// (name, source). Sized so each runs in a few ms — small enough for criterion's
 /// sampling to stay fast, large enough to dominate fixed overhead.
@@ -73,7 +71,7 @@ fn bench_vm_exec(c: &mut Criterion) {
     for (name, src) in WORKLOADS {
         let ctx = Context::new();
         let program = Parser::new(src, &ctx).parse().expect("parse");
-        let bytecode = Compiler::new(&ctx).compile(&program);
+        let bytecode = Compiler::new(&ctx).compile(&program).expect("compile");
         group.bench_function(*name, |b| {
             b.iter(|| {
                 let mut vm = AxeVM::new(black_box(&bytecode));
@@ -93,7 +91,9 @@ fn bench_vm_end_to_end(c: &mut Criterion) {
         let program = Parser::new(src, &ctx).parse().expect("parse");
         group.bench_function(*name, |b| {
             b.iter(|| {
-                let bytecode = Compiler::new(&ctx).compile(black_box(&program));
+                let bytecode = Compiler::new(&ctx)
+                    .compile(black_box(&program))
+                    .expect("compile");
                 let mut vm = AxeVM::new(&bytecode);
                 black_box(vm.exec())
             });
@@ -102,31 +102,5 @@ fn bench_vm_end_to_end(c: &mut Criterion) {
     group.finish();
 }
 
-/// Tree-walker, for the VM-vs-TW comparison. Skips programs it can't run.
-fn bench_tree_walker(c: &mut Criterion) {
-    let mut group = c.benchmark_group("tree_walker");
-    group.sample_size(50);
-    for (name, src) in WORKLOADS {
-        let ctx = Context::new();
-        let program = Parser::new(src, &ctx).parse().expect("parse");
-        // Skip anything the tree-walker can't actually run (e.g. OO methods).
-        if Axe::new(&ctx).run(program.clone()).is_err() {
-            continue;
-        }
-        group.bench_function(*name, |b| {
-            b.iter(|| {
-                let mut tw = Axe::new(&ctx);
-                black_box(tw.run(program.clone()))
-            });
-        });
-    }
-    group.finish();
-}
-
-criterion_group!(
-    benches,
-    bench_vm_exec,
-    bench_vm_end_to_end,
-    bench_tree_walker
-);
+criterion_group!(benches, bench_vm_exec, bench_vm_end_to_end);
 criterion_main!(benches);

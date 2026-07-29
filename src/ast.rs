@@ -82,6 +82,10 @@ pub enum UnaryOp {
 pub struct Expr {
     pub id: ExprId,
     pub kind: ExprKind,
+    /// 1-based source line this expression starts on; 0 = unknown (e.g.
+    /// synthesized nodes). Stamped by the parser, consumed by the compiler's
+    /// line table for runtime error reporting.
+    pub line: u32,
 }
 
 impl Expr {
@@ -89,7 +93,14 @@ impl Expr {
         Self {
             id: ExprId::new(),
             kind,
+            line: 0,
         }
+    }
+
+    /// Stamp a source line onto this expression (builder-style).
+    pub fn at(mut self, line: u32) -> Self {
+        self.line = line;
+        self
     }
 
     // Convenience constructors for backward compatibility with old Expr::Variant(...) syntax

@@ -1,19 +1,19 @@
 # Axe Programming Language
 
-A lightweight programming language interpreter written in Rust. Axe features a clean, C-like syntax with support for functions, classes, and modern control flow constructs.
+A lightweight programming language written in Rust, with a C-like syntax and support for functions, closures, and classes. Axe compiles to bytecode and runs on a stack-based virtual machine with a mark-sweep garbage collector.
 
 ## Quick Start
 
 Create a file called `hello.ax`:
 
 ```javascript
-print("Hello, World!");
+println("Hello, World!");
 ```
 
 Then build and run it:
 
 ```bash
-# Build the interpreter
+# Build
 cargo build --release
 
 # Run your program
@@ -60,30 +60,26 @@ cargo run --release examples/hello.ax
 
 # Start the interactive REPL
 cargo run --release
+
+# Print the bytecode disassembly of a file (no execution)
+./target/release/axe --disassemble examples/hello.ax
 ```
 
-### Execution Backends
+## Architecture
 
-Axe supports two execution backends that can be selected at runtime:
+Source code flows through a tokeniser, recursive-descent parser, and bytecode compiler (with constant folding), then executes on a stack-based VM:
 
-```bash
-# Use tree-walking interpreter (default)
-axe examples/hello.ax
-axe --tree-walker examples/hello.ax
+- **Bytecode VM** — compact single-byte opcodes, call frames, closures via upvalues
+- **Garbage collector** — non-moving mark-sweep with slot reuse; heap stays proportional to live data (run with `AXE_GC_STRESS=1` to collect at every safepoint for debugging)
+- **Error reporting** — compile and runtime errors carry source line numbers, and runtime errors include a stack trace:
 
-# Use stack-based VM (experimental)
-axe --vm examples/hello.ax
-
-# REPL with specific backend
-axe --vm
+```
+runtime error [line 2]: undefined property 'missing_field'
+  in get_it (called from line 5)
+  in process (called from line 11)
 ```
 
-| Backend | Flag | Description |
-|---------|------|-------------|
-| Tree-walker | `--tree-walker` | Default interpreter, full feature support |
-| Stack VM | `--vm` | Bytecode compiler + VM (experimental, limited features) |
-
-> **Note:** The stack VM currently only supports literals, arithmetic, and basic expressions. Variables, control flow, functions, and classes are not yet implemented.
+Exit codes follow convention: `65` for parse/compile errors, `70` for runtime errors.
 
 ### Running Tests
 
@@ -91,11 +87,12 @@ axe --vm
 # Run all tests
 cargo test
 
-# Run interpreter tests only
-cargo test --test ast
-
-# Run parser tests only
+# Run parser + end-to-end tests only
 cargo test --test parser
+
+# Track VM performance
+cargo run --release --bin bench   # quick µs/iter report
+cargo bench                       # criterion, with regression tracking
 ```
 
 ## Features
@@ -103,20 +100,27 @@ cargo test --test parser
 - **C-like syntax** with semicolons and braces
 - **Data types**: integers (i64), floats (f64), strings, booleans, null, lists
 - **Variables** with block scoping and shadowing
-- **Control flow**: if/else statements, while loops, for loops
-- **Functions** with `return`, recursion, and closures
+- **Control flow**: if/else statements, while loops, for loops over ranges/lists
+- **Functions** with `return`, recursion, and closures (captured variables outlive their frame)
 - **Classes** with inheritance, instance methods (`.`), and static access (`::`)
-- **Control flow**: `break` and `continue` in loops, `return` in functions
-- **Imports**: `from module import name1, name2;`
-- **Built-in functions**: `print`, `type`, `range`
-- **Methods** on strings and lists (`.len()`, `.concat()`, `.push()`, `.get()`)
+- **Built-in functions**: `print`, `println`, `range`, `len`
 - **Operators**: arithmetic, comparison, logical, and bitwise
+- **Safety**: checked integer arithmetic, division-by-zero errors, call-depth limit — bad programs report errors, they don't crash the host
+
+### Not yet supported
+
+These parse (or are planned) but currently report a clean compile error:
+
+- `break` / `continue` in loops
+- `from module import ...;`
+- Lambda expressions
+- Index syntax `list[i]` and methods on strings/lists (`.len()`, `.concat()`, ...) — use the `len(x)` builtin and `for` loops meanwhile
 
 ## Examples
 
 ### Hello World
 ```javascript
-print("Hello, World!");
+println("Hello, World!");
 ```
 
 ### Variables and Expressions
@@ -124,7 +128,7 @@ print("Hello, World!");
 let x = 10;
 let y = 20;
 let sum = x + y;
-print(sum);  // 30
+println(sum);  // 30
 
 // Multiple declarations
 let a = 1, b = 2, c = 3;
@@ -141,7 +145,7 @@ fn factorial(n) {
     }
 }
 
-print(factorial(5));  // 120
+println(factorial(5));  // 120
 
 // Sum of squares using a for loop
 fn sumOfSquares(limit) {
@@ -152,34 +156,48 @@ fn sumOfSquares(limit) {
     return total;
 }
 
-print(sumOfSquares(5));  // 55
+println(sumOfSquares(5));  // 55
+```
+
+### Closures
+```javascript
+fn counter() {
+    let c = 0;
+    fn inc() {
+        c = c + 1;
+        return c;
+    }
+    return inc;
+}
+
+let next = counter();
+next();           // 1
+next();           // 2
+println(next());  // 3
 ```
 
 ### Control Flow
 ```javascript
 // If-else
 if (x > 0) {
-    print("positive");
+    println("positive");
 } else {
-    print("non-positive");
+    println("non-positive");
 }
 
-// While loop with break
+// While loop
 let i = 0;
-while (true) {
-    if (i >= 5) {
-        break;
-    }
-    print(i);
+while (i < 5) {
+    println(i);
     i = i + 1;
 }
 
-// For loop with continue
-for i in range(10) {
-    if (i % 2 == 0) {
-        continue;  // skip even numbers
-    }
-    print(i);  // 1, 3, 5, 7, 9
+// For loop over a range or list
+for n in range(10) {
+    println(n);  // 0 .. 9
+}
+for item in [10, 20, 30] {
+    println(item);
 }
 ```
 
@@ -205,7 +223,7 @@ class Counter {
 let c = new Counter(0);
 c.increment();
 c.increment();
-print(c.get());  // 2
+println(c.get());  // 2
 ```
 
 ### Static Access (`::`)
@@ -239,32 +257,13 @@ b.get();  // 42 (instance method)
 ### Lists
 ```javascript
 let numbers = [1, 2, 3, 4, 5];
-print(numbers.len());       // 5
-print(numbers.get(0));      // 1
-print(numbers.get(-1));     // 5 (negative indexing)
+println(len(numbers));   // 5
 
-let more = numbers.push(6);  // [1, 2, 3, 4, 5, 6]
-let combined = [1, 2].concat([3, 4]);  // [1, 2, 3, 4]
-```
-
-### Strings
-```javascript
-let greeting = "Hello";
-print(greeting.len());                    // 5
-print(greeting.concat(", World!"));       // "Hello, World!"
-```
-
-### Imports
-```javascript
-// math.ax
-fn add(a, b) { return a + b; }
-let PI = 3;
-```
-```javascript
-// main.ax
-from math import add, PI;
-print(add(10, 20));  // 30
-print(PI);           // 3
+let total = 0;
+for n in numbers {
+    total = total + n;
+}
+println(total);          // 15
 ```
 
 ## Documentation
@@ -274,6 +273,7 @@ See the [docs](docs/index.md) folder for full documentation:
 - [Getting Started](docs/getting-started.md)
 - [Language Reference](docs/language-reference.md)
 - [Examples](docs/examples.md)
+- [VM Memory & GC](docs/vm-memory.md)
 
 ## Example Files
 
@@ -284,28 +284,16 @@ The `examples/` directory contains several example programs:
 | `hello.ax` | Simple hello world |
 | `functions.ax` | Function definitions and usage |
 | `loops.ax` | While and for loop examples |
-| `recursion.ax` | Recursive functions (factorial, fibonacci, etc.) |
-| `lists.ax` | List creation and manipulation |
+| `fibonacci.ax` | Fibonacci-style arithmetic and assignment |
 | `classes.ax` | Object-oriented programming examples |
 | `builtins.ax` | Built-in operators and expressions |
 | `scoping_explained.ax` | Variable scoping demonstration |
-| `math.ax` | Utility module for import examples |
-| `imports.ax` | Importing from another module |
+| `simple_counter.ax` | Variable declaration and assignment |
+| `math.ax` | Utility module (for future import support) |
 
 Run any example with:
 ```bash
 cargo run --release examples/<filename>.ax
-```
-
-## Running Tests
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific test suite
-cargo test --test ast
-cargo test --test parser
 ```
 
 ## Language Overview
@@ -336,20 +324,8 @@ cargo test --test parser
 
 | Function | Description |
 |----------|-------------|
-| `print(value)` | Print a value to stdout |
-| `type(value)` | Get the type of a value as a string |
+| `print(values...)` | Print values to stdout |
+| `println(values...)` | Print values followed by a newline |
 | `range(end)` | Generate list [0, 1, ..., end-1] |
 | `range(start, end)` | Generate list [start, ..., end-1] |
-
-### Methods
-
-**String methods:**
-- `.len()` - Get string length
-- `.concat(other)` - Concatenate strings
-
-**List methods:**
-- `.len()` - Get list length
-- `.get(index)` - Get element at index (supports negative indexing)
-- `.push(value)` - Return new list with value appended
-- `.concat(other)` - Return new list with other list appended
-
+| `len(x)` | Length of a list or string |

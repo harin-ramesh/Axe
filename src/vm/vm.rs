@@ -7,6 +7,36 @@ use super::builtins::builtins;
 use super::bytecode::{Bytecode, Constant};
 use super::instructions::Instruction;
 
+/// Maximum call-frame depth before a clean "stack overflow" error, so
+/// runaway recursion can't exhaust host memory.
+const MAX_CALL_DEPTH: usize = 4096;
+
+/// A runtime error: what went wrong, the source line of the failing
+/// instruction (0 if unknown), and the axe-level call stack (innermost
+/// first) at the moment of the error.
+#[derive(Debug, Clone)]
+pub struct RuntimeError {
+    pub message: String,
+    pub line: u32,
+    pub trace: Vec<String>,
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.line != 0 {
+            write!(f, "runtime error [line {}]: {}", self.line, self.message)?;
+        } else {
+            write!(f, "runtime error: {}", self.message)?;
+        }
+        for entry in &self.trace {
+            write!(f, "\n  in {}", entry)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for RuntimeError {}
+
 /// A heap-allocated object. Owned by the VM's `Heap`, never by a `Value`.
 #[derive(Debug, PartialEq)]
 pub enum Obj {
@@ -82,21 +112,6 @@ impl PartialEq for Value {
 }
 
 impl Value {
-    fn as_int(&self) -> i64 {
-        match self {
-            Value::Int(n) => *n,
-            _ => panic!("Expected Int, got {:?}", self),
-        }
-    }
-
-    #[allow(dead_code)]
-    fn as_float(&self) -> f64 {
-        match self {
-            Value::Float(n) => *n,
-            _ => panic!("Expected Float, got {:?}", self),
-        }
-    }
-
     fn as_bool(&self, heap: &Heap) -> bool {
         match self {
             Value::Bool(b) => *b,
@@ -143,24 +158,56 @@ impl Value {
     }
 }
 
+/// GC kicks in once this many objects are live (and adapts from there).
+const INITIAL_GC_THRESHOLD: usize = 1024;
+
 /// The VM-owned object store. All heap objects live here; `Value`s only
 /// reference them through `ObjRef` handles.
+///
+/// Collection is mark-sweep and non-moving: dead slots become `None` and go
+/// on a free list for reuse, so live `ObjRef` handles are never invalidated.
 pub struct Heap {
-    objects: Vec<Obj>,
+    objects: Vec<Option<Obj>>,
+    /// Indices of dead slots available for reuse.
+    free: Vec<usize>,
+    /// Number of occupied slots.
+    live: usize,
+    /// Collect when `live` reaches this. Doubled from the survivor count
+    /// after each collection so GC cost stays proportional to live data.
+    next_gc: usize,
 }
 
 impl Heap {
     fn new() -> Self {
         Heap {
             objects: Vec::new(),
+            free: Vec::new(),
+            live: 0,
+            next_gc: INITIAL_GC_THRESHOLD,
         }
     }
 
-    /// Allocate an object and return a handle to it.
+    /// Whether enough objects are live that the VM should collect at the
+    /// next safepoint (before its next allocation).
+    fn should_collect(&self) -> bool {
+        self.live >= self.next_gc
+    }
+
+    /// Allocate an object and return a handle to it, reusing a dead slot
+    /// when one is available.
     fn alloc(&mut self, obj: Obj) -> ObjRef {
-        let index = self.objects.len();
-        self.objects.push(obj);
-        ObjRef(index)
+        self.live += 1;
+        match self.free.pop() {
+            Some(index) => {
+                self.objects[index] = Some(obj);
+                ObjRef(index)
+            }
+            None => {
+                let index = self.objects.len();
+                self.objects.push(Some(obj));
+                ObjRef(index)
+            }
+        }
     }
 
     /// Allocate a string object and wrap its handle in a `Value`.
@@ -207,25 +254,92 @@ impl Heap {
     }
 
     /// Length of a list or string value. Public for the `len` native function.
-    pub fn value_len(&self, value: &Value) -> i64 {
+    pub fn value_len(&self, value: &Value) -> Result<i64, String> {
         match value {
             Value::Obj(o) => match self.get(*o) {
-                Obj::List(items) => items.len() as i64,
-                Obj::Str(s) => s.chars().count() as i64,
-                _ => panic!("value has no length: {:?}", value),
+                Obj::List(items) => Ok(items.len() as i64),
+                Obj::Str(s) => Ok(s.chars().count() as i64),
+                _ => Err("value has no length".to_string()),
             },
-            _ => panic!("value has no length: {:?}", value),
+            _ => Err("value has no length".to_string()),
         }
     }
 
     /// Dereference a handle to the object it points at.
     fn get(&self, r: ObjRef) -> &Obj {
-        &self.objects[r.0]
+        self.objects[r.0].as_ref().expect("use after free")
     }
 
     /// Mutably dereference a handle to the object it points at.
     fn get_mut(&mut self, r: ObjRef) -> &mut Obj {
-        &mut self.objects[r.0]
+        self.objects[r.0].as_mut().expect("use after free")
+    }
+
+    /// Mark `r` (if unmarked) and queue it for tracing.
+    fn mark_ref(r: ObjRef, marks: &mut [bool], gray: &mut Vec<ObjRef>) {
+        if !marks[r.0] {
+            marks[r.0] = true;
+            gray.push(r);
+        }
+    }
+
+    /// Mark the object a value references, if any.
+    fn mark_value(v: &Value, marks: &mut [bool], gray: &mut Vec<ObjRef>) {
+        if let Value::Obj(r) = v {
+            Self::mark_ref(*r, marks, gray);
+        }
+    }
+
+    /// Trace every reference held by the (already marked) object `r`.
+    fn trace(&self, r: ObjRef, marks: &mut [bool], gray: &mut Vec<ObjRef>) {
+        match self.get(r) {
+            Obj::Str(_) => {}
+            Obj::Class {
+                methods,
+                statics,
+                superclass,
+                ..
+            } => {
+                for v in methods.values().chain(statics.values()) {
+                    Self::mark_value(v, marks, gray);
+                }
+                if let Some(s) = superclass {
+                    Self::mark_ref(*s, marks, gray);
+                }
+            }
+            Obj::Instance { class, fields } => {
+                Self::mark_ref(*class, marks, gray);
+                for v in fields.values() {
+                    Self::mark_value(v, marks, gray);
+                }
+            }
+            Obj::List(items) => {
+                for v in items {
+                    Self::mark_value(v, marks, gray);
+                }
+            }
+            Obj::Closure { upvalues, .. } => {
+                for uv in upvalues {
+                    Self::mark_ref(*uv, marks, gray);
+                }
+            }
+            // Open upvalues point into the value stack, which is a root
+            // itself; only closed ones own a value to trace.
+            Obj::Upvalue(UpvalueState::Open(_)) => {}
+            Obj::Upvalue(UpvalueState::Closed(v)) => Self::mark_value(v, marks, gray),
+        }
+    }
+
+    /// Free every unmarked object, returning its slot to the free list.
+    fn sweep(&mut self, marks: &[bool]) {
+        for (i, slot) in self.objects.iter_mut().enumerate() {
+            if slot.is_some() && !marks[i] {
+                *slot = None;
+                self.free.push(i);
+                self.live -= 1;
+            }
+        }
+        self.next_gc = (self.live * 2).max(INITIAL_GC_THRESHOLD);
     }
 
     /// Look up a method by name, walking the superclass chain. Returns a clone
@@ -278,6 +392,9 @@ struct Frame {
     bp: usize,
     return_override: Option<Value>,
     closure: usize,
+    /// Bytecode entry of the function this frame is executing, for naming
+    /// the frame in stack traces.
+    entry: usize,
 }
 
 const NO_CLOSURE: usize = usize::MAX;
@@ -291,6 +408,13 @@ pub struct AxeVM<'a> {
     globals: Vec<Value>,
     heap: Heap,
     open_upvalues: Vec<ObjRef>,
+    str_constants: Vec<Option<ObjRef>>,
+    /// When set (env `AXE_GC_STRESS=1`), collect at every safepoint — slow,
+    /// but shakes out objects the collector wrongly considers unreachable.
+    gc_stress: bool,
+    /// Offset of the opcode currently being executed, so errors can be
+    /// attributed to the right instruction (and thus source line).
+    op_ip: usize,
 }
 
 impl<'a> AxeVM<'a> {
@@ -309,7 +433,174 @@ impl<'a> AxeVM<'a> {
             globals,
             heap: Heap::new(),
             open_upvalues: Vec::new(),
+            str_constants: vec![None; bytecode.constants.len()],
+            gc_stress: std::env::var_os("AXE_GC_STRESS").is_some(),
+            op_ip: 0,
         }
+    }
+
+    /// Build a `RuntimeError` at the current instruction, with a stack trace.
+    #[cold]
+    fn rt_err(&self, message: impl Into<String>) -> RuntimeError {
+        let mut full: Vec<String> = self
+            .frames
+            .iter()
+            .rev()
+            .map(|frame| {
+                let name = self.bytecode.fn_name(frame.entry).unwrap_or("<fn>");
+                let call_line = self.bytecode.line_at(frame.ret_ip.saturating_sub(1));
+                if call_line != 0 {
+                    format!("{} (called from line {})", name, call_line)
+                } else {
+                    name.to_string()
+                }
+            })
+            .collect();
+        // Deep traces (e.g. stack overflow) get elided in the middle.
+        let trace = if full.len() > 16 {
+            let omitted = full.len() - 12;
+            let tail = full.split_off(full.len() - 2);
+            full.truncate(10);
+            full.push(format!("... {} frames omitted ...", omitted));
+            full.extend(tail);
+            full
+        } else {
+            full
+        };
+        RuntimeError {
+            message: message.into(),
+            line: self.bytecode.line_at(self.op_ip),
+            trace,
+        }
+    }
+
+    /// Human-readable type of a value, for error messages.
+    fn type_name(&self, v: &Value) -> &'static str {
+        match v {
+            Value::Null => "null",
+            Value::Bool(_) => "bool",
+            Value::Int(_) => "int",
+            Value::Float(_) => "float",
+            Value::Native(..) | Value::Fn { .. } => "function",
+            Value::Obj(r) => match self.heap.get(*r) {
+                Obj::Str(_) => "string",
+                Obj::List(_) => "list",
+                Obj::Class { .. } => "class",
+                Obj::Instance { .. } => "instance",
+                Obj::Closure { .. } => "function",
+                Obj::Upvalue(_) => "upvalue",
+            },
+        }
+    }
+
+    /// Type error for a binary operator applied to unsupported operands.
+    #[cold]
+    fn binop_err(&self, op: &str, a: &Value, b: &Value) -> RuntimeError {
+        self.rt_err(format!(
+            "unsupported operand types for {}: {} and {}",
+            op,
+            self.type_name(a),
+            self.type_name(b)
+        ))
+    }
+
+    /// Pop a value that must be an int (bitwise ops).
+    fn pop_int(&mut self, op: &str) -> Result<i64, RuntimeError> {
+        match self.pop() {
+            Value::Int(n) => Ok(n),
+            v => Err(self.rt_err(format!(
+                "unsupported operand type for {}: {}",
+                op,
+                self.type_name(&v)
+            ))),
+        }
+    }
+
+    /// Guard against runaway recursion before pushing a call frame.
+    fn check_depth(&self) -> Result<(), RuntimeError> {
+        if self.frames.len() >= MAX_CALL_DEPTH {
+            return Err(self.rt_err("stack overflow"));
+        }
+        Ok(())
+    }
+
+    /// Error for property access on something that isn't an instance.
+    #[cold]
+    fn property_target_err(&self, name: Symbol, target: &Value) -> RuntimeError {
+        self.rt_err(format!(
+            "cannot access property '{}' on {}",
+            self.bytecode.sym_name(name),
+            self.type_name(target)
+        ))
+    }
+
+    /// Error for a method call on something that isn't an instance.
+    #[cold]
+    fn method_target_err(&self, name: Symbol, target: &Value) -> RuntimeError {
+        self.rt_err(format!(
+            "cannot call method '{}' on {}",
+            self.bytecode.sym_name(name),
+            self.type_name(target)
+        ))
+    }
+
+    /// Verify a call's argument count matches the callee's arity.
+    fn arity_check(&self, entry: usize, arity: usize, argc: usize) -> Result<(), RuntimeError> {
+        if arity != argc {
+            let name = self.bytecode.fn_name(entry).unwrap_or("<fn>");
+            return Err(self.rt_err(format!(
+                "{} expects {} argument{} but got {}",
+                name,
+                arity,
+                if arity == 1 { "" } else { "s" },
+                argc
+            )));
+        }
+        Ok(())
+    }
+
+    /// GC safepoint: collect if the heap has grown past its threshold. Called
+    /// right before allocating opcodes touch the heap, while every live value
+    /// is still reachable from a root.
+    fn maybe_gc(&mut self) {
+        if self.heap.should_collect() || self.gc_stress {
+            self.collect_garbage();
+        }
+    }
+
+    /// Mark-sweep collection. Roots: the value stack, globals, call frames
+    /// (their closures and pending `return_override`s), open upvalues, and
+    /// the interned string constants (pinned for the life of the VM).
+    fn collect_garbage(&mut self) {
+        let mut marks = vec![false; self.heap.objects.len()];
+        let mut gray: Vec<ObjRef> = Vec::new();
+
+        for v in &self.stack {
+            Heap::mark_value(v, &mut marks, &mut gray);
+        }
+        for v in &self.globals {
+            Heap::mark_value(v, &mut marks, &mut gray);
+        }
+        for frame in &self.frames {
+            if frame.closure != NO_CLOSURE {
+                Heap::mark_ref(ObjRef(frame.closure), &mut marks, &mut gray);
+            }
+            if let Some(v) = &frame.return_override {
+                Heap::mark_value(v, &mut marks, &mut gray);
+            }
+        }
+        for &uv in &self.open_upvalues {
+            Heap::mark_ref(uv, &mut marks, &mut gray);
+        }
+        for handle in self.str_constants.iter().flatten() {
+            Heap::mark_ref(*handle, &mut marks, &mut gray);
+        }
+
+        while let Some(r) = gray.pop() {
+            self.heap.trace(r, &mut marks, &mut gray);
+        }
+
+        self.heap.sweep(&marks);
     }
 
     fn capture_upvalue(&mut self, idx: usize) -> ObjRef {
@@ -362,14 +653,16 @@ impl<'a> AxeVM<'a> {
         value.display(&self.heap)
     }
 
-    pub fn exec(&mut self) -> Option<Value> {
+    /// Execute the bytecode from the top. On error, the VM state is reset on
+    /// the next `exec` call, so a REPL can keep using the same VM.
+    pub fn exec(&mut self) -> Result<Option<Value>, RuntimeError> {
         self.ip = 0;
         self.bp = 0;
         self.stack.clear();
         self.frames.clear();
         self.open_upvalues.clear();
-        self.eval();
-        self.stack.pop()
+        self.eval()?;
+        Ok(self.stack.pop())
     }
 
     fn push(&mut self, value: Value) {
@@ -392,11 +685,27 @@ impl<'a> AxeVM<'a> {
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_u8() as usize;
-        match self.bytecode.constants[index].clone() {
-            Constant::Int(n) => Value::Int(n),
-            Constant::Float(n) => Value::Float(n),
-            Constant::Fn { entry, arity } => Value::Fn { entry, arity },
-            Constant::Str(s) => self.heap.alloc_str(s),
+        // Copy the shared bytecode reference so the match borrow isn't tied to
+        // `&self`, leaving `self.heap` / `self.str_constants` free to mutate.
+        let bytecode = self.bytecode;
+        match &bytecode.constants[index] {
+            Constant::Int(n) => Value::Int(*n),
+            Constant::Float(n) => Value::Float(*n),
+            Constant::Fn { entry, arity } => Value::Fn {
+                entry: *entry,
+                arity: *arity,
+            },
+            Constant::Str(s) => match self.str_constants[index] {
+                // Immutable string constant already on the heap — reuse its handle.
+                Some(handle) => Value::Obj(handle),
+                None => {
+                    let value = self.heap.alloc_str(s.clone());
+                    if let Value::Obj(handle) = value {
+                        self.str_constants[index] = Some(handle);
+                    }
+                    value
+                }
+            },
             Constant::Sym(_) => panic!("symbol constant cannot be loaded as a value"),
         }
     }
@@ -418,8 +727,9 @@ impl<'a> AxeVM<'a> {
         u16::from_le_bytes([lo, hi])
     }
 
-    fn eval(&mut self) {
+    fn eval(&mut self) -> Result<(), RuntimeError> {
         loop {
+            self.op_ip = self.ip;
             let opcode = self.read_u8();
             match opcode {
                 Instruction::HALT => break,
@@ -467,16 +777,22 @@ impl<'a> AxeVM<'a> {
                     let b = self.pop();
                     let a = self.pop();
                     let result = match (&a, &b) {
-                        (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
+                        (Value::Int(a), Value::Int(b)) => Value::Int(
+                            a.checked_add(*b)
+                                .ok_or_else(|| self.rt_err("integer overflow in +"))?,
+                        ),
                         (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
                         (Value::Obj(ao), Value::Obj(bo)) => {
                             let s = match (self.heap.get(*ao), self.heap.get(*bo)) {
                                 (Obj::Str(a), Obj::Str(b)) => format!("{}{}", a, b),
-                                _ => panic!("type error: + on non-string objects"),
+                                _ => return Err(self.binop_err("+", &a, &b)),
                             };
+                            // Safepoint: operands are already folded into `s`,
+                            // so nothing this alloc needs can be collected.
+                            self.maybe_gc();
                             self.heap.alloc_str(s)
                         }
-                        _ => panic!("type error: {:?} + {:?}", a, b),
+                        _ => return Err(self.binop_err("+", &a, &b)),
                     };
                     self.push(result);
                 }
@@ -485,9 +801,12 @@ impl<'a> AxeVM<'a> {
                     let b = self.pop();
                     let a = self.pop();
                     let result = match (&a, &b) {
-                        (Value::Int(a), Value::Int(b)) => Value::Int(a - b),
+                        (Value::Int(a), Value::Int(b)) => Value::Int(
+                            a.checked_sub(*b)
+                                .ok_or_else(|| self.rt_err("integer overflow in -"))?,
+                        ),
                         (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
-                        _ => panic!("type error: {:?} - {:?}", a, b),
+                        _ => return Err(self.binop_err("-", &a, &b)),
                     };
                     self.push(result);
                 }
@@ -496,9 +815,12 @@ impl<'a> AxeVM<'a> {
                     let b = self.pop();
                     let a = self.pop();
                     let result = match (&a, &b) {
-                        (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
+                        (Value::Int(a), Value::Int(b)) => Value::Int(
+                            a.checked_mul(*b)
+                                .ok_or_else(|| self.rt_err("integer overflow in *"))?,
+                        ),
                         (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
-                        _ => panic!("type error: {:?} * {:?}", a, b),
+                        _ => return Err(self.binop_err("*", &a, &b)),
                     };
                     self.push(result);
                 }
@@ -507,9 +829,17 @@ impl<'a> AxeVM<'a> {
                     let b = self.pop();
                     let a = self.pop();
                     let result = match (&a, &b) {
-                        (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
+                        (Value::Int(a), Value::Int(b)) => {
+                            Value::Int(a.checked_div(*b).ok_or_else(|| {
+                                if *b == 0 {
+                                    self.rt_err("division by zero")
+                                } else {
+                                    self.rt_err("integer overflow in /")
+                                }
+                            })?)
+                        }
                         (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
-                        _ => panic!("type error: {:?} / {:?}", a, b),
+                        _ => return Err(self.binop_err("/", &a, &b)),
                     };
                     self.push(result);
                 }
@@ -518,9 +848,17 @@ impl<'a> AxeVM<'a> {
                     let b = self.pop();
                     let a = self.pop();
                     let result = match (&a, &b) {
-                        (Value::Int(a), Value::Int(b)) => Value::Int(a % b),
+                        (Value::Int(a), Value::Int(b)) => {
+                            Value::Int(a.checked_rem(*b).ok_or_else(|| {
+                                if *b == 0 {
+                                    self.rt_err("division by zero in %")
+                                } else {
+                                    self.rt_err("integer overflow in %")
+                                }
+                            })?)
+                        }
                         (Value::Float(a), Value::Float(b)) => Value::Float(a % b),
-                        _ => panic!("type error: {:?} % {:?}", a, b),
+                        _ => return Err(self.binop_err("%", &a, &b)),
                     };
                     self.push(result);
                 }
@@ -528,9 +866,17 @@ impl<'a> AxeVM<'a> {
                 Instruction::NEG => {
                     let a = self.pop();
                     let result = match a {
-                        Value::Int(n) => Value::Int(-n),
+                        Value::Int(n) => Value::Int(
+                            n.checked_neg()
+                                .ok_or_else(|| self.rt_err("integer overflow in negation"))?,
+                        ),
                         Value::Float(n) => Value::Float(-n),
-                        _ => panic!("type error: -{:?}", a),
+                        _ => {
+                            return Err(self.rt_err(format!(
+                                "unsupported operand type for unary -: {}",
+                                self.type_name(&a)
+                            )));
+                        }
                     };
                     self.push(result);
                 }
@@ -554,7 +900,7 @@ impl<'a> AxeVM<'a> {
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => a < b,
                         (Value::Float(a), Value::Float(b)) => a < b,
-                        _ => panic!("type error: {:?} < {:?}", a, b),
+                        _ => return Err(self.binop_err("<", &a, &b)),
                     };
                     self.push(Value::Bool(result));
                 }
@@ -565,7 +911,7 @@ impl<'a> AxeVM<'a> {
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => a <= b,
                         (Value::Float(a), Value::Float(b)) => a <= b,
-                        _ => panic!("type error: {:?} <= {:?}", a, b),
+                        _ => return Err(self.binop_err("<=", &a, &b)),
                     };
                     self.push(Value::Bool(result));
                 }
@@ -576,7 +922,7 @@ impl<'a> AxeVM<'a> {
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => a > b,
                         (Value::Float(a), Value::Float(b)) => a > b,
-                        _ => panic!("type error: {:?} > {:?}", a, b),
+                        _ => return Err(self.binop_err(">", &a, &b)),
                     };
                     self.push(Value::Bool(result));
                 }
@@ -587,7 +933,7 @@ impl<'a> AxeVM<'a> {
                     let result = match (&a, &b) {
                         (Value::Int(a), Value::Int(b)) => a >= b,
                         (Value::Float(a), Value::Float(b)) => a >= b,
-                        _ => panic!("type error: {:?} >= {:?}", a, b),
+                        _ => return Err(self.binop_err(">=", &a, &b)),
                     };
                     self.push(Value::Bool(result));
                 }
@@ -615,19 +961,19 @@ impl<'a> AxeVM<'a> {
 
                 // Bitwise
                 Instruction::BITAND => {
-                    let b = self.pop().as_int();
-                    let a = self.pop().as_int();
+                    let b = self.pop_int("&")?;
+                    let a = self.pop_int("&")?;
                     self.push(Value::Int(a & b));
                 }
 
                 Instruction::BITOR => {
-                    let b = self.pop().as_int();
-                    let a = self.pop().as_int();
+                    let b = self.pop_int("|")?;
+                    let a = self.pop_int("|")?;
                     self.push(Value::Int(a | b));
                 }
 
                 Instruction::BITINV => {
-                    let a = self.pop().as_int();
+                    let a = self.pop_int("~")?;
                     self.push(Value::Int(!a));
                 }
 
@@ -671,19 +1017,24 @@ impl<'a> AxeVM<'a> {
                     let callee_idx = self.stack.len() - argc - 1;
                     let callee = self.stack[callee_idx].clone();
                     match callee {
-                        Value::Native(_, func) => {
+                        Value::Native(name, func) => {
                             let args: Vec<Value> = self.stack[callee_idx + 1..].to_vec();
-                            let result = func(&args, &mut self.heap);
+                            let result = match func(&args, &mut self.heap) {
+                                Ok(v) => v,
+                                Err(m) => return Err(self.rt_err(format!("{}: {}", name, m))),
+                            };
                             self.stack.truncate(callee_idx);
                             self.push(result);
                         }
                         Value::Fn { entry, arity } => {
-                            assert_eq!(argc, arity as usize, "wrong arg count");
+                            self.arity_check(entry, arity as usize, argc)?;
+                            self.check_depth()?;
                             self.frames.push(Frame {
                                 ret_ip: self.ip,
                                 bp: self.bp,
                                 return_override: None,
                                 closure: NO_CLOSURE,
+                                entry,
                             });
                             self.bp = callee_idx + 1;
                             self.ip = entry;
@@ -691,19 +1042,30 @@ impl<'a> AxeVM<'a> {
                         Value::Obj(closure_ref) => {
                             let (entry, arity) = match self.heap.get(closure_ref) {
                                 Obj::Closure { entry, arity, .. } => (*entry, *arity),
-                                other => panic!("not callable: {:?}", other),
+                                _ => {
+                                    return Err(self.rt_err(format!(
+                                        "{} is not callable",
+                                        self.type_name(&callee)
+                                    )));
+                                }
                             };
-                            assert_eq!(argc, arity as usize, "wrong arg count");
+                            self.arity_check(entry, arity as usize, argc)?;
+                            self.check_depth()?;
                             self.frames.push(Frame {
                                 ret_ip: self.ip,
                                 bp: self.bp,
                                 return_override: None,
                                 closure: closure_ref.0,
+                                entry,
                             });
                             self.bp = callee_idx + 1;
                             self.ip = entry;
                         }
-                        other => panic!("not callable: {:?}", other),
+                        other => {
+                            return Err(
+                                self.rt_err(format!("{} is not callable", self.type_name(&other)))
+                            );
+                        }
                     }
                 }
                 Instruction::RETURN => {
@@ -723,6 +1085,7 @@ impl<'a> AxeVM<'a> {
 
                 Instruction::CLASS => {
                     let name = self.read_sym();
+                    self.maybe_gc();
                     let class = self.heap.alloc_class(name);
                     self.push(class);
                 }
@@ -730,13 +1093,20 @@ impl<'a> AxeVM<'a> {
                 Instruction::INHERIT => {
                     let superclass = self.pop();
                     let class = self.peek().clone();
-                    let (Value::Obj(class_ref), Value::Obj(super_ref)) = (class, superclass) else {
-                        panic!("can only inherit between classes");
+                    let (Value::Obj(class_ref), Value::Obj(super_ref)) =
+                        (class, superclass.clone())
+                    else {
+                        return Err(self.rt_err(format!(
+                            "can only inherit from a class, got {}",
+                            self.type_name(&superclass)
+                        )));
                     };
-                    assert!(
-                        matches!(self.heap.get(super_ref), Obj::Class { .. }),
-                        "superclass is not a class"
-                    );
+                    if !matches!(self.heap.get(super_ref), Obj::Class { .. }) {
+                        return Err(self.rt_err(format!(
+                            "can only inherit from a class, got {}",
+                            self.type_name(&superclass)
+                        )));
+                    }
                     if let Obj::Class { superclass, .. } = self.heap.get_mut(class_ref) {
                         *superclass = Some(super_ref);
                     } else {
@@ -772,44 +1142,63 @@ impl<'a> AxeVM<'a> {
 
                 Instruction::GET_PROPERTY => {
                     let name = self.read_sym();
-                    let Value::Obj(obj_ref) = self.pop() else {
-                        panic!("cannot access property on non-object");
+                    let target = self.pop();
+                    let obj_ref = match target {
+                        Value::Obj(r) => r,
+                        _ => return Err(self.property_target_err(name, &target)),
                     };
                     let (field, class) = match self.heap.get(obj_ref) {
                         Obj::Instance { fields, class } => (fields.get(&name).cloned(), *class),
-                        _ => panic!("cannot access property on non-instance"),
+                        _ => return Err(self.property_target_err(name, &target)),
                     };
                     let value = field
                         .or_else(|| self.heap.find_method(class, name))
                         .or_else(|| self.heap.find_static(class, name))
-                        .unwrap_or_else(|| panic!("property not found"));
+                        .ok_or_else(|| {
+                            self.rt_err(format!(
+                                "undefined property '{}'",
+                                self.bytecode.sym_name(name)
+                            ))
+                        })?;
                     self.push(value);
                 }
 
                 Instruction::SET_PROPERTY => {
                     let name = self.read_sym();
                     let value = self.pop();
-                    let Value::Obj(obj_ref) = self.pop() else {
-                        panic!("cannot set property on non-object");
+                    let target = self.pop();
+                    let obj_ref = match target {
+                        Value::Obj(r) => r,
+                        _ => return Err(self.property_target_err(name, &target)),
                     };
                     if let Obj::Instance { fields, .. } = self.heap.get_mut(obj_ref) {
                         fields.insert(name, value.clone());
                     } else {
-                        panic!("cannot set property on non-instance");
+                        return Err(self.property_target_err(name, &target));
                     }
                     self.push(value);
                 }
 
                 Instruction::GET_STATIC => {
                     let name = self.read_sym();
-                    let Value::Obj(class_ref) = self.pop() else {
-                        panic!("cannot access static member on non-class");
+                    let target = self.pop();
+                    let Value::Obj(class_ref) = target else {
+                        return Err(self.rt_err(format!(
+                            "cannot access static member '{}' on {}",
+                            self.bytecode.sym_name(name),
+                            self.type_name(&target)
+                        )));
                     };
                     let value = self
                         .heap
                         .find_static(class_ref, name)
                         .or_else(|| self.heap.find_method(class_ref, name))
-                        .unwrap_or_else(|| panic!("static member not found"));
+                        .ok_or_else(|| {
+                            self.rt_err(format!(
+                                "undefined static member '{}'",
+                                self.bytecode.sym_name(name)
+                            ))
+                        })?;
                     self.push(value);
                 }
 
@@ -817,19 +1206,34 @@ impl<'a> AxeVM<'a> {
                     let init_name = self.read_sym();
                     let argc = self.read_u8() as usize;
                     let class_idx = self.stack.len() - argc - 1;
-                    let Value::Obj(class_ref) = self.stack[class_idx] else {
-                        panic!("can only 'new' a class");
+                    let class_val = self.stack[class_idx].clone();
+                    let Value::Obj(class_ref) = class_val else {
+                        return Err(self.rt_err(format!(
+                            "can only 'new' a class, got {}",
+                            self.type_name(&class_val)
+                        )));
                     };
-                    assert!(
-                        matches!(self.heap.get(class_ref), Obj::Class { .. }),
-                        "can only 'new' a class"
-                    );
+                    if !matches!(self.heap.get(class_ref), Obj::Class { .. }) {
+                        return Err(self.rt_err(format!(
+                            "can only 'new' a class, got {}",
+                            self.type_name(&class_val)
+                        )));
+                    }
+                    // Safepoint: class and args are still rooted on the stack.
+                    self.maybe_gc();
                     let instance = self.heap.alloc_instance(class_ref);
 
                     match self.heap.find_method(class_ref, init_name) {
                         Some(Value::Fn { entry, arity }) => {
                             // init receives (self, args...): arity counts self.
-                            assert_eq!(arity as usize, argc + 1, "wrong arg count to init");
+                            if arity as usize != argc + 1 {
+                                return Err(self.rt_err(format!(
+                                    "init expects {} argument(s) but got {}",
+                                    arity - 1,
+                                    argc
+                                )));
+                            }
+                            self.check_depth()?;
                             // Reshape [class, args..] into [init_fn, self, args..] so
                             // the call reuses the standard frame layout, and stash the
                             // instance so RETURN yields it instead of init's result.
@@ -840,6 +1244,7 @@ impl<'a> AxeVM<'a> {
                                 bp: self.bp,
                                 return_override: Some(instance),
                                 closure: NO_CLOSURE,
+                                entry,
                             });
                             self.bp = class_idx + 1;
                             self.ip = entry;
@@ -849,7 +1254,9 @@ impl<'a> AxeVM<'a> {
                             self.stack.truncate(class_idx);
                             self.push(instance);
                         }
-                        Some(other) => panic!("init is not a function: {:?}", other),
+                        Some(_) => {
+                            return Err(self.rt_err("init is not a function"));
+                        }
                     }
                 }
 
@@ -857,17 +1264,26 @@ impl<'a> AxeVM<'a> {
                     let name = self.read_sym();
                     let argc = self.read_u8() as usize;
                     let recv_idx = self.stack.len() - argc - 1;
-                    let Value::Obj(obj_ref) = self.stack[recv_idx] else {
-                        panic!("cannot call method on non-object");
+                    let recv = self.stack[recv_idx].clone();
+                    let Value::Obj(obj_ref) = recv else {
+                        return Err(self.method_target_err(name, &recv));
                     };
                     let class = match self.heap.get(obj_ref) {
                         Obj::Instance { class, .. } => *class,
-                        _ => panic!("cannot call method on this type"),
+                        _ => return Err(self.method_target_err(name, &recv)),
                     };
                     match self.heap.find_method(class, name) {
                         Some(Value::Fn { entry, arity }) => {
                             // method receives (self, args...): arity counts self.
-                            assert_eq!(arity as usize, argc + 1, "wrong arg count to method");
+                            if arity as usize != argc + 1 {
+                                return Err(self.rt_err(format!(
+                                    "{} expects {} argument(s) but got {}",
+                                    self.bytecode.sym_name(name),
+                                    arity - 1,
+                                    argc
+                                )));
+                            }
+                            self.check_depth()?;
                             // Insert the callee below the receiver so the receiver
                             // becomes slot 0 (self) of the new frame.
                             self.stack.insert(recv_idx, Value::Fn { entry, arity });
@@ -876,11 +1292,17 @@ impl<'a> AxeVM<'a> {
                                 bp: self.bp,
                                 return_override: None,
                                 closure: NO_CLOSURE,
+                                entry,
                             });
                             self.bp = recv_idx + 1;
                             self.ip = entry;
                         }
-                        _ => panic!("method not found"),
+                        _ => {
+                            return Err(self.rt_err(format!(
+                                "undefined method '{}'",
+                                self.bytecode.sym_name(name)
+                            )));
+                        }
                     }
                 }
 
@@ -888,8 +1310,13 @@ impl<'a> AxeVM<'a> {
                     let name = self.read_sym();
                     let argc = self.read_u8() as usize;
                     let class_idx = self.stack.len() - argc - 1;
-                    let Value::Obj(class_ref) = self.stack[class_idx] else {
-                        panic!("cannot call static method on non-class");
+                    let class_val = self.stack[class_idx].clone();
+                    let Value::Obj(class_ref) = class_val else {
+                        return Err(self.rt_err(format!(
+                            "cannot call static method '{}' on {}",
+                            self.bytecode.sym_name(name),
+                            self.type_name(&class_val)
+                        )));
                     };
                     let method = self
                         .heap
@@ -897,7 +1324,15 @@ impl<'a> AxeVM<'a> {
                         .or_else(|| self.heap.find_static(class_ref, name));
                     match method {
                         Some(Value::Fn { entry, arity }) => {
-                            assert_eq!(arity as usize, argc, "wrong arg count to static method");
+                            if arity as usize != argc {
+                                return Err(self.rt_err(format!(
+                                    "{} expects {} argument(s) but got {}",
+                                    self.bytecode.sym_name(name),
+                                    arity,
+                                    argc
+                                )));
+                            }
+                            self.check_depth()?;
                             // Replace the class with the callee; args are slots 0..
                             self.stack[class_idx] = Value::Fn { entry, arity };
                             self.frames.push(Frame {
@@ -905,16 +1340,24 @@ impl<'a> AxeVM<'a> {
                                 bp: self.bp,
                                 return_override: None,
                                 closure: NO_CLOSURE,
+                                entry,
                             });
                             self.bp = class_idx + 1;
                             self.ip = entry;
                         }
-                        _ => panic!("static method not found"),
+                        _ => {
+                            return Err(self.rt_err(format!(
+                                "undefined static method '{}'",
+                                self.bytecode.sym_name(name)
+                            )));
+                        }
                     }
                 }
 
                 Instruction::BUILD_LIST => {
                     let count = self.read_u8() as usize;
+                    // Safepoint: the elements are still rooted on the stack.
+                    self.maybe_gc();
                     let start = self.stack.len() - count;
                     let items: Vec<Value> = self.stack.split_off(start);
                     let list = self.heap.alloc_list(items);
@@ -926,32 +1369,55 @@ impl<'a> AxeVM<'a> {
                     let list = self.pop();
                     let idx = match index {
                         Value::Int(n) => n,
-                        other => panic!("list index must be an integer, got {:?}", other),
-                    };
-                    let Value::Obj(obj_ref) = list else {
-                        panic!("cannot index non-list");
-                    };
-                    let element = match self.heap.get(obj_ref) {
-                        Obj::List(items) => {
-                            let len = items.len() as i64;
-                            let resolved = if idx < 0 { idx + len } else { idx };
-                            if resolved < 0 || resolved >= len {
-                                panic!("list index out of bounds: {}", idx);
-                            }
-                            items[resolved as usize].clone()
+                        other => {
+                            return Err(self.rt_err(format!(
+                                "list index must be an int, got {}",
+                                self.type_name(&other)
+                            )));
                         }
-                        _ => panic!("cannot index non-list"),
+                    };
+                    let element = match &list {
+                        Value::Obj(obj_ref) => match self.heap.get(*obj_ref) {
+                            Obj::List(items) => {
+                                let len = items.len() as i64;
+                                let resolved = if idx < 0 { idx + len } else { idx };
+                                if resolved < 0 || resolved >= len {
+                                    return Err(self.rt_err(format!(
+                                        "list index {} out of bounds (length {})",
+                                        idx, len
+                                    )));
+                                }
+                                items[resolved as usize].clone()
+                            }
+                            _ => {
+                                return Err(
+                                    self.rt_err(format!("cannot index {}", self.type_name(&list)))
+                                );
+                            }
+                        },
+                        _ => {
+                            return Err(
+                                self.rt_err(format!("cannot index {}", self.type_name(&list)))
+                            );
+                        }
                     };
                     self.push(element);
                 }
 
                 Instruction::LEN => {
                     let value = self.pop();
-                    let len = self.heap.value_len(&value);
+                    let len = match self.heap.value_len(&value) {
+                        Ok(n) => n,
+                        Err(m) => return Err(self.rt_err(m)),
+                    };
                     self.push(Value::Int(len));
                 }
 
                 Instruction::CLOSURE => {
+                    // Safepoint up front: the upvalues captured below stay
+                    // reachable via `open_upvalues` / the enclosing closure,
+                    // and no further collection can occur mid-handler.
+                    self.maybe_gc();
                     let (entry, arity) = match self.read_constant() {
                         Value::Fn { entry, arity } => (entry, arity),
                         other => panic!("CLOSURE expects a function constant, got {:?}", other),
@@ -1022,6 +1488,7 @@ impl<'a> AxeVM<'a> {
                 _ => panic!("Unknown opcode: 0x{:02x}", opcode),
             }
         }
+        Ok(())
     }
 }
 
@@ -1037,7 +1504,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert!(result.is_none());
     }
 
@@ -1049,7 +1516,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(42)));
     }
 
@@ -1061,7 +1528,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Null));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Null));
 
         // Test TRUE
         let mut b = BytecodeBuilder::new();
@@ -1069,7 +1536,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
 
         // Test FALSE
         let mut b = BytecodeBuilder::new();
@@ -1077,7 +1544,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(false)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(false)));
     }
 
     #[test]
@@ -1090,7 +1557,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(30)));
     }
 
@@ -1104,7 +1571,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Float(31.0)));
     }
 
@@ -1118,7 +1585,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(
             result.map(|v| vm.display_value(&v)),
             Some("Hello, World!".to_string())
@@ -1135,7 +1602,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(30)));
     }
 
@@ -1149,7 +1616,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(42)));
     }
 
@@ -1163,7 +1630,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(25)));
     }
 
@@ -1177,7 +1644,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(2)));
     }
 
@@ -1190,7 +1657,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(-42)));
     }
 
@@ -1204,7 +1671,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
 
         // Test NEQ
         let mut b = BytecodeBuilder::new();
@@ -1214,7 +1681,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
 
         // Test LT
         let mut b = BytecodeBuilder::new();
@@ -1224,7 +1691,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
 
         // Test GT
         let mut b = BytecodeBuilder::new();
@@ -1234,7 +1701,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
     }
 
     #[test]
@@ -1246,7 +1713,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(false)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(false)));
 
         // Test AND
         let mut b = BytecodeBuilder::new();
@@ -1256,7 +1723,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
 
         // Test OR
         let mut b = BytecodeBuilder::new();
@@ -1266,7 +1733,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Bool(true)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Bool(true)));
     }
 
     #[test]
@@ -1279,7 +1746,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Int(0b1000)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Int(0b1000)));
 
         // Test BITOR
         let mut b = BytecodeBuilder::new();
@@ -1289,7 +1756,7 @@ mod tests {
         b.emit(Instruction::HALT);
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        assert_eq!(vm.exec(), Some(Value::Int(0b1110)));
+        assert_eq!(vm.exec().unwrap(), Some(Value::Int(0b1110)));
     }
 
     #[test]
@@ -1302,7 +1769,7 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(25))); // 5 * 5
     }
 
@@ -1321,8 +1788,91 @@ mod tests {
 
         let bc = b.build();
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(55)));
+    }
+
+    #[test]
+    fn test_gc_collects_unreachable() {
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
+
+        // One list rooted on the stack, three unreachable ones.
+        let kept = vm.heap.alloc_list(vec![Value::Int(1)]);
+        vm.stack.push(kept.clone());
+        for _ in 0..3 {
+            vm.heap.alloc_list(vec![Value::Int(0)]);
+        }
+        assert_eq!(vm.heap.live, 4);
+
+        vm.collect_garbage();
+        assert_eq!(vm.heap.live, 1);
+        // The survivor is still intact behind its handle.
+        assert_eq!(vm.heap.value_len(&kept).unwrap(), 1);
+    }
+
+    #[test]
+    fn test_gc_traces_object_graph() {
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
+
+        // outer -> inner: only outer is rooted, but inner must survive too.
+        let inner = vm.heap.alloc_str("hi");
+        let outer = vm.heap.alloc_list(vec![inner.clone()]);
+        vm.stack.push(outer);
+        vm.heap.alloc_str("garbage");
+        assert_eq!(vm.heap.live, 3);
+
+        vm.collect_garbage();
+        assert_eq!(vm.heap.live, 2);
+        assert_eq!(vm.display_value(&inner), "hi");
+    }
+
+    #[test]
+    fn test_gc_reuses_freed_slots() {
+        let mut b = BytecodeBuilder::new();
+        b.emit(Instruction::HALT);
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
+
+        let Value::Obj(dead) = vm.heap.alloc_str("dead") else {
+            unreachable!()
+        };
+        vm.collect_garbage();
+        assert_eq!(vm.heap.live, 0);
+
+        // The next allocation should reuse the freed slot, not grow the heap.
+        let Value::Obj(reused) = vm.heap.alloc_str("new") else {
+            unreachable!()
+        };
+        assert_eq!(reused, dead);
+        assert_eq!(vm.heap.objects.len(), 1);
+    }
+
+    #[test]
+    fn test_gc_stress_string_concat() {
+        // With stress mode on, ADD collects before every string allocation;
+        // the interned constants and the result must all survive.
+        let mut b = BytecodeBuilder::new();
+        b.emit_constant(Constant::Str("Hello, ".into()));
+        b.emit_constant(Constant::Str("World".into()));
+        b.emit(Instruction::ADD);
+        b.emit_constant(Constant::Str("!".into()));
+        b.emit(Instruction::ADD);
+        b.emit(Instruction::HALT);
+
+        let bc = b.build();
+        let mut vm = AxeVM::new(&bc);
+        vm.gc_stress = true;
+        let result = vm.exec().unwrap();
+        assert_eq!(
+            result.map(|v| vm.display_value(&v)),
+            Some("Hello, World!".to_string())
+        );
     }
 
     #[test]
@@ -1339,7 +1889,7 @@ mod tests {
         assert_eq!(bc.constants.len(), 1);
 
         let mut vm = AxeVM::new(&bc);
-        let result = vm.exec();
+        let result = vm.exec().unwrap();
         assert_eq!(result, Some(Value::Int(84)));
     }
 }
