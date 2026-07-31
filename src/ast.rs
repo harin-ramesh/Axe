@@ -34,9 +34,13 @@ impl Default for ExprId {
 }
 
 /// A complete Axe program consisting of a list of statements.
+///
+/// Stored as `Box<[Stmt]>` rather than `Vec<Stmt>`: once parsing finishes
+/// the statement list never grows, so we drop the `Vec`'s capacity field
+/// and any spare buffer space, and the type documents that immutability.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Program {
-    pub stmts: Vec<Stmt>,
+    pub stmts: Box<[Stmt]>,
 }
 
 /// Literal values that can appear directly in source code.
