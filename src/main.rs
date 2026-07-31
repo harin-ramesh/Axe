@@ -1,4 +1,4 @@
-use axe::{AxeVM, Compiler, Context, Parser, Program, VMValue, disassemble};
+use axe::{AxeVM, Compiler, Context, Parser, VMValue, disassemble};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter};
@@ -20,9 +20,6 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            // Historical flag from when a tree-walker backend existed; the VM
-            // is the only backend now, so this is accepted and ignored.
-            "--vm" => {}
             "--disassemble" | "--dis" => disassemble = true,
             "--help" | "-h" => {
                 print_usage();
@@ -127,19 +124,16 @@ fn run_file(filename: &str) {
         }
     };
 
-    run_with_vm(&ctx, program);
-}
-
-fn run_with_vm(ctx: &Context, program: Program) {
-    let compiler = Compiler::new(ctx);
-    let chunk = match compiler.compile(&program) {
-        Ok(chunk) => chunk,
+    let compiler = Compiler::new(&ctx);
+    let bytecode = match compiler.compile(&program) {
+        Ok(bytecode) => bytecode,
         Err(e) => {
             eprintln!("compile error: {}", e);
             process::exit(65);
         }
     };
-    let mut vm = AxeVM::new(&chunk);
+
+    let mut vm = AxeVM::new(&bytecode);
     match vm.exec() {
         Ok(Some(result)) => {
             // Null is the unit result of statements; don't print it.
@@ -170,19 +164,15 @@ impl AxeHelper {
                 "help".to_string(),
                 "clear".to_string(),
             ],
-            keywords: vec![
-                "let".to_string(),
-                "fn".to_string(),
-                "if".to_string(),
-                "else".to_string(),
-                "while".to_string(),
-                "for".to_string(),
-                "return".to_string(),
-                "true".to_string(),
-                "false".to_string(),
-                "null".to_string(),
-                "print".to_string(),
-            ],
+            // Keep in sync with the tokeniser's keyword tokens, plus the
+            // built-in function names (used for completion + highlighting).
+            keywords: [
+                "let", "fn", "class", "new", "if", "else", "while", "for", "in", "return", "break",
+                "continue", "from", "import", "true", "false", "null", "print", "println", "range",
+                "len",
+            ]
+            .map(String::from)
+            .to_vec(),
         }
     }
 }
@@ -396,8 +386,8 @@ fn run_repl() {
                             // REPL keeps the final expression's value so it
                             // can be echoed back.
                             match compiler.compile_repl(&program) {
-                                Ok(chunk) => {
-                                    let mut vm = AxeVM::new(&chunk);
+                                Ok(bytecode) => {
+                                    let mut vm = AxeVM::new(&bytecode);
                                     match vm.exec() {
                                         Ok(Some(result)) => {
                                             if !matches!(result, VMValue::Null) {

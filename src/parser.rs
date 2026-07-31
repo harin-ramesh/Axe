@@ -86,7 +86,11 @@ impl<'src, 'ctx> Parser<'src, 'ctx> {
 
     fn parse_program(&mut self) -> Result<Program, ParseError> {
         let stmts = self.parse_statements(TokenKind::Eof)?;
-        Ok(Program { stmts })
+        // The parser builds in a Vec (needs to grow); the finished program is
+        // frozen into a boxed slice — same heap buffer, trimmed to length.
+        Ok(Program {
+            stmts: stmts.into_boxed_slice(),
+        })
     }
 
     // StatementList
