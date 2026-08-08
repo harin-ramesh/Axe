@@ -6,8 +6,6 @@ use super::bytecode::{Bytecode, BytecodeBuilder, Constant};
 use super::instructions::Instruction;
 use super::tables::GlobalTable;
 
-/// A compile-time error: what went wrong and the source line it points at
-/// (0 if unknown).
 #[derive(Debug, Clone)]
 pub struct CompileError {
     pub message: String,
@@ -26,28 +24,19 @@ impl std::fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
-/// A local variable in a function scope. Its stack slot equals its index in the
-/// scope's `locals` vector (locals are pushed/popped LIFO).
 #[derive(Clone, Copy)]
 struct Local {
     name: Symbol,
     depth: usize,
-    /// Set once a nested function captures this local as an upvalue, so scope
-    /// exit knows to emit `CLOSE_UPVALUE` instead of a plain `POP`.
     captured: bool,
 }
 
-/// Describes how a closure captures one upvalue: from the immediately enclosing
-/// function's local (`is_local`), or by inheriting the enclosing closure's
-/// upvalue.
 #[derive(Clone, Copy)]
 struct UpvalueDesc {
     index: u8,
     is_local: bool,
 }
 
-/// Compilation state for a single function (or the top-level script). Functions
-/// nest, so the compiler holds a stack of these.
 struct FnScope {
     locals: Vec<Local>,
     upvalues: Vec<UpvalueDesc>,
@@ -64,7 +53,6 @@ impl FnScope {
     }
 }
 
-/// Where a name resolves to.
 enum VarLoc {
     Local(u8),
     Upvalue(u8),
@@ -72,20 +60,12 @@ enum VarLoc {
     Undefined,
 }
 
-/// Compiles AST to bytecode
 pub struct Compiler<'ctx> {
     builder: BytecodeBuilder,
     ctx: &'ctx Context,
     globals: GlobalTable,
-    /// Stack of function scopes; the last is the one being compiled. Index 0 is
-    /// the top-level script.
     fn_scopes: Vec<FnScope>,
-    /// Counter for generating unique names for compiler-synthesized locals
-    /// (e.g. the hidden list/index locals of a `for` loop), so nested loops
-    /// don't collide.
     synthetic_counter: usize,
-    /// Most recent source line seen while walking the AST; attached to
-    /// compile errors and fed to the bytecode line table.
     line: u32,
 }
 
@@ -106,7 +86,6 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    /// Build a `CompileError` at the current source line.
     fn err(&self, message: impl Into<String>) -> CompileError {
         CompileError {
             message: message.into(),
@@ -114,7 +93,6 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    /// Note that compilation has reached source line `line` (0 = unchanged).
     fn mark_line(&mut self, line: u32) {
         if line != 0 {
             self.line = line;
@@ -122,13 +100,10 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    /// Resolve a `Symbol` to its source name for error messages.
     fn name_of(&self, sym: Symbol) -> String {
         self.ctx.resolve(sym)
     }
 
-    /// Add a `Constant::Sym` and record its source name so runtime errors
-    /// can print the member name.
     fn sym_const(&mut self, sym: Symbol) -> Result<u8, CompileError> {
         let c = self
             .builder
@@ -396,7 +371,9 @@ impl<'ctx> Compiler<'ctx> {
         let list_slot = self.add_local(list_name);
 
         // hidden: __idx = 0
-        self.builder.emit_constant(Constant::Int(0));
+        self.builder
+            .try_emit_constant(Constant::Int(0))
+            .map_err(|e| self.err(e))?;
         let idx_slot = self.add_local(idx_name);
 
         // loop variable, seeded with a placeholder so it owns a stack slot
@@ -428,7 +405,9 @@ impl<'ctx> Compiler<'ctx> {
         // idx = idx + 1
         self.builder.emit(Instruction::GET_LOCAL);
         self.builder.emit(idx_slot);
-        self.builder.emit_constant(Constant::Int(1));
+        self.builder
+            .try_emit_constant(Constant::Int(1))
+            .map_err(|e| self.err(e))?;
         self.builder.emit(Instruction::ADD);
         self.builder.emit(Instruction::SET_LOCAL);
         self.builder.emit(idx_slot);
@@ -581,8 +560,6 @@ impl<'ctx> Compiler<'ctx> {
 
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
         self.mark_line(expr.line);
-        // Re-applied before multi-operand opcodes so the *operator*'s line —
-        // not the last operand's — is what runtime errors report.
         let line = expr.line;
         match &expr.kind {
             ExprKind::Literal(lit) => self.compile_literal(lit)?,
