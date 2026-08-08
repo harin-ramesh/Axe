@@ -17,8 +17,8 @@ pub use ast::{Expr, Literal, Operation, ParamVec, Program, Stmt};
 
 // Re-export stack VM types
 pub use vm::{
-    AxeVM, Bytecode, BytecodeBuilder, CompileError, Compiler, Obj as VMObj, RuntimeError,
-    Value as VMValue, disassemble, disassemble_instruction,
+    AxeVM, Bytecode, BytecodeBuilder, CompileError, Compiler, FileLoader, ModuleLoader,
+    Obj as VMObj, RuntimeError, Value as VMValue, disassemble, disassemble_instruction,
 };
 
 pub use parser::{ParseError, Parser};
