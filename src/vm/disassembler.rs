@@ -229,8 +229,8 @@ mod tests {
     #[test]
     fn constant_opcode_inlines_value() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(42));
-        b.emit_constant(Constant::Str("hello".into()));
+        b.try_emit_constant(Constant::Int(42)).unwrap();
+        b.try_emit_constant(Constant::Str("hello".into())).unwrap();
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 

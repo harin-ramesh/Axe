@@ -41,35 +41,22 @@ impl std::error::Error for RuntimeError {}
 #[derive(Debug, PartialEq)]
 pub enum Obj {
     Str(String),
-    /// A class: a bag of methods and static members, keyed by interned name,
-    /// plus an optional superclass handle for inheritance lookups. Keys are
-    /// `Symbol` (interned u32s), so we use `FxHashMap` — SipHash's DoS
-    /// resistance is wasted overhead on internal integer keys.
     Class {
         name: Symbol,
         methods: FxHashMap<Symbol, Value>,
         statics: FxHashMap<Symbol, Value>,
         superclass: Option<ObjRef>,
     },
-    /// An instance of a class: its own field map plus a handle back to the
-    /// class it was created from (for method/static resolution).
     Instance {
         class: ObjRef,
         fields: FxHashMap<Symbol, Value>,
     },
-    /// A list of values.
     List(Vec<Value>),
-    /// A closure: a function template (entry/arity) plus captured upvalues.
-    /// Only *capturing* functions become closures; non-capturing ones stay a
-    /// flat `Value::Fn` with no allocation.
     Closure {
         entry: usize,
         arity: u8,
         upvalues: Vec<ObjRef>,
     },
-    /// A captured variable. `Open` still lives on the value stack (by absolute
-    /// index); `Closed` has been lifted onto the heap once its defining frame
-    /// returned, so it outlives that frame.
     Upvalue(UpvalueState),
 }
 
@@ -409,11 +396,7 @@ pub struct AxeVM<'a> {
     heap: Heap,
     open_upvalues: Vec<ObjRef>,
     str_constants: Vec<Option<ObjRef>>,
-    /// When set (env `AXE_GC_STRESS=1`), collect at every safepoint — slow,
-    /// but shakes out objects the collector wrongly considers unreachable.
     gc_stress: bool,
-    /// Offset of the opcode currently being executed, so errors can be
-    /// attributed to the right instruction (and thus source line).
     op_ip: usize,
 }
 
@@ -685,8 +668,6 @@ impl<'a> AxeVM<'a> {
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_u8() as usize;
-        // Copy the shared bytecode reference so the match borrow isn't tied to
-        // `&self`, leaving `self.heap` / `self.str_constants` free to mutate.
         let bytecode = self.bytecode;
         match &bytecode.constants[index] {
             Constant::Int(n) => Value::Int(*n),
@@ -1511,7 +1492,7 @@ mod tests {
     #[test]
     fn test_const() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(42));
+        b.try_emit_constant(Constant::Int(42)).unwrap();
         b.emit(Instruction::HALT);
 
         let bc = b.build();
@@ -1550,8 +1531,8 @@ mod tests {
     #[test]
     fn test_add() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(10));
-        b.emit_constant(Constant::Int(20));
+        b.try_emit_constant(Constant::Int(10)).unwrap();
+        b.try_emit_constant(Constant::Int(20)).unwrap();
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 
@@ -1564,8 +1545,8 @@ mod tests {
     #[test]
     fn test_add_float() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Float(10.5));
-        b.emit_constant(Constant::Float(20.5));
+        b.try_emit_constant(Constant::Float(10.5)).unwrap();
+        b.try_emit_constant(Constant::Float(20.5)).unwrap();
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 
@@ -1578,8 +1559,9 @@ mod tests {
     #[test]
     fn test_string_concat() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Str("Hello, ".into()));
-        b.emit_constant(Constant::Str("World!".into()));
+        b.try_emit_constant(Constant::Str("Hello, ".into()))
+            .unwrap();
+        b.try_emit_constant(Constant::Str("World!".into())).unwrap();
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 
@@ -1595,8 +1577,8 @@ mod tests {
     #[test]
     fn test_sub() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(50));
-        b.emit_constant(Constant::Int(20));
+        b.try_emit_constant(Constant::Int(50)).unwrap();
+        b.try_emit_constant(Constant::Int(20)).unwrap();
         b.emit(Instruction::SUB);
         b.emit(Instruction::HALT);
 
@@ -1609,8 +1591,8 @@ mod tests {
     #[test]
     fn test_mul() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(6));
-        b.emit_constant(Constant::Int(7));
+        b.try_emit_constant(Constant::Int(6)).unwrap();
+        b.try_emit_constant(Constant::Int(7)).unwrap();
         b.emit(Instruction::MUL);
         b.emit(Instruction::HALT);
 
@@ -1623,8 +1605,8 @@ mod tests {
     #[test]
     fn test_div() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(100));
-        b.emit_constant(Constant::Int(4));
+        b.try_emit_constant(Constant::Int(100)).unwrap();
+        b.try_emit_constant(Constant::Int(4)).unwrap();
         b.emit(Instruction::DIV);
         b.emit(Instruction::HALT);
 
@@ -1637,8 +1619,8 @@ mod tests {
     #[test]
     fn test_mod() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(17));
-        b.emit_constant(Constant::Int(5));
+        b.try_emit_constant(Constant::Int(17)).unwrap();
+        b.try_emit_constant(Constant::Int(5)).unwrap();
         b.emit(Instruction::MOD);
         b.emit(Instruction::HALT);
 
@@ -1651,7 +1633,7 @@ mod tests {
     #[test]
     fn test_neg() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(42));
+        b.try_emit_constant(Constant::Int(42)).unwrap();
         b.emit(Instruction::NEG);
         b.emit(Instruction::HALT);
 
@@ -1665,8 +1647,8 @@ mod tests {
     fn test_comparison() {
         // Test EQ
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(5));
-        b.emit_constant(Constant::Int(5));
+        b.try_emit_constant(Constant::Int(5)).unwrap();
+        b.try_emit_constant(Constant::Int(5)).unwrap();
         b.emit(Instruction::EQ);
         b.emit(Instruction::HALT);
         let bc = b.build();
@@ -1675,8 +1657,8 @@ mod tests {
 
         // Test NEQ
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(5));
-        b.emit_constant(Constant::Int(3));
+        b.try_emit_constant(Constant::Int(5)).unwrap();
+        b.try_emit_constant(Constant::Int(3)).unwrap();
         b.emit(Instruction::NEQ);
         b.emit(Instruction::HALT);
         let bc = b.build();
@@ -1685,8 +1667,8 @@ mod tests {
 
         // Test LT
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(3));
-        b.emit_constant(Constant::Int(5));
+        b.try_emit_constant(Constant::Int(3)).unwrap();
+        b.try_emit_constant(Constant::Int(5)).unwrap();
         b.emit(Instruction::LT);
         b.emit(Instruction::HALT);
         let bc = b.build();
@@ -1695,8 +1677,8 @@ mod tests {
 
         // Test GT
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(5));
-        b.emit_constant(Constant::Int(3));
+        b.try_emit_constant(Constant::Int(5)).unwrap();
+        b.try_emit_constant(Constant::Int(3)).unwrap();
         b.emit(Instruction::GT);
         b.emit(Instruction::HALT);
         let bc = b.build();
@@ -1740,8 +1722,8 @@ mod tests {
     fn test_bitwise() {
         // Test BITAND
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(0b1100));
-        b.emit_constant(Constant::Int(0b1010));
+        b.try_emit_constant(Constant::Int(0b1100)).unwrap();
+        b.try_emit_constant(Constant::Int(0b1010)).unwrap();
         b.emit(Instruction::BITAND);
         b.emit(Instruction::HALT);
         let bc = b.build();
@@ -1750,8 +1732,8 @@ mod tests {
 
         // Test BITOR
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(0b1100));
-        b.emit_constant(Constant::Int(0b1010));
+        b.try_emit_constant(Constant::Int(0b1100)).unwrap();
+        b.try_emit_constant(Constant::Int(0b1010)).unwrap();
         b.emit(Instruction::BITOR);
         b.emit(Instruction::HALT);
         let bc = b.build();
@@ -1762,7 +1744,7 @@ mod tests {
     #[test]
     fn test_dup() {
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(5));
+        b.try_emit_constant(Constant::Int(5)).unwrap();
         b.emit(Instruction::DUP);
         b.emit(Instruction::MUL);
         b.emit(Instruction::HALT);
@@ -1777,12 +1759,12 @@ mod tests {
     fn test_complex_expression() {
         // Compute: (10 + 20) * 2 - 5 = 55
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Int(10));
-        b.emit_constant(Constant::Int(20));
+        b.try_emit_constant(Constant::Int(10)).unwrap();
+        b.try_emit_constant(Constant::Int(20)).unwrap();
         b.emit(Instruction::ADD);
-        b.emit_constant(Constant::Int(2));
+        b.try_emit_constant(Constant::Int(2)).unwrap();
         b.emit(Instruction::MUL);
-        b.emit_constant(Constant::Int(5));
+        b.try_emit_constant(Constant::Int(5)).unwrap();
         b.emit(Instruction::SUB);
         b.emit(Instruction::HALT);
 
@@ -1858,10 +1840,11 @@ mod tests {
         // With stress mode on, ADD collects before every string allocation;
         // the interned constants and the result must all survive.
         let mut b = BytecodeBuilder::new();
-        b.emit_constant(Constant::Str("Hello, ".into()));
-        b.emit_constant(Constant::Str("World".into()));
+        b.try_emit_constant(Constant::Str("Hello, ".into()))
+            .unwrap();
+        b.try_emit_constant(Constant::Str("World".into())).unwrap();
         b.emit(Instruction::ADD);
-        b.emit_constant(Constant::Str("!".into()));
+        b.try_emit_constant(Constant::Str("!".into())).unwrap();
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 
@@ -1879,8 +1862,8 @@ mod tests {
     fn test_constant_deduplication() {
         let mut b = BytecodeBuilder::new();
         // Use same constant twice - should only be stored once
-        b.emit_constant(Constant::Int(42));
-        b.emit_constant(Constant::Int(42));
+        b.try_emit_constant(Constant::Int(42)).unwrap();
+        b.try_emit_constant(Constant::Int(42)).unwrap();
         b.emit(Instruction::ADD);
         b.emit(Instruction::HALT);
 
