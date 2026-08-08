@@ -64,6 +64,15 @@ fn print_usage() {
     eprintln!("  -h, --help     Show this help message");
 }
 
+/// Imports resolve against the directory of the file being run.
+fn module_root(filename: &str) -> std::path::PathBuf {
+    std::path::Path::new(filename)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
 fn disassemble_file(filename: &str) {
     let content = match fs::read_to_string(filename) {
         Ok(content) => content,
@@ -87,7 +96,7 @@ fn disassemble_file(filename: &str) {
         }
     };
 
-    let bytecode = match Compiler::new(&ctx).compile(&program) {
+    let bytecode = match Compiler::with_root(&ctx, module_root(filename)).compile(&program) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("compile error: {}", e);
@@ -124,7 +133,7 @@ fn run_file(filename: &str) {
         }
     };
 
-    let compiler = Compiler::new(&ctx);
+    let compiler = Compiler::with_root(&ctx, module_root(filename));
     let bytecode = match compiler.compile(&program) {
         Ok(bytecode) => bytecode,
         Err(e) => {
