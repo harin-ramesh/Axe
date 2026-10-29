@@ -58,6 +58,13 @@ impl BytecodeBuilder {
         self.bytecode
     }
 
+    pub(crate) fn remove_trailing_halt(&mut self) -> usize {
+        if self.bytecode.code.last() == Some(&Instruction::HALT) {
+            self.bytecode.code.pop();
+        }
+        self.bytecode.code.len()
+    }
+
     pub fn set_line(&mut self, line: u32) {
         if line != 0 && line != self.current_line {
             self.current_line = line;

@@ -1,4 +1,5 @@
 use super::vm::{Heap, Value};
+use std::io::{self, Write};
 
 /// Native functions receive their args and `&mut Heap` so they can allocate
 /// heap objects (e.g. `range` building a list). Errors are plain messages;
@@ -21,6 +22,12 @@ fn native_print(args: &[Value], heap: &mut Heap) -> Result<Value, String> {
         }
         print!("{}", arg.display(heap));
     }
+    // `print!` does not add a newline, so stdout may otherwise remain buffered
+    // while the REPL displays its next prompt.
+    io::stdout().flush().map_err(|e| e.to_string())?;
+    if !args.is_empty() {
+        heap.mark_output_terminated(false);
+    }
     Ok(Value::Null)
 }
 
@@ -32,6 +39,7 @@ fn native_println(args: &[Value], heap: &mut Heap) -> Result<Value, String> {
         print!("{}", arg.display(heap));
     }
     println!();
+    heap.mark_output_terminated(true);
     Ok(Value::Null)
 }
 

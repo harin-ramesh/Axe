@@ -344,6 +344,8 @@ fn run_repl() {
     }
 
     let ctx = Context::new();
+    let mut compiler = Compiler::new(&ctx);
+    let mut vm = AxeVM::new(&Default::default());
     let mut accumulated_input = String::new();
 
     loop {
@@ -391,13 +393,19 @@ fn run_repl() {
                     let mut parser = Parser::new(&accumulated_input, &ctx);
                     match parser.parse() {
                         Ok(program) => {
-                            let compiler = Compiler::new(&ctx);
-                            // REPL keeps the final expression's value so it
-                            // can be echoed back.
-                            match compiler.compile_repl(&program) {
-                                Ok(bytecode) => {
-                                    let mut vm = AxeVM::new(&bytecode);
-                                    match vm.exec() {
+                            // Keep both compiler globals and VM values alive
+                            // between submissions. The final expression is
+                            // left on the stack so it can be echoed back.
+                            match compiler.compile_repl_chunk(&program) {
+                                Ok((bytecode, start)) => {
+                                    let result = vm.exec_repl_chunk(bytecode, start);
+                                    // `print` intentionally has no newline, but
+                                    // rustyline would erase that output when it
+                                    // draws the next prompt.
+                                    if vm.take_unterminated_output() {
+                                        println!();
+                                    }
+                                    match result {
                                         Ok(Some(result)) => {
                                             if !matches!(result, VMValue::Null) {
                                                 println!(

@@ -1,5 +1,6 @@
 use crate::Symbol;
 
+#[derive(Clone)]
 pub struct GlobalTable {
     names: Vec<Symbol>,
 }

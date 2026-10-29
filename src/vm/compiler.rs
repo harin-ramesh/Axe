@@ -58,6 +58,7 @@ struct UpvalueDesc {
     is_local: bool,
 }
 
+#[derive(Clone)]
 struct FnScope {
     locals: Vec<Local>,
     upvalues: Vec<UpvalueDesc>,
@@ -81,6 +82,7 @@ enum VarLoc {
     Undefined,
 }
 
+#[derive(Clone)]
 pub struct LoopScope {
     break_jumps: Vec<usize>,
     continue_jumps: Vec<usize>,
@@ -769,6 +771,52 @@ impl<'ctx> Compiler<'ctx> {
     /// value is left on the stack instead of popped, so the caller (REPL,
     /// tests) can observe the result of the final expression.
     pub fn compile_repl(mut self, program: &Program) -> Result<Bytecode, CompileError> {
+        self.compile_repl_program(program)?;
+        Ok(self.builder.build())
+    }
+
+    /// Append one REPL submission to this compiler's bytecode. The returned
+    /// offset is the entry point for the newly appended submission. Keeping
+    /// the compiler alive preserves global names between submissions.
+    pub fn compile_repl_chunk(
+        &mut self,
+        program: &Program,
+    ) -> Result<(Bytecode, usize), CompileError> {
+        // Compilation can add globals and emit code before finding an error.
+        // Restore all compiler state so a bad REPL submission has no effect on
+        // later ones.
+        let snapshot = (
+            self.builder.clone(),
+            self.globals.clone(),
+            self.fn_scopes.clone(),
+            self.loop_scopes.clone(),
+            self.synthetic_counter,
+            self.line,
+            self.module_prefix.clone(),
+            self.loaded.clone(),
+            self.loading.clone(),
+        );
+
+        let start = self.builder.remove_trailing_halt();
+        if let Err(error) = self.compile_repl_program(program) {
+            (
+                self.builder,
+                self.globals,
+                self.fn_scopes,
+                self.loop_scopes,
+                self.synthetic_counter,
+                self.line,
+                self.module_prefix,
+                self.loaded,
+                self.loading,
+            ) = snapshot;
+            return Err(error);
+        }
+
+        Ok((self.builder.clone().build(), start))
+    }
+
+    fn compile_repl_program(&mut self, program: &Program) -> Result<(), CompileError> {
         if let Some((last, rest)) = program.stmts.split_last() {
             for stmt in rest {
                 self.compile_stmt(stmt)?;
@@ -779,7 +827,7 @@ impl<'ctx> Compiler<'ctx> {
             }
         }
         self.builder.emit(Instruction::HALT);
-        Ok(self.builder.build())
+        Ok(())
     }
 
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
@@ -1314,6 +1362,26 @@ mod tests {
         vm.exec()
             .expect("runtime error")
             .map(|v| vm.display_value(&v))
+    }
+
+    #[test]
+    fn test_repl_chunks_preserve_globals_and_functions() {
+        let ctx = Context::new();
+        let mut compiler = Compiler::new(&ctx);
+        let mut vm = AxeVM::new(&Bytecode::default());
+
+        for src in ["let a = 1;", "fn add(x) { return x + a; }"] {
+            let program = Parser::new(src, &ctx).parse().unwrap();
+            let (bytecode, start) = compiler.compile_repl_chunk(&program).unwrap();
+            assert_eq!(vm.exec_repl_chunk(bytecode, start).unwrap(), None);
+        }
+
+        let program = Parser::new("add(a);", &ctx).parse().unwrap();
+        let (bytecode, start) = compiler.compile_repl_chunk(&program).unwrap();
+        assert_eq!(
+            vm.exec_repl_chunk(bytecode, start).unwrap(),
+            Some(Value::Int(2))
+        );
     }
 
     /// Compile a whole program expecting it to be *rejected*, returning the

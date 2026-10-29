@@ -162,6 +162,9 @@ pub struct Heap {
     /// Collect when `live` reaches this. Doubled from the survivor count
     /// after each collection so GC cost stays proportional to live data.
     next_gc: usize,
+    /// Whether the most recent native output ended with a newline. The REPL
+    /// uses this to avoid having rustyline overwrite unterminated `print` output.
+    output_terminated: bool,
 }
 
 impl Heap {
@@ -171,7 +174,12 @@ impl Heap {
             free: Vec::new(),
             live: 0,
             next_gc: INITIAL_GC_THRESHOLD,
+            output_terminated: true,
         }
+    }
+
+    pub(crate) fn mark_output_terminated(&mut self, terminated: bool) {
+        self.output_terminated = terminated;
     }
 
     /// Whether enough objects are live that the VM should collect at the
@@ -386,8 +394,8 @@ struct Frame {
 
 const NO_CLOSURE: usize = usize::MAX;
 
-pub struct AxeVM<'a> {
-    bytecode: &'a Bytecode,
+pub struct AxeVM {
+    bytecode: Bytecode,
     ip: usize,
     bp: usize,
     stack: Vec<Value>,
@@ -400,15 +408,15 @@ pub struct AxeVM<'a> {
     op_ip: usize,
 }
 
-impl<'a> AxeVM<'a> {
-    pub fn new(bytecode: &'a Bytecode) -> Self {
+impl AxeVM {
+    pub fn new(bytecode: &Bytecode) -> Self {
         let globals = builtins()
             .iter()
             .map(|(name, f)| Value::Native(name, *f))
             .collect();
 
         AxeVM {
-            bytecode,
+            bytecode: bytecode.clone(),
             ip: 0,
             bp: 0,
             stack: Vec::with_capacity(256),
@@ -636,10 +644,35 @@ impl<'a> AxeVM<'a> {
         value.display(&self.heap)
     }
 
+    /// Report and clear an unterminated native `print` call. A terminal REPL
+    /// should emit a newline before drawing its next prompt when this is true.
+    pub fn take_unterminated_output(&mut self) -> bool {
+        let unterminated = !self.heap.output_terminated;
+        self.heap.output_terminated = true;
+        unterminated
+    }
+
     /// Execute the bytecode from the top. On error, the VM state is reset on
     /// the next `exec` call, so a REPL can keep using the same VM.
     pub fn exec(&mut self) -> Result<Option<Value>, RuntimeError> {
-        self.ip = 0;
+        self.exec_from(0)
+    }
+
+    /// Replace the program with an extended bytecode image and execute only
+    /// the newly appended portion. Globals and heap objects are retained.
+    pub fn exec_repl_chunk(
+        &mut self,
+        bytecode: Bytecode,
+        start: usize,
+    ) -> Result<Option<Value>, RuntimeError> {
+        self.bytecode = bytecode;
+        self.str_constants
+            .resize(self.bytecode.constants.len(), None);
+        self.exec_from(start)
+    }
+
+    fn exec_from(&mut self, start: usize) -> Result<Option<Value>, RuntimeError> {
+        self.ip = start;
         self.bp = 0;
         self.stack.clear();
         self.frames.clear();
@@ -668,8 +701,7 @@ impl<'a> AxeVM<'a> {
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_u8() as usize;
-        let bytecode = self.bytecode;
-        match &bytecode.constants[index] {
+        match &self.bytecode.constants[index] {
             Constant::Int(n) => Value::Int(*n),
             Constant::Float(n) => Value::Float(*n),
             Constant::Fn { entry, arity } => Value::Fn {
